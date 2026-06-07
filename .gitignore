@@ -1,0 +1,6 @@
+.DS_Store
+desktop/mac/config.json
+desktop/mac/runtime/sessions/
+desktop/mac/renderer/.build/
+desktop/mac/renderer/.swiftpm/
+desktop/mac/renderer/Package.resolved

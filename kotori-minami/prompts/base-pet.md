@@ -1,0 +1,7 @@
+Create one clean full-body reference sprite for Codex pet 南小鸟.
+
+Pet identity: Pixel-art chibi desktop pet inspired by Kotori Minami: flaxen hair, amber eyes, iconic side half-up hairstyle with a green ribbon bow, Otonokizaka-style school idol uniform palette with a green neck bow, gentle healing personality with a slightly airheaded charm, compact full-body silhouette, optional tiny attached (bird-like) companion motif or alpaca plush, no text, no logos, no scenery..
+Style: Pet-safe sprite: compact full-body mascot, readable in a 192x208 cell, clear silhouette, simple face, stable palette/materials, and crisp edges for chroma-key extraction. Style `pixel`: Pixel-art-adjacent digital mascot with a chunky silhouette, simple dark outline, limited palette, flat cel shading, and visible stepped edges. User style notes: Minimal cute pixel style, crisp outline, readable when shrunk for a floating desktop pet. Preserve large simple shapes: flax hair mass, amber eyes, green bow, navy-white uniform accents, green neck bow. Use attached props only, never detached symbols or text..
+
+
+Place a single centered pose on a perfectly flat pure magenta #FF00FF chroma-key background. Keep the full pet visible, compact, readable at 192x208, and easy to animate. Preserve approved reference identity cues. No scenery, text, borders, checkerboard transparency, shadows, glows, detached effects, or extra props. Keep #FF00FF and close colors out of the pet, props, highlights, and effects.

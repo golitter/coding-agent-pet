@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "run_dir": "/Users/yanghao/Lab/vscode/pet/kotori-minami",
+  "spritesheet": "/Users/yanghao/Lab/vscode/pet/kotori-minami/final/spritesheet.webp",
+  "validation": "/Users/yanghao/Lab/vscode/pet/kotori-minami/final/validation.json",
+  "contact_sheet": "/Users/yanghao/Lab/vscode/pet/kotori-minami/qa/contact-sheet.png",
+  "review": "/Users/yanghao/Lab/vscode/pet/kotori-minami/qa/review.json",
+  "package": "/Users/yanghao/.codex/pets/kotori-minami"
+}

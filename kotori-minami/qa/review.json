@@ -1,0 +1,962 @@
+{
+  "ok": true,
+  "frames_root": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames",
+  "errors": [],
+  "warnings": [],
+  "rows": [
+    {
+      "state": "idle",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14620,
+          "bbox": [
+            42,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 146
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14836,
+          "bbox": [
+            42,
+            5,
+            150,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 174
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14762,
+          "bbox": [
+            42,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 147
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14941,
+          "bbox": [
+            42,
+            5,
+            150,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 128
+        },
+        {
+          "index": 4,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14726,
+          "bbox": [
+            42,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 150
+        },
+        {
+          "index": 5,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14784,
+          "bbox": [
+            42,
+            5,
+            150,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 166
+        }
+      ]
+    },
+    {
+      "state": "running-right",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15608,
+          "bbox": [
+            39,
+            5,
+            152,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 255
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15640,
+          "bbox": [
+            36,
+            5,
+            155,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 242
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15853,
+          "bbox": [
+            36,
+            5,
+            155,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 263
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16611,
+          "bbox": [
+            33,
+            5,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 312
+        },
+        {
+          "index": 4,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15501,
+          "bbox": [
+            38,
+            5,
+            153,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 274
+        },
+        {
+          "index": 5,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15815,
+          "bbox": [
+            35,
+            5,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 255
+        },
+        {
+          "index": 6,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15854,
+          "bbox": [
+            36,
+            5,
+            155,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 283
+        },
+        {
+          "index": 7,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15542,
+          "bbox": [
+            39,
+            5,
+            152,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 285
+        }
+      ]
+    },
+    {
+      "state": "running-left",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15608,
+          "bbox": [
+            39,
+            5,
+            152,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 255
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15640,
+          "bbox": [
+            36,
+            5,
+            155,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 242
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15853,
+          "bbox": [
+            36,
+            5,
+            155,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 263
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16611,
+          "bbox": [
+            33,
+            5,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 312
+        },
+        {
+          "index": 4,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15501,
+          "bbox": [
+            38,
+            5,
+            153,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 274
+        },
+        {
+          "index": 5,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15815,
+          "bbox": [
+            35,
+            5,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 255
+        },
+        {
+          "index": 6,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15854,
+          "bbox": [
+            36,
+            5,
+            155,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 283
+        },
+        {
+          "index": 7,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15542,
+          "bbox": [
+            39,
+            5,
+            152,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 285
+        }
+      ]
+    },
+    {
+      "state": "waving",
+      "expected_frames": 4,
+      "actual_frames": 4,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waving/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14631,
+          "bbox": [
+            42,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 109
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waving/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15001,
+          "bbox": [
+            39,
+            5,
+            153,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 85
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waving/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14464,
+          "bbox": [
+            43,
+            5,
+            148,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 111
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waving/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14495,
+          "bbox": [
+            43,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 88
+        }
+      ]
+    },
+    {
+      "state": "jumping",
+      "expected_frames": 5,
+      "actual_frames": 5,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19156,
+          "bbox": [
+            29,
+            5,
+            162,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 242
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17457,
+          "bbox": [
+            31,
+            5,
+            160,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 209
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19660,
+          "bbox": [
+            27,
+            5,
+            165,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 186
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14732,
+          "bbox": [
+            38,
+            5,
+            154,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 143
+        },
+        {
+          "index": 4,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17903,
+          "bbox": [
+            31,
+            5,
+            160,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 223
+        }
+      ]
+    },
+    {
+      "state": "failed",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19397,
+          "bbox": [
+            32,
+            5,
+            160,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 260
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20553,
+          "bbox": [
+            29,
+            5,
+            162,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 287
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21222,
+          "bbox": [
+            27,
+            5,
+            165,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 297
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22751,
+          "bbox": [
+            19,
+            5,
+            172,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 268
+        },
+        {
+          "index": 4,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22918,
+          "bbox": [
+            18,
+            5,
+            174,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 289
+        },
+        {
+          "index": 5,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 23121,
+          "bbox": [
+            20,
+            5,
+            171,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 278
+        },
+        {
+          "index": 6,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21254,
+          "bbox": [
+            26,
+            5,
+            166,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 250
+        },
+        {
+          "index": 7,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21717,
+          "bbox": [
+            27,
+            5,
+            164,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 286
+        }
+      ]
+    },
+    {
+      "state": "waiting",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14835,
+          "bbox": [
+            43,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 175
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14726,
+          "bbox": [
+            43,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 169
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14710,
+          "bbox": [
+            43,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 147
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14799,
+          "bbox": [
+            43,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 171
+        },
+        {
+          "index": 4,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14776,
+          "bbox": [
+            43,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 200
+        },
+        {
+          "index": 5,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14738,
+          "bbox": [
+            43,
+            5,
+            149,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 142
+        }
+      ]
+    },
+    {
+      "state": "running",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14008,
+          "bbox": [
+            45,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 113
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13931,
+          "bbox": [
+            45,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 106
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13908,
+          "bbox": [
+            45,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 113
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13830,
+          "bbox": [
+            45,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 125
+        },
+        {
+          "index": 4,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14038,
+          "bbox": [
+            44,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 146
+        },
+        {
+          "index": 5,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13904,
+          "bbox": [
+            45,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 109
+        }
+      ]
+    },
+    {
+      "state": "review",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14011,
+          "bbox": [
+            45,
+            5,
+            146,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 128
+        },
+        {
+          "index": 1,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13987,
+          "bbox": [
+            45,
+            5,
+            146,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 125
+        },
+        {
+          "index": 2,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14128,
+          "bbox": [
+            44,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 130
+        },
+        {
+          "index": 3,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13962,
+          "bbox": [
+            45,
+            5,
+            146,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 120
+        },
+        {
+          "index": 4,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14086,
+          "bbox": [
+            45,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 131
+        },
+        {
+          "index": 5,
+          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14142,
+          "bbox": [
+            44,
+            5,
+            147,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 157
+        }
+      ]
+    }
+  ]
+}
