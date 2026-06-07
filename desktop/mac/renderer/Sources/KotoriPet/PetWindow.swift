@@ -24,6 +24,7 @@ final class PetWindow: NSPanel {
     // Drag state
     private var dragStart: NSPoint?
     var onDrag: ((CGFloat) -> Void)?  // dx callback for direction animation
+    var onTap: (() -> Void)?          // single click callback
     private var wasDragging = false
 
     init(config: PetConfig) {
@@ -161,6 +162,9 @@ final class PetWindow: NSPanel {
         if wasDragging {
             wasDragging = false
             onDrag?(0)  // signal: drag ended
+        } else if dragStart != nil {
+            // Single click (no drag occurred)
+            onTap?()
         }
         dragStart = nil
         super.mouseUp(with: event)

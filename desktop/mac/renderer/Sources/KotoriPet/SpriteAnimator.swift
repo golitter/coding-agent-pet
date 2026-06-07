@@ -8,6 +8,7 @@ final class SpriteAnimator {
     private let cache: FrameCache
     private var currentState: String = "idle"
     private var preDragState: String = "idle"  // state before drag started
+    private var preOneShotState: String = "idle"  // state before one-shot animation
     private var currentFrameIndex: Int = 0
     private var timer: DispatchSourceTimer?
     private let fps: Double
@@ -47,6 +48,23 @@ final class SpriteAnimator {
             print("[SpriteAnimator] ⚠️ Unknown state: \(state)")
             return
         }
+        // If currently in a one-shot, save only if the new state isn't also one-shot
+        if Self.oneShotStates.contains(currentState) && !Self.oneShotStates.contains(state) {
+            preOneShotState = state  // update restore target
+        }
+        currentState = state
+        currentFrameIndex = 0
+        showCurrentFrame()
+    }
+
+    /// Trigger a one-shot animation (e.g. jumping, waving).
+    /// After it finishes, restores the state that was active before the one-shot.
+    func triggerOneShot(_ state: String) {
+        guard Self.oneShotStates.contains(state) else { return }
+        guard cache.frames[state] != nil else { return }
+        // Don't interrupt an ongoing one-shot
+        guard !Self.oneShotStates.contains(currentState) else { return }
+        preOneShotState = currentState
         currentState = state
         currentFrameIndex = 0
         showCurrentFrame()
@@ -93,9 +111,10 @@ final class SpriteAnimator {
 
         currentFrameIndex += 1
 
-        // One-shot states: play full cycle then return to idle
+        // One-shot states: play full cycle then return to previous state
         if Self.oneShotStates.contains(currentState) && currentFrameIndex >= frames.count {
-            currentState = "idle"
+            currentState = preOneShotState
+            preOneShotState = "idle"
             currentFrameIndex = 0
         } else {
             currentFrameIndex = currentFrameIndex % frames.count

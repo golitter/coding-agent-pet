@@ -59,13 +59,14 @@ desktop/     → repo root (pet_base_dir)
 3. PetWindow          ← 创建浮窗，显示在屏幕右下角
 4. SpriteAnimator     ← 绑定动画引擎 (fps 从配置读取)
 5. 拖动回调绑定        ← onDrag → handleDrag
-6. SessionManager     ← 多会话聚合器
-7. StateWatcher       ← socket + 文件监控
-8. 加载磁盘会话        ← loadFromDisk()
-9. 启动动画            ← animator.start()
-10. 初始对话           ← "准备好了～"
-11. 清理定时器         ← 间隔从配置读取
-12. NSRunLoop          ← app.run()
+6. 点击回调绑定        ← onTap → triggerOneShot("jumping")
+7. SessionManager     ← 多会话聚合器
+8. StateWatcher       ← socket + 文件监控
+9. 加载磁盘会话        ← loadFromDisk()
+10. 启动动画           ← animator.start()
+11. 初始对话           ← "准备好了～"
+12. 清理定时器         ← 间隔从配置读取
+13. NSRunLoop          ← app.run()
 ```
 
 ---
@@ -97,6 +98,7 @@ desktop/     → repo root (pet_base_dir)
 
 | 操作 | 行为 |
 |---|---|
+| **单击** | 触发跳跃动画（一次性），播完后恢复之前状态 |
 | 单击 + 拖动 | 移动窗口，按方向播放 running-left/right |
 | 松开鼠标 | 停止拖动，恢复之前状态 |
 | **右键** | 弹出上下文菜单 |
@@ -178,12 +180,13 @@ desktop/     → repo root (pet_base_dir)
 | 类型 | 状态 | 行为 |
 |---|---|---|
 | **循环** | idle, running, running-right, running-left, waiting, review, failed | 播完一轮后从头循环 |
-| **一次性** | jumping, waving | 播完一轮后自动回到 idle |
+| **一次性** | jumping, waving | 播完一轮后自动回到触发前的状态 |
 
 ### 状态切换
 
 ```swift
 transition(to: "running")   // 切换到 running 动画
+triggerOneShot("jumping")   // 触发跳跃动画，播完后恢复之前状态
 handleDrag(dx: 5.0)          // 向右拖动 → running-right
 handleDrag(dx: -3.0)         // 向左拖动 → running-left
 handleDrag(dx: 0)            // 松手 → 恢复 preDragState

@@ -31,6 +31,11 @@ petWindow.onDrag = { dx in
     animator.handleDrag(dx: dx)
 }
 
+// 3c. Bind click callback for jumping animation
+petWindow.onTap = {
+    animator.triggerOneShot("jumping")
+}
+
 // 4. Session manager — aggregates multi-session state
 let sessionManager = SessionManager(sessionsDir: config.sessionsDir)
 sessionManager.onStateChange = { state, dialogue, count in
