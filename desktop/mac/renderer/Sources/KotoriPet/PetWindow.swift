@@ -1,7 +1,7 @@
 import AppKit
 
 /// Transparent, borderless, always-on-top floating window that hosts the pet sprite and dialogue bubble.
-/// Supports drag-to-move and double-click context menu.
+/// Supports drag-to-move and right-click context menu.
 final class PetWindow: NSPanel {
     let imageView: NSImageView
     let bubble: DialogueBubble

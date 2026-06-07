@@ -11,14 +11,15 @@ struct SessionState {
 
 /// Priority order for aggregating multi-session states.
 /// Higher number = higher priority (shown first).
+/// waiting (permission request) is highest to ensure the user notices it promptly.
 private let statePriority: [String: Int] = [
+    "waiting":        8,
     "running":        7,
     "running-right":  6,
     "running-left":   6,
     "review":         5,
     "jumping":        4,
     "waving":         3,
-    "waiting":        2,
     "idle":           1,
     "failed":         0,
 ]
