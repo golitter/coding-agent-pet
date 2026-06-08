@@ -1,3 +1,13 @@
+//! Activity aggregator — owns the live view of every AI agent process
+//! (Claude Code / Codex / …) currently producing events, and rolls them up
+//! into a single display state for the pet renderer.
+//!
+//! Naming note: the wire protocol and on-disk filename still use `session_id`
+//! (e.g. `019ea736-...json`), since that identifier is owned by the agent.
+//! Internally, however, what we are tracking is the *agent's current activity*
+//! (running / waiting / jumping / …), not a long-lived session. Hence
+//! `ActivityAggregator` + `AgentActivity` for the in-memory model.
+
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -5,16 +15,6 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use tracing::info;
-
-/// Activity aggregator — owns the live view of every AI agent process
-/// (Claude Code / Codex / …) currently producing events, and rolls them up
-/// into a single display state for the pet renderer.
-///
-/// Naming note: the wire protocol and on-disk filename still use `session_id`
-/// (e.g. `019ea736-...json`), since that identifier is owned by the agent.
-/// Internally, however, what we are tracking is the *agent's current activity*
-/// (running / waiting / jumping / …), not a long-lived session. Hence
-/// `ActivityAggregator` + `AgentActivity` for the in-memory model.
 
 /// Priority order for aggregating multi-agent activities.
 /// Higher number = higher priority.
