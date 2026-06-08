@@ -4,8 +4,6 @@
 set -euo pipefail
 
 PLATFORM_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG="$PLATFORM_DIR/config.json"
-EXAMPLE="$PLATFORM_DIR/config.example.json"
 
 # 用 python3 从 config 读取所有配置，避免硬编码
 /usr/bin/python3 -c "
