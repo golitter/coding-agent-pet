@@ -38,7 +38,7 @@
 
 | 事件 | 触发时机 | Claude Code 行为 | Codex 行为 |
 |---|---|---|---|
-| `SessionStart` | 启动或恢复会话 | 写 session 文件，挥手问候 | 同左 |
+| `SessionStart` | 启动或恢复会话 | 写 session 文件，挥手问候 | **懒触发**：实际只在首次 `UserPromptSubmit` 时一起补发（详见上方"注意"） |
 | `SessionEnd` | 会话结束（退出/关窗口） | 立即删除 session 文件，挥手告别 | **不触发**（Codex 不提供此事件，依赖 [pseudo-session-end](../codex/v01330/pseudo-session-end.md) SQLite 轮询兜底） |
 
 ### 2. 用户交互（user input）

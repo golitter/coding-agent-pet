@@ -76,7 +76,11 @@ timeout = 30
 | `PermissionRequest` | 请求权限时 | 宠物等待："需要你的授权～" |
 | `SubagentStop` | 子代理完成时 | 宠物回到 idle |
 
-**与 Claude Code 的差异**：Codex 没有注册 `PreCompact`，因为该事件在宠物 config 的 Codex 事件列表中未启用。Codex 也不注册 `SessionEnd`（Codex 当前不提供该事件，会话死亡检测依赖 [pseudo-session-end.md](../codex/v01330/pseudo-session-end.md) 的 SQLite 轮询方案）。
+**与 Claude Code 的差异**：
+
+- Codex 没有注册 `PreCompact`，因为该事件在宠物 config 的 Codex 事件列表中未启用。
+- Codex 也不注册 `SessionEnd`（Codex 当前不提供该事件，会话死亡检测依赖 [pseudo-session-end.md](../codex/v01330/pseudo-session-end.md) 的 SQLite 轮询方案）。
+- **`SessionStart` 触发时机不同**（Codex 0.133.0 实测）：上表中"启动或恢复会话"是 Codex 平台官方说法，但实测 Codex 0.133.0 的 `session_start` 是**懒触发**——只在用户**首次提交 prompt** 时才连同 `user_prompt_submit` 一起补发（两者间隔 30~50ms），CLI/IDE 启动瞬间并不发。若用户启动 codex 后不发消息直接退出，两个事件都不会触发。证据见 `/tmp/kotori-pet-codex-hook.log` + `~/.codex/log/codex-tui.log`。结果：挥手动画（waving）会被紧随的奔跑动画（running）瞬时覆盖，肉眼几乎不可见。
 
 ### matcher 字段
 
@@ -293,7 +297,7 @@ EVENT_ALIASES = {
 
 | hook_event (PascalCase) | → 宠物 state | → dialogue | 备注 |
 |---|---|---|---|
-| `SessionStart` | `waving` | "嗨！小鸟来啦～" | 一次性动画 |
+| `SessionStart` | `waving` | "嗨！小鸟来啦～" | 一次性动画（⚠️ Codex 0.133.0 懒触发，被紧随的 running 瞬时覆盖，详见上文"与 Claude Code 的差异"） |
 | `UserPromptSubmit` | `running` | "收到！开始工作～" | 循环动画 |
 | `PreToolUse` | `running` | "执行中..." | 循环动画 |
 | `PostToolUse` | `running` | "处理中..." | 硬编码 |
