@@ -89,21 +89,21 @@ src-tauri/    → cross-platform/    (config 所在目录)
 
 ## lib.rs — 应用初始化
 
-启动顺序：
+启动顺序（与 [lib.rs](../cross-platform/src-tauri/src/lib.rs) 注释一一对应）：
 
 ```
-0. tracing subscriber   ← 初始化日志框架 (支持 RUST_LOG 环境变量)
-1. PetConfig            ← 加载配置
-2. NSWindow 透明化      ← macOS: objc 调用设置透明背景
-3. Dock 隐藏           ← macOS: ActivationPolicy::Accessory
-4. 创建 sessions 目录   ← std::fs::create_dir_all
-5. ActivityAggregator      ← 多会话聚合器 (Rust)
-6. 状态变化订阅         ← broadcast channel → emit "state-change" 到前端
-7. Unix Socket 服务端   ← 异步接收 hook 推送
-8. 文件系统监控         ← notify crate 监听 sessions 目录变化
-9. 加载磁盘会话         ← load_from_disk()
-10. 定时清理            ← tokio interval, 间隔从配置读取
-11. 注入配置到 Tauri    ← app.manage(config)
+ 0. tracing subscriber    ← 初始化日志框架 (支持 RUST_LOG 环境变量)
+ 1. PetConfig             ← 加载配置
+ 2. Dock 隐藏             ← macOS: ActivationPolicy::Accessory
+ 3. NSWindow/WKWebView 透明化 ← macOS: objc 调用设置透明背景
+ 4. 创建 sessions 目录    ← std::fs::create_dir_all
+ 5. ActivityAggregator    ← agent 活动聚合器 (Rust, 单 Mutex)
+ 6. 状态变化订阅          ← broadcast channel → emit "state-change" 到前端
+ 7. Unix Socket 服务端    ← 异步接收 hook 推送
+ 8. 文件系统监控          ← notify crate 监听 sessions 目录变化 (独立阻塞线程)
+ 9. 加载磁盘会话          ← load_from_disk()
+10. 定时清理              ← tokio interval, 间隔从配置读取
+11. 注入配置到 Tauri      ← app.manage(config)
 ```
 
 **macOS 透明窗口**: 通过 `objc` crate 直接操作 NSWindow 和 WKWebView，设置 `opaque=NO`、`backgroundColor=clearColor`、`hasShadow=NO`。
@@ -116,16 +116,18 @@ src-tauri/    → cross-platform/    (config 所在目录)
 
 ### 内部结构
 
-所有可变状态封装在单个 `Mutex<Inner>` 中，包含 `sessions` HashMap 和 `aggregated` 显示状态，通过辅助方法操作：
+所有可变状态封装在单个 `Mutex<Inner>` 中，包含 `activities: HashMap<String, AgentActivity>` 和 `aggregated: AggregatedState` 显示状态，通过辅助方法操作：
 
 | 方法 | 说明 |
 |---|---|
-| `remove_session(id)` | 删除指定会话 |
-| `insert_session(id, state)` | 插入/更新会话 |
-| `replace_all_sessions(new)` | 原子替换所有会话（用于 `load_from_disk`） |
-| `remove_orphaned_sessions(file_ids)` | 批量删除无对应文件的会话 |
+| `remove_session(id)` | 删除指定活动会话 |
+| `insert_session(id, activity)` | 插入/更新活动会话 |
+| `replace_all_sessions(new)` | 原子替换所有活动会话（用于 `load_from_disk`） |
+| `remove_orphaned_sessions(file_ids)` | 批量删除无对应磁盘文件的活动会话 |
 
 这种设计避免了多个独立 Mutex 导致的死锁风险。
+
+> 命名：Rust 类型 `ActivityAggregator` / `AgentActivity` / HashMap 字段 `activities` 是"活动会话"的英文表达——`session_id` 在 wire 协议层和文件名层沿用（`019ea736-…json`），`ActivityAggregator` 在内存层聚合它们，描述的是同一个东西。
 
 ### 状态优先级
 
@@ -143,11 +145,11 @@ src-tauri/    → cross-platform/    (config 所在目录)
 
 ### 聚合规则
 
-1. 扫描所有活跃会话
+1. 扫描所有活动会话
 2. 取优先级最高的会话状态作为显示状态
 3. 取该会话的对话台词显示在气泡中
-4. 活跃会话数（非 idle）显示为 "×N"
-5. `isTerminal: true` 的会话立即删除
+4. `active_count` = `inner.activities.len()`，**包含 idle 状态**（"开着"就算 1 个）
+5. `isTerminal: true` 的事件立即删除对应会话
 
 ### 状态推送
 
@@ -170,10 +172,19 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。广�
 | 定时器 | `renderer.cleanup_interval_sec` (默认 5s) | **双向清理**：①移除已被 hook 删除的内存 orphan 会话；②删除 mtime >`stale_timeout_sec` 的磁盘孤儿文件（崩溃会话兜底）|
 | 磁盘加载 | 事件驱动 | 跳过 mtime >`stale_timeout_sec`（默认 3600s）的过期文件——判定基于文件系统 mtime，不是 JSON 内 `updatedAt` |
 | terminal 标记 | 即时 | 收到 `isTerminal: true` 时立即删除 |
+| `Stop` 延迟删除 | 2s | `watcher.rs` 中 `tokio::time::sleep` + `remove_if_state("jumping")` —— 期间收到新事件改变 state 则取消删除 |
+
+判定过期使用统一的 helper：
+
+```rust
+fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
+```
+
+`load_from_disk` 与 `cleanup_stale` 共享同一判定逻辑（mtime-only，不读 JSON 内 `updatedAt`）。
 
 `stale_timeout_sec` 默认 1h 的取舍：覆盖阅读/思考/长工具调用等合法静默期；崩溃会话最多残留 1h 后被磁盘反向清理收尸。详见 [bugfix/active-count-undercount.md](bugfix/active-count-undercount.md)。
 
-`active_count`（气泡 `×N`）= HashMap 里所有 session 数。`idle` 状态（如 `SubagentStop` 触发）只影响状态仲裁优先级，不影响计数——"开着"就该算 1 个。
+`active_count`（气泡 `×N`）= HashMap 里所有活动会话数。`idle` 状态（如 `SubagentStop` 触发）只影响状态仲裁优先级，不影响计数——"开着"就该算 1 个。
 
 ---
 
@@ -394,11 +405,13 @@ animator.handleDrag(0)             // 松手 → 恢复 preDragState
 
 | crate | 用途 |
 |---|---|
-| `tauri` v2 | 桌面应用框架 |
-| `tauri-plugin-shell` | Shell 命令执行 |
+| `tauri` v2 | 桌面应用框架（启用 `protocol-asset`、`macos-private-api`、`tray-icon` features） |
+| `serde` / `serde_json` | 序列化 |
 | `tokio` | 异步运行时 (socket, broadcast, timer) |
-| `notify` | 跨平台文件系统监控 |
+| `notify` v7 | 跨平台文件系统监控 |
 | `chrono` | 时间解析 |
 | `objc` (macOS) | NSWindow/WKWebView 透明化 |
 | `tracing` | 结构化日志框架 |
 | `tracing-subscriber` | 日志输出（支持 `RUST_LOG` 环境变量过滤） |
+
+> **已移除**：`tauri-plugin-shell` —— 之前虽然注册了插件，但 capabilities 从未授予任何 `shell:*` 权限，前端也未使用。AppleScript 通过 `commands::run_applescript` 直接调用 `std::process::Command::new("osascript")` 实现，无需 shell plugin。详见 [Cargo.toml](../cross-platform/src-tauri/Cargo.toml) 注释。

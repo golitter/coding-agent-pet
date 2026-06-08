@@ -28,11 +28,11 @@
 
 **注意**：
 - **SessionStart 触发时机不同**：Claude Code 在 CLI/IDE **启动瞬间**就触发 `SessionStart`，与首次 `UserPromptSubmit` 之间隔用户思考时间（秒～分钟级）；Codex 0.133.0 的 `session_start` 是**懒触发**——只在用户**首次提交 prompt** 时与 `user_prompt_submit` 一起补发（间隔仅 30~50ms）。若用户启动 codex 后不发消息直接退出，两个事件都不会发。结果：Codex 的挥手动画会被紧随的奔跑动画瞬时覆盖，肉眼几乎不可见。
-- **`SessionEnd` Claude 独有**：Codex 不提供此事件，会话死亡检测依赖 [pseudo-session-end](../codex/v01330/pseudo-session-end.md) 的 SQLite 轮询兜底（详见第 25、39 行表格）。
+- **`SessionEnd` Claude 独有**：Codex 当前不提供此事件，会话死亡检测只能依赖后端兜底——`stale_timeout_sec`（默认 1h）超时后由 `cleanup_stale` 删除磁盘孤儿文件。
 - **用户中断检测缺失**（两个平台都有）：用户提交 prompt 后**按 Ctrl+C / Esc / 关窗口中断**时，**Claude Code 和 Codex 都不会发任何 hook 事件**。结果：session 文件 mtime 停留在 `UserPromptSubmit` 那一刻，state 永远停在 `running`，宠物卡在"收到！开始工作～"直到 **`stale_timeout_sec`（默认 1h）**后才被 `cleanup_stale` 清理，期间 `active_count` 错误地 +1。
   - **根因**：两个平台都没有"用户中断"hook 事件——Claude Code 有 [Issue #9516](https://github.com/anthropics/claude-code/issues/9516) feature request 但未实现；Codex 0.133.0 也没有 cancel/interrupt/abort hook。
   - **当前缓解**：等 1h TTL / 重启宠物 app / 手动删 `sessions/<session_id>.json`。
-  - **未来修复方向**（**不在本次范围**）：在 Rust 后端做 state-aware stale timeout——`running` 状态用 ~180s，其它状态保持 1h。判断时 `is_session_file_stale` 需要读 JSON 的 `state` 字段决定 TTL。详见 [aggregator.rs:34](../../cross-platform/src-tauri/src/aggregator.rs#L34) 现有的 mtime-only 判断。
+  - **未来修复方向**（**不在本次范围**）：在 Rust 后端做 state-aware stale timeout——`running` 状态用 ~180s，其它状态保持 1h。判断时 `is_session_file_stale` 需要读 JSON 的 `state` 字段决定 TTL。详见 [aggregator.rs:44](../../cross-platform/src-tauri/src/aggregator.rs#L44) 现有的 mtime-only 判断。
 
 ---
 
@@ -43,7 +43,7 @@
 | 事件 | 触发时机 | Claude Code 行为 | Codex 行为 |
 |---|---|---|---|
 | `SessionStart` | 启动或恢复会话 | 写 session 文件，挥手问候 | **懒触发**：实际只在首次 `UserPromptSubmit` 时一起补发（详见上方"注意"） |
-| `SessionEnd` | 会话结束（退出/关窗口） | 立即删除 session 文件，挥手告别 | **不触发**（Codex 不提供此事件，依赖 [pseudo-session-end](../codex/v01330/pseudo-session-end.md) SQLite 轮询兜底） |
+| `SessionEnd` | 会话结束（退出/关窗口） | 立即删除 session 文件，挥手告别 | **不触发**（Codex 当前不提供此事件，依赖后端 `stale_timeout_sec`（默认 1h）兜底清理） |
 
 ### 2. 用户交互（user input）
 
@@ -85,8 +85,8 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 | `Stop` | **2s 后删除** | 期间收到新事件（state 不再是 `jumping`）→ 取消 | 正常完成一轮对话 |
 | `StopFailure` | **立即删除** | 不可取消 | 响应失败 |
 | `SessionEnd`（Claude 独有） | **立即删除** | 不可取消 | Claude Code 会话退出 |
-| (无 terminal 事件) | **stale_timeout_sec 后清理**（默认 1h） | — | 进程崩溃 / kill -9 / UI 删对话 |
-| (Codex 崩溃) | pseudo-session-end 轮询 **~5min 后清理** | — | Codex 异常退出 |
+| (无 terminal 事件) | **stale_timeout_sec 后清理**（默认 1h） | — | 进程崩溃 / kill -9 / UI 删对话 / 用户中断 |
+| (Codex 崩溃) | 同上：`stale_timeout_sec` 后清理 | — | Codex 异常退出 |
 
 > **关键**：hook 脚本本身不做延迟删除（短生命周期进程的 timer 会被 kill），所有清理逻辑都在长生命周期的 Rust 后端。
 
@@ -101,7 +101,7 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 | 事件名格式 | PascalCase 直接读 | snake_case → `EVENT_ALIASES` 归一化 |
 | 字段名 | 固定 `hook_event_name` | 多种（`hook_event_name` / `event` / `codex_event_type`） |
 | Session ID 字段 | `session_id` | `session_id` / `sessionId` / `conversation_id` / `thread_id` |
-| 崩溃兜底 | 1h TTL | 1h TTL + pseudo-session-end SQLite 轮询（~5min） |
+| 崩溃兜底 | 1h TTL（`stale_timeout_sec`） | 同左，Codex 无额外轮询机制 |
 
 ---
 
@@ -113,6 +113,6 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 | [codex.md](codex.md) | Codex hook 实现细节 |
 | [../../cross-platform/hooks/scripts/common.py](../../cross-platform/hooks/scripts/common.py) | 共享处理逻辑（state_map 查表、socket 推送） |
 | [../../cross-platform/config.example.json](../../cross-platform/config.example.json) | `state_map` + `terminal_events` 配置 |
-| [../../cross-platform/src-tauri/src/aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) | Rust 后端：terminal 删除、Stop 延迟取消 |
+| [../../cross-platform/src-tauri/src/aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) | Rust 后端：terminal 删除、cleanup_stale、Stop 延迟取消 |
 | [../../cross-platform/src-tauri/src/watcher.rs](../../cross-platform/src-tauri/src/watcher.rs) | Socket 服务端 + Stop 2s 延迟调度 |
-| [../codex/v01330/pseudo-session-end.md](../codex/v01330/pseudo-session-end.md) | Codex 无 SessionEnd 的兜底方案 |
+| [../bugfix/active-count-undercount.md](../bugfix/active-count-undercount.md) | `stale_timeout_sec` 默认值改为 1h 的根因与方案 |
