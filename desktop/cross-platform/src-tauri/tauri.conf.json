@@ -1,0 +1,40 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "KotoriPet",
+  "version": "0.1.0",
+  "identifier": "com.kotori.pet",
+  "build": {
+    "frontendDist": "../src",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "",
+        "width": 139,
+        "height": 185,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "visibleOnAllWorkspaces": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "acceptFirstMouse": true,
+        "shadow": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src asset: https://asset.localhost data:; style-src 'self' 'unsafe-inline'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["**/*"],
+          "requireLiteralLeadingDot": false
+        }
+      }
+    }
+  }
+}

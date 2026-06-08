@@ -48,7 +48,7 @@ kotori-minami/frames/
 | 原始尺寸 | 192×208px |
 | 缩放因子 | 0.6 |
 | 显示尺寸 | ~115×125px |
-| 缩放方式 | `scaleProportionallyUpOrDown` |
+| 缩放方式 | `image-rendering: pixelated` (CSS) |
 | 帧率 | 10 FPS |
 
 ## 关联文件
@@ -56,4 +56,4 @@ kotori-minami/frames/
 - 精灵图合并: `kotori-minami/final/spritesheet.webp` / `spritesheet.png`
 - 精灵图清单: `kotori-minami/frames/frames-manifest.json`
 - 宠物定义: `kotori-minami/pet_request.json`
-- 帧加载器: `desktop/mac/renderer/Sources/KotoriPet/FrameCache.swift`
+- 帧加载器: `desktop/cross-platform/src/animator.js`

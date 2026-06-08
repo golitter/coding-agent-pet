@@ -1,20 +1,20 @@
 #!/bin/bash
-# KotoriPet Hook 配置脚本
+# KotoriPet (Tauri) Hook 配置脚本
 # 自动将 pet hook 添加到 Claude Code 和 Codex 的 settings 中
 set -euo pipefail
 
-MAC_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG="$MAC_DIR/config.json"
-EXAMPLE="$MAC_DIR/config.example.json"
+PLATFORM_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG="$PLATFORM_DIR/config.json"
+EXAMPLE="$PLATFORM_DIR/config.example.json"
 
 # 用 python3 从 config 读取所有配置，避免硬编码
 /usr/bin/python3 -c "
 import json, os
 from pathlib import Path
 
-mac_dir = Path('$MAC_DIR')
-config_path = str(mac_dir / 'config.json')
-example_path = str(mac_dir / 'config.example.json')
+platform_dir = Path('$PLATFORM_DIR')
+config_path = str(platform_dir / 'config.json')
+example_path = str(platform_dir / 'config.example.json')
 
 if os.path.exists(config_path):
     p = config_path
@@ -28,7 +28,7 @@ with open(p) as f:
     config = json.load(f)
 
 # ── Resolve paths ──
-repo_root = mac_dir.parent.parent  # desktop/mac → repo
+repo_root = platform_dir.parent.parent  # desktop/cross-platform → repo
 
 def resolve(val, *parts):
     if val is not None and isinstance(val, str) and val.strip():
@@ -39,13 +39,13 @@ def resolve(val, *parts):
     return str(repo_root.joinpath(*parts))
 
 pet_base_dir = resolve(config.get('pet_base_dir'))
-hook_dir     = str(mac_dir / 'hooks')
+hook_dir     = str(platform_dir / 'hooks')
 claude_hook  = os.path.join(hook_dir, 'pet-claude-hook.sh')
 codex_hook   = os.path.join(hook_dir, 'pet-codex-hook.sh')
 
 hooks_config = config.get('hooks', {})
 claude_settings = os.path.expanduser(hooks_config.get('claude_code_settings', '~/.claude/settings.json'))
-codex_settings  = os.path.expanduser(hooks_config.get('codex_hooks', '~/.Codex/hooks.json'))
+codex_settings  = os.path.expanduser(hooks_config.get('codex_hooks', '~/.codex/hooks.json'))
 
 CLAUDE_EVENTS = [
     'Notification', 'PermissionRequest', 'PostToolUse', 'PreCompact',
@@ -58,12 +58,12 @@ CODEX_EVENTS = [
     'SessionStart', 'Stop', 'StopFailure', 'SubagentStop', 'UserPromptSubmit',
 ]
 
-# Old paths to clean up (from previous versions or other platform)
+# Old paths to clean up (from previous versions)
 OLD_PATHS = [
     'kotori-desktop-pet/hooks/pet-claude-hook.sh',
     'kotori-desktop-pet/hooks/pet-codex-hook.sh',
-    'desktop/cross-platform/hooks/pet-claude-hook.sh',
-    'desktop/cross-platform/hooks/pet-codex-hook.sh',
+    'desktop/mac/hooks/pet-claude-hook.sh',
+    'desktop/mac/hooks/pet-codex-hook.sh',
 ]
 
 def setup_platform(settings_path, hook_cmd, events, platform_name):

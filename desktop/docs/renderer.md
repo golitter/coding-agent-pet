@@ -1,89 +1,202 @@
-# Swift 渲染器详解
+# Tauri 渲染器详解
 
 ## 编译与运行
 
 ```bash
-cd desktop/mac/renderer
-swift build -c release
-xattr -cr .build/release/KotoriPet  # 首次清除签名限制
-.build/release/KotoriPet
+cd desktop/cross-platform
+npx tauri build --debug
+xattr -cr src-tauri/target/debug/kotori-pet  # macOS: 清除签名限制
+./src-tauri/target/debug/kotori-pet
 ```
 
 或使用脚本：`./build-and-run.sh`
 
 ## 组件一览
 
+### Rust 后端 (`src-tauri/src/`)
+
 | 文件 | 职责 |
 |---|---|
-| `Config.swift` | 加载配置、自动检测路径 |
-| `main.swift` | 入口，创建并串联所有组件 |
-| `PetWindow.swift` | 浮窗窗口、拖动、右键菜单 |
-| `DialogueBubble.swift` | 对话气泡（normal/warning/error 三种样式）|
-| `FrameCache.swift` | 预加载 55 帧 PNG 到内存 |
-| `SpriteAnimator.swift` | 动画循环引擎 |
-| `SessionManager.swift` | 多会话聚合、优先级排序、清理 |
-| `StateWatcher.swift` | 双通道状态监听（socket + 文件）|
+| `main.rs` | 入口，调用 `lib::run()` |
+| `lib.rs` | 应用初始化，创建并串联所有组件 |
+| `config.rs` | 加载配置、自动检测路径 |
+| `commands.rs` | Tauri commands，向前端暴露配置和 AppleScript 执行 |
+| `session.rs` | 多会话聚合、优先级排序、清理 |
+| `watcher.rs` | 双通道状态监听（socket + 文件）|
+
+### 前端 (`src/`)
+
+| 文件 | 职责 |
+|---|---|
+| `index.html` | 主页面，DOM 结构 |
+| `main.js` | 入口，窗口设置，交互绑定 |
+| `animator.js` | 精灵帧加载 + 动画循环引擎 |
+| `bubble.js` | 对话气泡（normal/warning/error 三种样式）|
+| `style.css` | 全局样式，气泡/菜单/精灵渲染 |
 
 ---
 
-## Config.swift — 配置加载
+## config.rs — 配置加载
 
 从 `config.json`（或降级到 `config.example.json`）加载所有配置。
 
 **路径自动检测逻辑：**
 
 ```
-可执行文件路径: .../desktop/mac/renderer/.build/release/KotoriPet
-release/     → .build/
-.build/      → renderer/
-renderer/    → mac/
-mac/         → desktop/
-desktop/     → repo root (pet_base_dir)
+可执行文件路径: .../desktop/cross-platform/src-tauri/target/debug/kotori-pet
+target/debug/ → target/
+target/       → src-tauri/
+src-tauri/    → cross-platform/    (config 所在目录)
+向父级遍历查找含 kotori-minami/ 的目录 → repo root (pet_base_dir)
 ```
 
 所有 `null` 值的路径自动拼接：
 - `frames_dir` → `{pet_base_dir}/{pet_id}/frames`
-- `sessions_dir` → `{pet_base_dir}/desktop/mac/runtime/sessions`
+- `sessions_dir` → `{pet_base_dir}/desktop/cross-platform/runtime/sessions`
 
-支持 `~` 展开（如 `~/my-pet`）和相对路径。
+支持 `~` 展开和相对路径。
 
 ---
 
-## main.swift — 入口
+## commands.rs — Tauri Commands
+
+向前端暴露的 IPC 接口：
+
+| Command | 说明 |
+|---|---|
+| `get_config` | 返回前端所需的配置子集（frames_dir, scale, fps, dialogue_*, menu_items） |
+| `run_applescript` | 执行 AppleScript 命令（用于菜单项"打开/关闭应用"） |
+
+前端通过 `window.__TAURI__.core.invoke('get_config')` 调用。
+
+---
+
+## lib.rs — 应用初始化
 
 启动顺序：
 
 ```
 1. PetConfig          ← 加载配置
-2. FrameCache         ← 预加载精灵帧 (~8MB)
-3. PetWindow          ← 创建浮窗，显示在屏幕右下角
-4. SpriteAnimator     ← 绑定动画引擎 (fps 从配置读取)
-5. 拖动回调绑定        ← onDrag → handleDrag
-6. 点击回调绑定        ← onTap → triggerOneShot("jumping")
-7. SessionManager     ← 多会话聚合器
-8. StateWatcher       ← socket + 文件监控
-9. 加载磁盘会话        ← loadFromDisk()
-10. 启动动画           ← animator.start()
-11. 初始对话           ← "准备好了～"
-12. 清理定时器         ← 间隔从配置读取
-13. NSRunLoop          ← app.run()
+2. NSWindow 透明化     ← macOS: objc 调用设置透明背景
+3. Dock 隐藏          ← macOS: ActivationPolicy::Accessory
+4. 创建 sessions 目录  ← std::fs::create_dir_all
+5. SessionManager     ← 多会话聚合器 (Rust)
+6. 状态变化订阅        ← broadcast channel → emit "state-change" 到前端
+7. Unix Socket 服务端  ← 异步接收 hook 推送
+8. 文件系统监控        ← notify crate 监听 sessions 目录变化
+9. 加载磁盘会话        ← load_from_disk()
+10. 定时清理           ← tokio interval, 间隔从配置读取
+11. 注入配置到 Tauri   ← app.manage(config)
 ```
+
+**macOS 透明窗口**: 通过 `objc` crate 直接操作 NSWindow 和 WKWebView，设置 `opaque=NO`、`backgroundColor=clearColor`、`hasShadow=NO`。
 
 ---
 
-## PetWindow.swift — 浮窗窗口
+## session.rs — 多会话聚合
+
+### 状态优先级
+
+| 优先级 | 状态 | 含义 |
+|---|---|---|
+| 8 | waiting | 等待授权（最高优先级，确保不会遗漏） |
+| 7 | running | 正在工作 |
+| 6 | running-right | 向右拖动 |
+| 6 | running-left | 向左拖动 |
+| 5 | review | 审阅代码 |
+| 4 | jumping | 庆祝完成 |
+| 3 | waving | 问候/通知 |
+| 1 | idle | 空闲 |
+| 0 | failed | 出错 |
+
+### 聚合规则
+
+1. 扫描所有活跃会话
+2. 取优先级最高的会话状态作为显示状态
+3. 取该会话的对话台词显示在气泡中
+4. 活跃会话数（非 idle）显示为 "×N"
+5. `isTerminal: true` 的会话立即删除
+
+### 状态推送
+
+使用 `tokio::sync::broadcast` channel，当聚合状态变化时发送 `StateChange`：
+
+```rust
+pub struct StateChange {
+    pub state: String,
+    pub dialogue: String,
+    pub active_count: usize,
+}
+```
+
+Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。
+
+### 清理机制
+
+| 触发 | 间隔配置 | 行为 |
+|---|---|---|
+| 定时器 | `renderer.cleanup_interval_sec` (默认 5s) | 移除已被 hook 删除的 orphan 会话 |
+| 磁盘加载 | 事件驱动 | 跳过 >`stale_timeout_sec` 未更新的过期会话 |
+| terminal 标记 | 即时 | 收到 `isTerminal: true` 时立即删除 |
+
+---
+
+## watcher.rs — 状态监听
+
+### 双通道设计
+
+| 通道 | 机制 | 路径配置 | 延迟 |
+|---|---|---|---|
+| **Unix Socket** (主) | `tokio::net::UnixListener` | `config.socket_path` | <1ms |
+| **文件监控** (兜底) | `notify` crate | `config.sessions_dir` | ~100ms |
+
+### Socket 协议
+
+- AF_UNIX SOCK_STREAM (Tokio async)
+- Hook 连接 → 发送 JSON → 关闭
+- 渲染器 accept → 解析 → 调用 SessionManager.update()
+- Best-effort：socket 不存在时不报错
+
+### 文件监控
+
+- 使用 `notify::recommended_watcher`（跨平台）
+- 监听目录的任何变更事件
+- 触发时调用 `SessionManager.load_from_disk()`
+- 在独立阻塞线程中运行
+
+---
+
+## main.js — 前端入口 + 交互
+
+### 初始化流程
+
+```
+1. invoke('get_config')    ← 从 Rust 获取配置
+2. SpriteAnimator          ← 创建动画器，加载精灵帧
+3. 窗口设置                ← 尺寸 + 定位（右下角）
+4. onFrame 回调            ← 动画器 → 更新 <img> src
+5. DialogueBubble          ← 创建对话气泡
+6. animator.start()        ← 启动动画循环
+7. 初始对话                ← "准备好了～"
+8. listen('state-change')  ← 监听 Rust 状态推送
+9. 右键菜单构建            ← 从 config.menu_items 动态生成
+10. 鼠标交互绑定           ← 点击/拖动/右键
+```
 
 ### 窗口属性
 
+由 `tauri.conf.json` 配置：
+
 | 属性 | 值 |
 |---|---|
-| 类型 | NSPanel (borderless, nonactivating) |
-| 层级 | `.floating`（浮在所有窗口之上）|
-| 透明 | `isOpaque=false`, `backgroundColor=clear` |
-| 阴影 | `hasShadow=false` |
-| 鼠标穿透 | `false`（接收交互事件）|
-| 全空间 | `.canJoinAllSpaces` + `.fullScreenAuxiliary` |
-| Dock 显示 | 不显示 (`.accessory` policy) |
+| 类型 | 无边框、透明、置顶 |
+| 透明 | `transparent: true` |
+| 置顶 | `alwaysOnTop: true` |
+| 全空间 | `visibleOnAllWorkspaces: true` |
+| 可缩放 | `resizable: false` |
+| 任务栏 | `skipTaskbar: true` |
+| 首次鼠标 | `acceptFirstMouse: true` |
+| 阴影 | `shadow: false` |
 
 ### 显示尺寸
 
@@ -92,6 +205,7 @@ desktop/     → repo root (pet_base_dir)
 | 原始精灵 | — | 192×208px |
 | 缩放因子 | `renderer.scale` | 0.6 |
 | 显示尺寸 | — | ~115×125px |
+| 窗口尺寸 | — | ~139×185px (含边距) |
 | 窗口边距 | `renderer.corner_margin` | 20px |
 
 ### 交互功能
@@ -99,17 +213,16 @@ desktop/     → repo root (pet_base_dir)
 | 操作 | 行为 |
 |---|---|
 | **单击** | 触发跳跃动画（一次性），播完后恢复之前状态 |
-| 单击 + 拖动 | 移动窗口，按方向播放 running-left/right |
+| 单击 + 拖动 | 使用 `appWindow.startDragging()` 移动窗口，按方向播放 running-left/right |
 | 松开鼠标 | 停止拖动，恢复之前状态 |
-| **右键** | 弹出上下文菜单 |
+| **右键** | 弹出自定义上下文菜单 |
 
 ### 拖动动画
 
-- 拖动时实时计算水平位移 dx
-- `onDrag?(dx)` 回调通知 SpriteAnimator
+- 拖动时实时计算水平位移 dx（3px 阈值防误触）
+- `animator.handleDrag(dx)` 通知动画器
 - 保存拖动前状态 (`preDragState`)，松手时恢复
 - 方向切换时不会覆盖 `preDragState`
-- `mouseUp` / `rightMouseUp` / `otherMouseUp` 均触发恢复
 
 ### 右键菜单
 
@@ -117,15 +230,69 @@ desktop/     → repo root (pet_base_dir)
 
 | action | 说明 |
 |---|---|
-| `applescript` | 执行 `script` 字段中的 AppleScript（激活/启动应用）|
-| `quit` | 终止宠物应用 |
+| `applescript` | 通过 `invoke('run_applescript')` 执行 AppleScript |
+| `quit` | 关闭窗口 (`getCurrentWindow().close()`) |
 | `separator` | 分隔线 |
 
-默认菜单：Codex、VS Code、关闭宠物。用户可在 config.json 中自定义。
+默认菜单：打开 Codex、关闭 Codex、打开 VS Code、关闭 VS Code、关闭宠物。
 
 ---
 
-## DialogueBubble.swift — 对话气泡
+## animator.js — 动画引擎
+
+### 帧加载
+
+通过 Tauri 的 `convertFileSrc` 将本地文件路径转为 asset protocol URL，预加载所有 PNG 帧：
+
+| 状态 | 帧数 | 用途 |
+|---|---|---|
+| idle | 6 | 静息、呼吸、眨眼 |
+| running-right | 8 | 向右拖动 |
+| running-left | 8 | 向左拖动 |
+| waving | 4 | 问候/通知 |
+| jumping | 5 | 跳跃庆祝动画 |
+| failed | 8 | 出错 |
+| waiting | 6 | 等待授权 |
+| running | 6 | 工作中 |
+| review | 6 | 审阅代码 |
+
+总计 **55 帧**。
+
+### 可配置参数
+
+| 参数 | 配置项 | 默认值 |
+|---|---|---|
+| 帧率 | `renderer.fps` | 10 FPS (100ms/帧) |
+| 定时器 | — | setInterval |
+
+### 动画类型
+
+| 类型 | 状态 | 行为 |
+|---|---|---|
+| **循环** | idle, running, running-right, running-left, waiting, review, failed | 播完一轮后从头循环 |
+| **一次性** | jumping, waving | 播完一轮后自动回到触发前的状态 |
+
+### 状态切换
+
+```js
+animator.transitionTo('running')   // 切换到 running 动画
+animator.triggerOneShot('jumping') // 触发跳跃动画，播完后恢复之前状态
+animator.handleDrag(5.0)           // 向右拖动 → running-right
+animator.handleDrag(-3.0)          // 向左拖动 → running-left
+animator.handleDrag(0)             // 松手 → 恢复 preDragState
+```
+
+### 拖动方向覆盖
+
+- `dx > 0.5` → running-right
+- `dx < -0.5` → running-left
+- `dx == 0` → 恢复拖动前的状态
+- `preDragState` 只在首次进入拖动时保存
+- 如果 `preDragState` 本身是拖动状态，恢复到 idle
+
+---
+
+## bubble.js — 对话气泡
 
 ### 三种样式
 
@@ -144,116 +311,46 @@ desktop/     → repo root (pet_base_dir)
 | 圆角 | `dialogue.cornerRadius` | 6px |
 | 淡入/淡出 | `dialogue.fade_duration_sec` | 0.3s |
 
----
+### 显示逻辑
 
-## FrameCache.swift — 帧缓存
-
-从 `kotori-minami/frames/` 预加载所有 PNG 帧：
-
-| 状态 | 帧数 | 用途 |
-|---|---|---|
-| idle | 6 | 静息、呼吸、眨眼 |
-| running-right | 8 | 向右拖动 |
-| running-left | 8 | 向左拖动 |
-| waving | 4 | 问候/通知 |
-| jumping | 5 | 任务完成庆祝 |
-| failed | 8 | 出错 |
-| waiting | 6 | 等待授权 |
-| running | 6 | 工作中 |
-| review | 6 | 审阅代码 |
-
-总计 **55 帧**，约 **8MB** 内存。
+- 有文字或多会话时显示，否则隐藏
+- 多会话时显示 `×N` 计数
+- 根据状态自动切换 normal/warning/error 样式
 
 ---
 
-## SpriteAnimator.swift — 动画引擎
+## Tauri 配置文件
 
-### 可配置参数
+### tauri.conf.json
 
-| 参数 | 配置项 | 默认值 |
-|---|---|---|
-| 帧率 | `renderer.fps` | 10 FPS (100ms/帧) |
-| 定时器 | — | DispatchSourceTimer |
+关键安全配置：
 
-### 动画类型
-
-| 类型 | 状态 | 行为 |
-|---|---|---|
-| **循环** | idle, running, running-right, running-left, waiting, review, failed | 播完一轮后从头循环 |
-| **一次性** | jumping, waving | 播完一轮后自动回到触发前的状态 |
-
-### 状态切换
-
-```swift
-transition(to: "running")   // 切换到 running 动画
-triggerOneShot("jumping")   // 触发跳跃动画，播完后恢复之前状态
-handleDrag(dx: 5.0)          // 向右拖动 → running-right
-handleDrag(dx: -3.0)         // 向左拖动 → running-left
-handleDrag(dx: 0)            // 松手 → 恢复 preDragState
+```json
+{
+  "app": {
+    "withGlobalTauri": true,       // 前端直接使用 window.__TAURI__
+    "macOSPrivateApi": true,       // macOS 透明窗口所需
+    "security": {
+      "assetProtocol": {           // 允许加载本地精灵帧
+        "enable": true,
+        "scope": { "allow": ["**/*"] }
+      }
+    }
+  }
+}
 ```
 
-### 拖动方向覆盖
+### capabilities/default.json
 
-- `dx > 0.5` → running-right
-- `dx < -0.5` → running-left
-- `dx == 0` → 恢复拖动前的状态
-- `preDragState` 只在首次进入拖动时保存
-- 如果 `preDragState` 本身是拖动状态，恢复到 idle
+声明前端所需的权限：窗口拖动、尺寸设置、事件监听、Shell 执行。
 
----
+### Cargo.toml 关键依赖
 
-## SessionManager.swift — 多会话聚合
-
-### 状态优先级
-
-| 优先级 | 状态 | 含义 |
-|---|---|---|
-| 7 | running | 正在工作 |
-| 6 | running-right | 向右拖动 |
-| 6 | running-left | 向左拖动 |
-| 5 | review | 审阅代码 |
-| 4 | jumping | 庆祝完成 |
-| 3 | waving | 问候/通知 |
-| 2 | waiting | 等待授权 |
-| 1 | idle | 空闲 |
-| 0 | failed | 出错 |
-
-### 聚合规则
-
-1. 扫描所有活跃会话
-2. 取优先级最高的会话状态作为显示状态
-3. 取该会话的对话台词显示在气泡中
-4. 活跃会话数（非 idle）显示为 "×N"
-5. `isTerminal: true` 的会话立即删除
-
-### 清理机制
-
-| 触发 | 间隔配置 | 行为 |
-|---|---|---|
-| 定时器 | `renderer.cleanup_interval_sec` (默认 5s) | 移除已被 hook 删除的 orphan 会话 |
-| 磁盘加载 | 事件驱动 | 跳过 >`stale_timeout_sec` 未更新的过期会话 |
-| terminal 标记 | 即时 | 收到 `isTerminal: true` 时立即删除 |
-
----
-
-## StateWatcher.swift — 状态监听
-
-### 双通道设计
-
-| 通道 | 机制 | 路径配置 | 延迟 |
-|---|---|---|---|
-| **Unix Socket** (主) | `config.socket_path` | `/tmp/kotori-pet.sock` | <1ms |
-| **文件监控** (兜底) | DispatchSource | `config.sessions_dir` | ~100ms |
-
-### Socket 协议
-
-- AF_UNIX SOCK_STREAM
-- Hook 连接 → 发送 JSON → 关闭
-- 渲染器 accept → 解析 → 调用 SessionManager.update()
-- Best-effort：socket 不存在时不报错
-
-### 文件监控
-
-- `DispatchSource.makeFileSystemObjectSource`
-- 监听目录的 write/delete/rename 事件
-- 触发时调用 `SessionManager.loadFromDisk()`
+| crate | 用途 |
+|---|---|
+| `tauri` v2 | 桌面应用框架 |
+| `tauri-plugin-shell` | Shell 命令执行 |
+| `tokio` | 异步运行时 (socket, broadcast, timer) |
+| `notify` | 跨平台文件系统监控 |
+| `chrono` | 时间解析 |
+| `objc` (macOS) | NSWindow/WKWebView 透明化 |

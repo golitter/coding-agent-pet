@@ -4,8 +4,8 @@
 
 | 文件 | 用途 |
 |---|---|
-| `mac/hooks/pet-claude-hook.sh` | Claude Code 事件处理 |
-| `mac/hooks/pet-codex-hook.sh` | Codex 事件处理 |
+| `cross-platform/hooks/pet-claude-hook.sh` | Claude Code 事件处理 |
+| `cross-platform/hooks/pet-codex-hook.sh` | Codex 事件处理 |
 
 ## 机制
 
@@ -31,13 +31,13 @@ stdin JSON
 ## 路径自动检测
 
 ```
-hooks/pet-claude-hook.sh   → MAC_DIR = hooks 的父目录 (mac/)
-MAC_DIR.parent.parent       → REPO_ROOT (desktop/ 的父目录)
+hooks/pet-claude-hook.sh   → PLATFORM_DIR = hooks 的父目录 (cross-platform/)
+PLATFORM_DIR.parent.parent  → REPO_ROOT (desktop/ 的父目录)
 
 null 值自动拼接:
   pet_base_dir → REPO_ROOT
   frames_dir   → REPO_ROOT/{pet_id}/frames
-  sessions_dir → REPO_ROOT/desktop/mac/runtime/sessions
+  sessions_dir → REPO_ROOT/desktop/cross-platform/runtime/sessions
 ```
 
 ## 事件 → 状态映射
@@ -49,10 +49,7 @@ null 值自动拼接:
 | `SessionStart` | waving | "嗨！小鸟来啦～" | 普通 |
 | `UserPromptSubmit` | running | "收到！开始工作～" | 普通 |
 | `PreToolUse` | running | "执行中..." | 普通 |
-| `PostToolUse` (Read) | review | "让我看看..." | 普通 |
-| `PostToolUse` (Edit/Write) | review | "改好啦～" | 普通 |
-| `PostToolUse` (Bash) | idle | "命令执行完毕！" | 普通 |
-| `PostToolUse` (其他) | idle | "" | 普通 |
+| `PostToolUse` | running | "处理中..." | 普通 |
 | `Stop` | jumping | "搞定啦！✨" | 延迟删除 (2s) |
 | `StopFailure` | failed | "呜...出了点问题" | terminal (3s) |
 | `Notification` | waving | "注意哦～" | 普通 |
@@ -65,7 +62,7 @@ null 值自动拼接:
 
 ## Session 文件格式
 
-路径: `desktop/mac/runtime/sessions/{session_id}.json`
+路径: `desktop/cross-platform/runtime/sessions/{session_id}.json`
 
 ```json
 {
@@ -101,7 +98,7 @@ SessionEnd → 立即删除 session 文件
 ## 配置集成脚本
 
 `setup-hooks.sh` 从 config 读取 hook 路径和 settings 路径，自动：
-1. 清理旧版本 hook 条目
+1. 清理旧版本 hook 条目（包括 `desktop/mac/hooks/` 的旧路径）
 2. 为每个事件添加新的 hook
 3. 写回 settings 文件
 
@@ -112,6 +109,12 @@ SessionEnd → 立即删除 session 文件
   "codex_hooks": "~/.Codex/hooks.json"
 }
 ```
+
+清理的旧路径：
+- `kotori-desktop-pet/hooks/pet-claude-hook.sh`
+- `kotori-desktop-pet/hooks/pet-codex-hook.sh`
+- `desktop/mac/hooks/pet-claude-hook.sh`
+- `desktop/mac/hooks/pet-codex-hook.sh`
 
 ## 支持新平台
 

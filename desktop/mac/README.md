@@ -1,4 +1,22 @@
-# 🐦 Kotori 虚拟桌面宠物 (macOS)
+# 🐦 Kotori 虚拟桌面宠物 (macOS) — ⚠️ 已弃用
+
+> **⚠️ 此目录已弃用！**
+>
+> 本目录为旧版 macOS 原生 Swift 实现，已不再维护。
+> 请使用基于 Tauri 的跨平台版本：[`desktop/cross-platform/`](../cross-platform/)
+>
+> 迁移方式：
+> ```bash
+> cd desktop/cross-platform
+> cp config.example.json config.json   # 按需修改配置
+> ./setup.sh                           # 一键安装 & 启动
+> ```
+>
+> 详见 [跨平台文档](../docs/overview.md)。
+
+---
+
+以下为旧版说明，仅供参考：
 
 一只浮在桌面上的像素风南小鸟，会根据你的 AI 编码工具（Claude Code / Codex）的状态切换动画和对话。
 
