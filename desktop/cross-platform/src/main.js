@@ -205,29 +205,21 @@ function getQuitShortcut() {
 /**
  * Triple-click handler — wipe every session file on disk and bubble up
  * feedback. No staleness threshold: this is the user's "give me a clean
- * slate" escape hatch, so it clears regardless of mtime. Bubble auto-fades
- * after 2.5s unless a state-change event has overwritten it in the meantime
- * (checked by comparing text).
+ * slate" escape hatch, so it clears regardless of mtime. Both branches
+ * auto-fade via DialogueBubble's AUTO_HIDE_MS (forceAutoHide=true), so the
+ * failed bubble fades even though "failed" is normally a persistent state.
  */
 async function triggerRedundantCleanup(bubble) {
-  let text;
   try {
     const count = await invoke("purge_all_sessions");
-    text = count > 0 ? `清理了 ${count} 个会话～` : "没有可清理的会话～";
+    const text = count > 0 ? `清理了 ${count} 个会话～` : "没有可清理的会话～";
     bubble.show(text, 0, "waving");
   } catch (e) {
     console.error("[TripleClick] purge_all_sessions failed:", e);
-    text = "清理失败…";
-    bubble.show(text, 0, "failed");
+    // forceAutoHide: "failed" is normally a persistent state, but this is
+    // one-shot user feedback and should fade out like the success branch.
+    bubble.show("清理失败…", 0, "failed", true);
   }
-
-  // Auto-hide after 2.5s, but only if no state-change event has replaced the
-  // text in the meantime — otherwise we'd clobber a fresh agent update.
-  setTimeout(() => {
-    if (bubble.textEl.textContent === text) {
-      bubble.hide();
-    }
-  }, 2500);
 }
 
 /** Setup click, drag, and right-click handlers */
