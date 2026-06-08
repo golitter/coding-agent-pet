@@ -258,27 +258,37 @@ function setupInteractions(animator, contextMenu, bubble) {
   });
 
   // mousemove can fire at 120Hz on ProMotion / high-precision trackpads.
-  // Coalesce via rAF so drag state updates happen at most once per frame.
+  //
+  // startDragging() MUST run synchronously inside the mousemove handler: it
+  // hands control to the OS's native window-drag loop, which only honors the
+  // call within the trusted user-gesture event. The previous code called it
+  // from a requestAnimationFrame callback (one frame later, outside the event
+  // stack), so the OS ignored it and the pet wouldn't move. The rAF loop below
+  // now only throttles the directional *animation*, not the drag itself.
   let pendingMove = null;
   document.addEventListener("mousemove", (e) => {
     if (!dragStart || e.button !== 0) return;
+
+    if (!isDragging) {
+      const dx = e.screenX - dragStart.x;
+      const dy = e.screenY - dragStart.y;
+      if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+        isDragging = true;
+        appWindow.startDragging();
+      }
+    }
     pendingMove = e;
   });
 
   const processMove = () => {
-    if (pendingMove) {
+    if (pendingMove && isDragging) {
       const e = pendingMove;
       pendingMove = null;
       const dx = e.screenX - dragStart.x;
-      const dy = e.screenY - dragStart.y;
-
-      if (!isDragging && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
-        isDragging = true;
-        appWindow.startDragging();
-      }
-
-      // Direction animation
-      if (isDragging && Math.abs(dx) > 0.5) {
+      // Direction animation only — once startDragging() ran, the OS owns the
+      // actual window movement (and may stop delivering further mousemove until
+      // release), so we just feed the last-known dx to the animator.
+      if (Math.abs(dx) > 0.5) {
         animator.handleDrag(dx);
       }
     }
