@@ -108,8 +108,19 @@ def setup_platform(settings_path, hook_cmd, events, platform_name):
             }]
         })
 
-    with open(settings_path, 'w') as f:
-        json.dump(settings, f, indent=2, ensure_ascii=False)
+    # Atomic write: write to tmp file first, then rename
+    tmp_path = settings_path + '.tmp'
+    try:
+        with open(tmp_path, 'w') as f:
+            json.dump(settings, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, settings_path)
+    except Exception:
+        # Clean up tmp file on failure
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
     print(f'  ✓ 已配置 {len(events)} 个 {platform_name} hook 事件')
 
