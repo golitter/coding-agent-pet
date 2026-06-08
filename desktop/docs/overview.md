@@ -137,3 +137,15 @@ cd ~/pet
 | 前端 | HTML + CSS + JS | 精灵动画、对话气泡、交互 |
 | 通信 | Tauri Event + IPC | Rust → JS 状态推送 |
 | 构建 | npm + Cargo | 前端依赖 + Rust 编译 |
+| 日志 | `tracing` | 结构化日志，支持 `RUST_LOG` 环境变量 |
+
+## 安全设计
+
+| 方面 | 措施 |
+|---|---|
+| **Socket 权限** | Unix socket 文件权限 `0o600`，仅 owner 可连接，防止本地其他用户注入伪造状态 |
+| **AppleScript 沙箱** | `run_applescript` command 拒绝包含 `do shell script` 或反引号的脚本，防止任意命令执行 |
+| **最小权限** | capabilities 仅声明实际需要的窗口操作和事件权限，不含 `shell:allow-execute` |
+| **Payload 限制** | socket 接收上限 64KB，防止恶意超大 payload |
+| **Shell 注入防护** | Python hook 延迟删除使用 `threading.Timer`，不拼接到 shell 命令 |
+| **Mutex 安全** | SessionManager 所有可变状态合并为单个 `Mutex<Inner>`，消除死锁风险 |

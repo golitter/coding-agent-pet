@@ -11,6 +11,13 @@ xattr -cr src-tauri/target/debug/kotori-pet  # macOS: 清除签名限制
 
 或使用脚本：`./build-and-run.sh`
 
+日志级别通过环境变量 `RUST_LOG` 控制（默认 `info`）：
+
+```bash
+RUST_LOG=debug ./src-tauri/target/debug/kotori-pet   # 详细日志
+RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
+```
+
 ## 组件一览
 
 ### Rust 后端 (`src-tauri/src/`)
@@ -56,6 +63,8 @@ src-tauri/    → cross-platform/    (config 所在目录)
 
 支持 `~` 展开和相对路径。
 
+日志输出使用 `tracing::info!`，而非 `println!`。
+
 ---
 
 ## commands.rs — Tauri Commands
@@ -64,11 +73,17 @@ src-tauri/    → cross-platform/    (config 所在目录)
 
 | Command | 说明 |
 |---|---|
-| `get_config` | 返回前端所需的配置子集（frames_dir, scale, fps, dialogue_*, menu_items） |
-| `run_applescript` | 执行 AppleScript 命令（用于菜单项"打开应用"） |
+| `get_config` | 返回前端所需的配置子集（frames_dir, scale, fps, dialogue_\*, menu_items） |
+| `run_applescript` | 执行 AppleScript 命令（**仅 macOS**，含安全检查） |
 | `quit_app` | 退出应用（`app.exit(0)`） |
 
 前端通过 `window.__TAURI__.core.invoke('get_config')` 调用。
+
+### `run_applescript` 安全机制
+
+- **平台守卫**: 非 macOS 平台直接返回错误 `"AppleScript is only available on macOS"`
+- **内容过滤**: 拒绝包含 `do shell script` 或反引号的脚本，防止通过 AppleScript 执行任意 shell 命令
+- **错误处理**: 前端 `invoke` 调用均带有 `.catch()` 处理
 
 ---
 
@@ -77,24 +92,40 @@ src-tauri/    → cross-platform/    (config 所在目录)
 启动顺序：
 
 ```
-1. PetConfig          ← 加载配置
-2. NSWindow 透明化     ← macOS: objc 调用设置透明背景
-3. Dock 隐藏          ← macOS: ActivationPolicy::Accessory
-4. 创建 sessions 目录  ← std::fs::create_dir_all
-5. SessionManager     ← 多会话聚合器 (Rust)
-6. 状态变化订阅        ← broadcast channel → emit "state-change" 到前端
-7. Unix Socket 服务端  ← 异步接收 hook 推送
-8. 文件系统监控        ← notify crate 监听 sessions 目录变化
-9. 加载磁盘会话        ← load_from_disk()
-10. 定时清理           ← tokio interval, 间隔从配置读取
-11. 注入配置到 Tauri   ← app.manage(config)
+0. tracing subscriber   ← 初始化日志框架 (支持 RUST_LOG 环境变量)
+1. PetConfig            ← 加载配置
+2. NSWindow 透明化      ← macOS: objc 调用设置透明背景
+3. Dock 隐藏           ← macOS: ActivationPolicy::Accessory
+4. 创建 sessions 目录   ← std::fs::create_dir_all
+5. SessionManager      ← 多会话聚合器 (Rust)
+6. 状态变化订阅         ← broadcast channel → emit "state-change" 到前端
+7. Unix Socket 服务端   ← 异步接收 hook 推送
+8. 文件系统监控         ← notify crate 监听 sessions 目录变化
+9. 加载磁盘会话         ← load_from_disk()
+10. 定时清理            ← tokio interval, 间隔从配置读取
+11. 注入配置到 Tauri    ← app.manage(config)
 ```
 
 **macOS 透明窗口**: 通过 `objc` crate 直接操作 NSWindow 和 WKWebView，设置 `opaque=NO`、`backgroundColor=clearColor`、`hasShadow=NO`。
 
+**日志系统**: 使用 `tracing` + `tracing-subscriber` 替代 `println!`/`eprintln!`，支持结构化日志和 `RUST_LOG` 环境变量过滤。
+
 ---
 
 ## session.rs — 多会话聚合
+
+### 内部结构
+
+所有可变状态封装在单个 `Mutex<Inner>` 中，包含 `sessions` HashMap 和 `aggregated` 显示状态，通过辅助方法操作：
+
+| 方法 | 说明 |
+|---|---|
+| `remove_session(id)` | 删除指定会话 |
+| `insert_session(id, state)` | 插入/更新会话 |
+| `replace_all_sessions(new)` | 原子替换所有会话（用于 `load_from_disk`） |
+| `remove_orphaned_sessions(file_ids)` | 批量删除无对应文件的会话 |
+
+这种设计避免了多个独立 Mutex 导致的死锁风险。
 
 ### 状态优先级
 
@@ -130,7 +161,7 @@ pub struct StateChange {
 }
 ```
 
-Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。
+Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。广播前会释放 Mutex 锁，避免阻塞其他调用者。
 
 ### 清理机制
 
@@ -155,14 +186,16 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。
 
 - AF_UNIX SOCK_STREAM (Tokio async)
 - Hook 连接 → 发送 JSON → 关闭
-- 渲染器 accept → 解析 → 调用 SessionManager.update()
+- 渲染器 accept → 循环读取完整 payload → 解析 → 调用 SessionManager.update()
+- **安全限制**: socket 文件权限设为 `0o600`（仅 owner 可读写），防止其他用户注入伪造事件
+- **缓冲区**: 动态增长，循环读取至 EOF，上限 64KB
 - Best-effort：socket 不存在时不报错
 
 ### 文件监控
 
 - 使用 `notify::recommended_watcher`（跨平台）
 - 监听目录的任何变更事件
-- 触发时调用 `SessionManager.load_from_disk()`
+- **防抖**: 100ms 窗口内合并多个事件，只触发一次 `load_from_disk()`，避免高频写入导致的冗余 I/O
 - 在独立阻塞线程中运行
 
 ---
@@ -231,11 +264,17 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。
 
 | action | 说明 |
 |---|---|
-| `applescript` | 通过 `invoke('run_applescript')` 执行 AppleScript |
+| `applescript` | 通过 `invoke('run_applescript')` 执行 AppleScript（仅 macOS） |
 | `quit` | 退出应用 (`invoke('quit_app')` → `app.exit(0)`) |
 | `separator` | 分隔线 |
 
 默认菜单：打开 Codex、打开 VS Code、分隔线、关闭宠物。
+
+所有 `invoke` 调用都带有 `.catch()` 错误处理。
+
+### 平台检测
+
+使用 `navigator.userAgentData?.platform`（现代 API）搭配 `navigator.userAgent` 降级检测 macOS，替代已废弃的 `navigator.platform`。
 
 ---
 
@@ -343,7 +382,9 @@ animator.handleDrag(0)             // 松手 → 恢复 preDragState
 
 ### capabilities/default.json
 
-声明前端所需的权限：窗口拖动、尺寸设置、事件监听、Shell 执行。
+声明前端所需的最小权限集：窗口拖动、尺寸设置、事件监听。
+
+> **注意**: `shell:allow-execute` 权限已移除——前端不直接使用 shell plugin，AppleScript 执行通过 Rust 端 `run_applescript` command（IPC）完成。
 
 ### Cargo.toml 关键依赖
 
@@ -355,3 +396,5 @@ animator.handleDrag(0)             // 松手 → 恢复 preDragState
 | `notify` | 跨平台文件系统监控 |
 | `chrono` | 时间解析 |
 | `objc` (macOS) | NSWindow/WKWebView 透明化 |
+| `tracing` | 结构化日志框架 |
+| `tracing-subscriber` | 日志输出（支持 `RUST_LOG` 环境变量过滤） |

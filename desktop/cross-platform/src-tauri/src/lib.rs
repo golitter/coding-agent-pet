@@ -12,6 +12,7 @@ use session::SessionManager;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
+use tracing::{info, warn};
 
 /// macOS: Force NSWindow and WKWebView to transparent via objc.
 #[cfg(target_os = "macos")]
@@ -46,6 +47,14 @@ fn make_window_transparent(window: &tauri::WebviewWindow) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize tracing subscriber
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
@@ -78,7 +87,7 @@ pub fn run() {
                             let _ = app_handle.emit("state-change", &change);
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                            eprintln!("[SessionManager] Lagged {} events", n);
+                            warn!("SessionManager lagged {} events", n);
                         }
                         Err(_) => break,
                     }
@@ -116,7 +125,7 @@ pub fn run() {
             // 10. Store config for frontend access
             app.manage(config);
 
-            println!("[KotoriPet] ✓ Running. Press Ctrl+C to exit.");
+            info!("KotoriPet ✓ Running. Press Ctrl+C to exit.");
 
             Ok(())
         })

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
+use tracing::info;
 
 /// Priority order for aggregating multi-session states.
 /// Higher number = higher priority.
@@ -46,27 +47,76 @@ pub struct StateChange {
     pub active_count: usize,
 }
 
+/// Aggregated display state — protected by a single Mutex to prevent deadlocks.
+struct AggregatedState {
+    current_state: String,
+    current_dialogue: String,
+    active_count: usize,
+}
+
+/// All mutable state behind ONE Mutex.
+struct Inner {
+    sessions: HashMap<String, SessionState>,
+    aggregated: AggregatedState,
+}
+
 /// Manages multiple concurrent sessions, aggregates them into a single display state.
 pub struct SessionManager {
-    sessions: Mutex<HashMap<String, SessionState>>,
+    inner: Mutex<Inner>,
     sessions_dir: String,
     stale_timeout_sec: u64,
-    current_state: Mutex<String>,
-    current_dialogue: Mutex<String>,
-    active_count: Mutex<usize>,
     tx: broadcast::Sender<StateChange>,
+}
+
+// ── Convenience helpers for accessing `inner.sessions` ──
+
+impl SessionManager {
+    /// Lock inner and remove a session by id. Returns true if removed.
+    fn remove_session(&self, id: &str) -> bool {
+        self.inner.lock().unwrap().sessions.remove(id).is_some()
+    }
+
+    /// Lock inner and insert a session.
+    fn insert_session(&self, id: String, state: SessionState) {
+        self.inner.lock().unwrap().sessions.insert(id, state);
+    }
+
+    /// Lock inner and replace all sessions atomically.
+    fn replace_all_sessions(&self, new: HashMap<String, SessionState>) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.sessions = new;
+    }
+
+    /// Lock inner, collect orphaned session ids (those not in `file_ids`), then remove them.
+    fn remove_orphaned_sessions(&self, file_ids: &std::collections::HashSet<String>) -> Vec<String> {
+        let mut inner = self.inner.lock().unwrap();
+        let orphaned: Vec<String> = inner
+            .sessions
+            .keys()
+            .filter(|id| !file_ids.contains(*id))
+            .cloned()
+            .collect();
+        for id in &orphaned {
+            inner.sessions.remove(id);
+        }
+        orphaned
+    }
 }
 
 impl SessionManager {
     pub fn new(sessions_dir: String, stale_timeout_sec: u64) -> Self {
         let (tx, _) = broadcast::channel(16);
         Self {
-            sessions: Mutex::new(HashMap::new()),
+            inner: Mutex::new(Inner {
+                sessions: HashMap::new(),
+                aggregated: AggregatedState {
+                    current_state: "idle".to_string(),
+                    current_dialogue: String::new(),
+                    active_count: 0,
+                },
+            }),
             sessions_dir,
             stale_timeout_sec,
-            current_state: Mutex::new("idle".to_string()),
-            current_dialogue: Mutex::new(String::new()),
-            active_count: Mutex::new(0),
             tx,
         }
     }
@@ -78,7 +128,7 @@ impl SessionManager {
     /// Update a session's state from a hook event.
     pub fn update(&self, session_id: &str, state: &str, dialogue: &str, source: &str, is_terminal: bool) {
         if is_terminal {
-            self.sessions.lock().unwrap().remove(session_id);
+            self.remove_session(session_id);
             // Also delete file
             let path = PathBuf::from(&self.sessions_dir).join(format!("{}.json", session_id));
             let _ = std::fs::remove_file(path);
@@ -99,10 +149,7 @@ impl SessionManager {
             updated_at: now,
         };
 
-        self.sessions
-            .lock()
-            .unwrap()
-            .insert(session_id.to_string(), session);
+        self.insert_session(session_id.to_string(), session);
         self.aggregate_and_notify();
     }
 
@@ -170,7 +217,7 @@ impl SessionManager {
             );
         }
 
-        *self.sessions.lock().unwrap() = loaded;
+        self.replace_all_sessions(loaded);
         self.aggregate_and_notify();
     }
 
@@ -193,39 +240,27 @@ impl SessionManager {
             })
             .collect();
 
-        let mut sessions = self.sessions.lock().unwrap();
-        let orphaned: Vec<String> = sessions
-            .keys()
-            .filter(|id| !file_ids.contains(*id))
-            .cloned()
-            .collect();
+        let orphaned = self.remove_orphaned_sessions(&file_ids);
 
         if !orphaned.is_empty() {
-            for id in &orphaned {
-                sessions.remove(id);
-            }
-            drop(sessions);
-            println!("[SessionManager] Cleaned up {} orphaned sessions", orphaned.len());
+            info!("Cleaned up {} orphaned sessions", orphaned.len());
             self.aggregate_and_notify();
         }
     }
 
     /// Aggregate all sessions into a single display state using priority.
     fn aggregate_and_notify(&self) {
-        let sessions = self.sessions.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap();
 
-        if sessions.is_empty() {
-            drop(sessions);
-            let changed = {
-                let mut cs = self.current_state.lock().unwrap();
-                let mut cd = self.current_dialogue.lock().unwrap();
-                let mut ac = self.active_count.lock().unwrap();
-                let c = *cs != "idle" || !cd.is_empty() || *ac != 0;
-                *cs = "idle".to_string();
-                *cd = String::new();
-                *ac = 0;
-                c
-            };
+        if inner.sessions.is_empty() {
+            let changed = inner.aggregated.current_state != "idle"
+                || !inner.aggregated.current_dialogue.is_empty()
+                || inner.aggregated.active_count != 0;
+            inner.aggregated.current_state = "idle".to_string();
+            inner.aggregated.current_dialogue = String::new();
+            inner.aggregated.active_count = 0;
+
+            drop(inner);
             if changed {
                 let _ = self.tx.send(StateChange {
                     state: "idle".to_string(),
@@ -239,7 +274,7 @@ impl SessionManager {
         let mut best_session: Option<&SessionState> = None;
         let mut best_priority = -1i32;
 
-        for s in sessions.values() {
+        for s in inner.sessions.values() {
             let priority = get_priority(&s.state);
             if priority > best_priority {
                 best_priority = priority;
@@ -253,27 +288,24 @@ impl SessionManager {
         let new_dialogue = best_session
             .map(|s| s.dialogue.clone())
             .unwrap_or_default();
-        let new_count = sessions.values().filter(|s| s.state != "idle").count();
+        let new_count = inner.sessions.values().filter(|s| s.state != "idle").count();
 
-        drop(sessions);
-
-        let changed = {
-            let cs = self.current_state.lock().unwrap();
-            let cd = self.current_dialogue.lock().unwrap();
-            let ac = self.active_count.lock().unwrap();
-            *cs != new_state || *cd != new_dialogue || *ac != new_count
-        };
+        let changed = inner.aggregated.current_state != new_state
+            || inner.aggregated.current_dialogue != new_dialogue
+            || inner.aggregated.active_count != new_count;
 
         if changed {
-            *self.current_state.lock().unwrap() = new_state.clone();
-            *self.current_dialogue.lock().unwrap() = new_dialogue.clone();
-            *self.active_count.lock().unwrap() = new_count;
+            inner.aggregated.current_state = new_state.clone();
+            inner.aggregated.current_dialogue = new_dialogue.clone();
+            inner.aggregated.active_count = new_count;
 
-            println!(
-                "[SessionManager] → state={} dialogue=\"{}\" active={}",
+            info!(
+                "state={} dialogue=\"{}\" active={}",
                 new_state, new_dialogue, new_count
             );
 
+            // Drop the lock before broadcasting to avoid blocking other callers.
+            drop(inner);
             let _ = self.tx.send(StateChange {
                 state: new_state,
                 dialogue: new_dialogue,

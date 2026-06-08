@@ -10,7 +10,7 @@
 | `cross-platform/hooks/scripts/claude_hook.py` | Claude Code 事件处理 |
 | `cross-platform/hooks/scripts/codex_hook.py` | Codex 事件处理（含 EVENT_ALIASES + 调试日志）|
 
-Shell 脚本仅做调用入口，所有逻辑在 `scripts/*.py` 中。两个 hook 共享 `common.py` 中约 130 行核心代码。
+Shell 脚本仅做调用入口，所有逻辑在 `scripts/*.py` 中。两个 hook 共享 `common.py` 中约 120 行核心代码。
 
 ## 机制
 
@@ -36,7 +36,7 @@ stdin JSON
   → 映射 event → (state, dialogue)
   → 原子写入 sessions/{session_id}.json
   → 推送 Unix socket (best-effort)
-  → terminal 事件: 异步延迟删除文件
+  → terminal 事件: 延迟删除文件 (threading.Timer)
 ```
 
 ## 路径自动检测
@@ -105,6 +105,8 @@ SessionEnd → 立即删除 session 文件
 ```
 
 **原子写入**: 先写 `.tmp`，再 `os.replace()` 重命名，防止读到不完整数据。
+
+**延迟删除**: 使用 `threading.Timer` 而非 shell 子进程，避免路径中特殊字符导致的 shell 注入风险。
 
 ## 配置集成脚本
 

@@ -2,6 +2,8 @@ use crate::session::SessionManager;
 use notify::Watcher;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tracing::{info, warn};
 
 /// Start a Unix socket server that receives JSON payloads from hook scripts.
 /// Runs as a Tokio async task.
@@ -14,12 +16,21 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<SessionMana
     let listener = match tokio::net::UnixListener::bind(&path) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("[Watcher] ⚠️ Cannot bind socket {}: {}", path, e);
+            warn!("Cannot bind socket {}: {}", path, e);
             return;
         }
     };
 
-    println!("[Watcher] ✓ Socket listening: {}", path);
+    // Restrict socket file permissions to owner-only (prevent other users from injecting events)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)) {
+            warn!("Cannot set socket permissions: {}", e);
+        }
+    }
+
+    info!("Socket listening: {}", path);
 
     loop {
         match listener.accept().await {
@@ -27,14 +38,24 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<SessionMana
                 let mgr = session_mgr.clone();
                 tokio::spawn(async move {
                     use tokio::io::AsyncReadExt;
-                    let mut buf = vec![0u8; 4096];
-                    let n = match stream.read(&mut buf).await {
-                        Ok(n) if n > 0 => n,
-                        _ => return,
-                    };
+                    // Read the full payload in a growing buffer until EOF.
+                    // Hook scripts open a connection, write one JSON blob, then close.
+                    let mut buf = Vec::with_capacity(8192);
+                    let mut tmp = [0u8; 4096];
+                    loop {
+                        match stream.read(&mut tmp).await {
+                            Ok(0) => break,
+                            Ok(n) => buf.extend_from_slice(&tmp[..n]),
+                            Err(_) => return,
+                        };
+                        // Safety cap: reject payloads larger than 64 KB
+                        if buf.len() > 65536 {
+                            warn!("Socket payload too large ({} bytes), dropping", buf.len());
+                            return;
+                        }
+                    }
 
-                    let data = &buf[..n];
-                    let json: serde_json::Value = match serde_json::from_slice(data) {
+                    let json: serde_json::Value = match serde_json::from_slice(&buf) {
                         Ok(v) => v,
                         Err(_) => return,
                     };
@@ -49,7 +70,7 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<SessionMana
                 });
             }
             Err(e) => {
-                eprintln!("[Watcher] ⚠️ Accept error: {}", e);
+                warn!("Socket accept error: {}", e);
             }
         }
     }
@@ -65,29 +86,35 @@ pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<SessionManager>) 
     let mut watcher = match notify::recommended_watcher(tx) {
         Ok(w) => w,
         Err(e) => {
-            eprintln!(
-                "[Watcher] ⚠️ Cannot create file watcher: {}",
-                e
-            );
+            warn!("Cannot create file watcher: {}", e);
             return;
         }
     };
 
     if let Err(e) = watcher.watch(Path::new(&dir), notify::RecursiveMode::Recursive) {
-        eprintln!(
-            "[Watcher] ⚠️ Cannot watch directory {}: {}",
-            dir, e
-        );
+        warn!("Cannot watch directory {}: {}", dir, e);
         return;
     }
 
-    println!("[Watcher] ✓ Watching directory: {}", dir);
+    info!("Watching directory: {}", dir);
 
-    // Process events — just trigger load_from_disk on any change
+    // Process events with debounce: coalesce rapid fs events (100ms window)
+    // so that multiple file changes in quick succession only trigger one reload.
+    let debounce = Duration::from_millis(100);
+    let mut last_reload = Instant::now() - debounce; // allow first event immediately
+
     loop {
         match rx.recv() {
             Ok(_event) => {
-                session_mgr.load_from_disk();
+                // Drain any queued events first
+                while rx.try_recv().is_ok() {}
+
+                let now = Instant::now();
+                if now.duration_since(last_reload) >= debounce {
+                    session_mgr.load_from_disk();
+                    last_reload = now;
+                }
+                // else: within debounce window, skip — the next event will pick it up
             }
             Err(_) => break,
         }

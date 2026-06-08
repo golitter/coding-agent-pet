@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+use tracing::info;
 
 /// Resolved configuration used throughout the application.
 #[derive(Debug, Clone)]
@@ -210,11 +211,11 @@ impl PetConfig {
             menu_items,
         };
 
-        println!("[Config] ✓ Config: {}", actual_path.display());
-        println!("[Config]   petBaseDir: {}", config.pet_base_dir);
-        println!("[Config]   framesDir: {}", config.frames_dir);
-        println!("[Config]   sessionsDir: {}", config.sessions_dir);
-        println!("[Config]   scale: {}, fps: {}", config.scale, config.fps);
+        info!("Config: {}", actual_path.display());
+        info!("  petBaseDir: {}", config.pet_base_dir);
+        info!("  framesDir: {}", config.frames_dir);
+        info!("  sessionsDir: {}", config.sessions_dir);
+        info!("  scale: {}, fps: {}", config.scale, config.fps);
 
         config
     }

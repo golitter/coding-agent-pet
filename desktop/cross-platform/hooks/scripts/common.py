@@ -8,7 +8,6 @@ and socket push logic.
 import json
 import os
 import socket
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,15 +58,25 @@ def write_session(session_file, payload):
 
 
 def schedule_cleanup(session_file, delay):
-    """Schedule async deletion of session file after `delay` seconds."""
+    """Schedule async deletion of session file after `delay` seconds.
+
+    Uses threading.Timer to avoid shell injection from file paths
+    containing special characters.
+    """
+    import threading
+
+    def _delete():
+        try:
+            os.remove(session_file)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
+
     try:
-        subprocess.Popen(
-            ['nohup', '/bin/bash', '-c',
-             'sleep ' + str(delay) + ' && rm -f "' + session_file + '"'],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            preexec_fn=os.setpgrp,
-        )
+        timer = threading.Timer(delay, _delete)
+        timer.daemon = True
+        timer.start()
     except Exception:
         pass
 

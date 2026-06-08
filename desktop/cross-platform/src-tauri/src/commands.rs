@@ -51,15 +51,29 @@ pub fn quit_app(app: tauri::AppHandle) {
 
 #[tauri::command]
 pub fn run_applescript(script: String) -> Result<String, String> {
-    let output = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .output()
-        .map_err(|e| format!("Failed to run osascript: {}", e))?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = script;
+        return Err("AppleScript is only available on macOS".into());
+    }
 
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    #[cfg(target_os = "macos")]
+    {
+        // Reject scripts containing shell-escape attempts
+        if script.contains("do shell script") || script.contains("`") {
+            return Err("Script contains disallowed patterns".into());
+        }
+
+        let output = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output()
+            .map_err(|e| format!("Failed to run osascript: {}", e))?;
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
     }
 }

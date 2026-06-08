@@ -96,7 +96,7 @@ function buildContextMenu(menuEl, items) {
   if (!items || items.length === 0) {
     // Fallback menu
     menuEl.appendChild(createMenuItem('关闭宠物', () => {
-      invoke('quit_app');
+      invoke('quit_app').catch(e => console.error('[Menu] quit_app failed:', e));
     }, getQuitShortcut()));
     return;
   }
@@ -108,11 +108,11 @@ function buildContextMenu(menuEl, items) {
       menuEl.appendChild(sep);
     } else if (item.action === 'quit') {
       menuEl.appendChild(createMenuItem(item.title, () => {
-        invoke('quit_app');
+        invoke('quit_app').catch(e => console.error('[Menu] quit_app failed:', e));
       }, getQuitShortcut()));
     } else if (item.action === 'applescript' && item.script) {
       menuEl.appendChild(createMenuItem(item.title, () => {
-        invoke('run_applescript', { script: item.script });
+        invoke('run_applescript', { script: item.script }).catch(e => console.error('[Menu] run_applescript failed:', e));
       }));
     }
   }
@@ -148,7 +148,10 @@ function hideAllMenus() {
 }
 
 function isMacPlatform() {
-  return navigator.platform.toLowerCase().includes('mac');
+  if (navigator.userAgentData) {
+    return navigator.userAgentData.platform === 'macOS';
+  }
+  return /mac/i.test(navigator.userAgent);
 }
 
 function getQuitShortcut() {
@@ -233,7 +236,7 @@ function setupInteractions(animator, contextMenu) {
     if (quitModifierPressed && e.key.toLowerCase() === 'q') {
       e.preventDefault();
       hideAllMenus();
-      invoke('quit_app');
+      invoke('quit_app').catch(e => console.error('[Keyboard] quit_app failed:', e));
     }
   });
 }

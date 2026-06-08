@@ -46,6 +46,16 @@ Claude Code / Codex → JSON 事件 (hooks) → session 文件 → Unix Socket �
 
 支持多会话同时运行，按优先级聚合状态（waiting > running > review > jumping > waving > idle > failed）。
 
+### 安全措施
+
+| 措施 | 说明 |
+|---|---|
+| Socket 权限 `0o600` | 仅 owner 可连接，防止本地注入 |
+| AppleScript 内容过滤 | 拒绝 `do shell script` 和反引号 |
+| 最小 capabilities | 仅声明实际使用的权限 |
+| Mutex 合并 | 所有可变状态在单个 Mutex 后，消除死锁风险 |
+| Shell 注入防护 | Python hook 使用 `threading.Timer` 而非 shell 拼接 |
+
 ## 目录结构
 
 ```
@@ -69,9 +79,9 @@ desktop/cross-platform/
 │       ├── main.rs       #   入口
 │       ├── lib.rs        #   应用初始化：窗口透明 + 事件分发
 │       ├── config.rs     #   配置加载 + 路径自动检测
-│       ├── session.rs    #   多会话管理器 + 优先级聚合
-│       ├── watcher.rs    #   Unix Socket 服务端 + 文件监听
-│       └── commands.rs   #   Tauri 命令：获取配置 / AppleScript / 退出
+│       ├── session.rs    #   多会话管理器 (单 Mutex) + 优先级聚合
+│       ├── watcher.rs    #   Unix Socket 服务端 + 文件监听 (防抖)
+│       └── commands.rs   #   Tauri 命令：获取配置 / AppleScript (安全过滤) / 退出
 ├── hooks/                # Hook 脚本
 │   ├── pet-claude-hook.sh  # Claude Code hook 入口
 │   ├── pet-codex-hook.sh   # Codex hook 入口
@@ -112,6 +122,15 @@ desktop/cross-platform/
 ```
 
 详见 [config.example.json](config.example.json)。修改后运行 `./build-and-run.sh` 重启生效。
+
+### 日志
+
+Rust 后端使用 `tracing` 框架，通过 `RUST_LOG` 环境变量控制日志级别：
+
+```bash
+RUST_LOG=debug ./src-tauri/target/debug/kotori-pet   # 详细日志
+RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
+```
 
 ## 要求
 
