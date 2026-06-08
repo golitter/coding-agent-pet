@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "run_dir": "~/Lab/vscode/pet/kotori-minami",
+  "spritesheet": "~/Lab/vscode/pet/kotori-minami/final/spritesheet.webp",
+  "validation": "~/Lab/vscode/pet/kotori-minami/final/validation.json",
+  "contact_sheet": "~/Lab/vscode/pet/kotori-minami/qa/contact-sheet.png",
+  "review": "~/Lab/vscode/pet/kotori-minami/qa/review.json",
+  "package": "~/.codex/pets/kotori-minami"
+}

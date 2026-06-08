@@ -202,8 +202,8 @@ impl PetConfig {
             }
         }
 
-        let frames_dir =
-            frames_dir_override.unwrap_or_else(|| format!("{}/{}/frames", pet_base_dir, pet_id));
+        let frames_dir = frames_dir_override
+            .unwrap_or_else(|| format!("{}/assets/{}/frames", pet_base_dir, pet_id));
         let sessions_dir = sessions_dir_override
             .unwrap_or_else(|| format!("{}/desktop/cross-platform/runtime/sessions", pet_base_dir));
 
@@ -252,12 +252,13 @@ fn resolve_path(path: &str, base: &str) -> String {
     }
 }
 
-/// Walk up from a directory to find the repo root (directory containing kotori-minami/).
+/// Walk up from a directory to find the repo root (directory containing the
+/// `desktop/cross-platform/` app source tree — a stable landmark that survives
+/// resource reorganization, unlike pet-specific asset directories).
 fn detect_repo_root(start: &Path) -> String {
     let mut dir = start.to_path_buf();
     for _ in 0..10 {
-        if dir.join("kotori-minami").exists() || dir.join("desktop").join("cross-platform").exists()
-        {
+        if dir.join("desktop").join("cross-platform").exists() {
             return dir.to_string_lossy().to_string();
         }
         if !dir.pop() {

@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "frames_root": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames",
+  "frames_root": "kotori-minami/frames",
   "errors": [],
   "warnings": [],
   "rows": [
@@ -15,7 +15,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/00.png",
+          "file": "kotori-minami/frames/idle/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14620,
@@ -30,7 +30,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/01.png",
+          "file": "kotori-minami/frames/idle/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14836,
@@ -45,7 +45,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/02.png",
+          "file": "kotori-minami/frames/idle/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14762,
@@ -60,7 +60,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/03.png",
+          "file": "kotori-minami/frames/idle/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14941,
@@ -75,7 +75,7 @@
         },
         {
           "index": 4,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/04.png",
+          "file": "kotori-minami/frames/idle/04.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14726,
@@ -90,7 +90,7 @@
         },
         {
           "index": 5,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/idle/05.png",
+          "file": "kotori-minami/frames/idle/05.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14784,
@@ -116,7 +116,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/00.png",
+          "file": "kotori-minami/frames/running-right/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15608,
@@ -131,7 +131,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/01.png",
+          "file": "kotori-minami/frames/running-right/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15640,
@@ -146,7 +146,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/02.png",
+          "file": "kotori-minami/frames/running-right/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15853,
@@ -161,7 +161,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/03.png",
+          "file": "kotori-minami/frames/running-right/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 16611,
@@ -176,7 +176,7 @@
         },
         {
           "index": 4,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/04.png",
+          "file": "kotori-minami/frames/running-right/04.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15501,
@@ -191,7 +191,7 @@
         },
         {
           "index": 5,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/05.png",
+          "file": "kotori-minami/frames/running-right/05.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15815,
@@ -206,7 +206,7 @@
         },
         {
           "index": 6,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/06.png",
+          "file": "kotori-minami/frames/running-right/06.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15854,
@@ -221,7 +221,7 @@
         },
         {
           "index": 7,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-right/07.png",
+          "file": "kotori-minami/frames/running-right/07.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15542,
@@ -247,7 +247,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/00.png",
+          "file": "kotori-minami/frames/running-left/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15608,
@@ -262,7 +262,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/01.png",
+          "file": "kotori-minami/frames/running-left/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15640,
@@ -277,7 +277,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/02.png",
+          "file": "kotori-minami/frames/running-left/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15853,
@@ -292,7 +292,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/03.png",
+          "file": "kotori-minami/frames/running-left/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 16611,
@@ -307,7 +307,7 @@
         },
         {
           "index": 4,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/04.png",
+          "file": "kotori-minami/frames/running-left/04.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15501,
@@ -322,7 +322,7 @@
         },
         {
           "index": 5,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/05.png",
+          "file": "kotori-minami/frames/running-left/05.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15815,
@@ -337,7 +337,7 @@
         },
         {
           "index": 6,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/06.png",
+          "file": "kotori-minami/frames/running-left/06.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15854,
@@ -352,7 +352,7 @@
         },
         {
           "index": 7,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running-left/07.png",
+          "file": "kotori-minami/frames/running-left/07.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15542,
@@ -378,7 +378,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waving/00.png",
+          "file": "kotori-minami/frames/waving/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14631,
@@ -393,7 +393,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waving/01.png",
+          "file": "kotori-minami/frames/waving/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 15001,
@@ -408,7 +408,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waving/02.png",
+          "file": "kotori-minami/frames/waving/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14464,
@@ -423,7 +423,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waving/03.png",
+          "file": "kotori-minami/frames/waving/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14495,
@@ -449,7 +449,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/00.png",
+          "file": "kotori-minami/frames/jumping/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 19156,
@@ -464,7 +464,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/01.png",
+          "file": "kotori-minami/frames/jumping/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 17457,
@@ -479,7 +479,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/02.png",
+          "file": "kotori-minami/frames/jumping/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 19660,
@@ -494,7 +494,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/03.png",
+          "file": "kotori-minami/frames/jumping/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14732,
@@ -509,7 +509,7 @@
         },
         {
           "index": 4,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/jumping/04.png",
+          "file": "kotori-minami/frames/jumping/04.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 17903,
@@ -535,7 +535,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/00.png",
+          "file": "kotori-minami/frames/failed/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 19397,
@@ -550,7 +550,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/01.png",
+          "file": "kotori-minami/frames/failed/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 20553,
@@ -565,7 +565,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/02.png",
+          "file": "kotori-minami/frames/failed/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 21222,
@@ -580,7 +580,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/03.png",
+          "file": "kotori-minami/frames/failed/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 22751,
@@ -595,7 +595,7 @@
         },
         {
           "index": 4,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/04.png",
+          "file": "kotori-minami/frames/failed/04.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 22918,
@@ -610,7 +610,7 @@
         },
         {
           "index": 5,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/05.png",
+          "file": "kotori-minami/frames/failed/05.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 23121,
@@ -625,7 +625,7 @@
         },
         {
           "index": 6,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/06.png",
+          "file": "kotori-minami/frames/failed/06.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 21254,
@@ -640,7 +640,7 @@
         },
         {
           "index": 7,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/failed/07.png",
+          "file": "kotori-minami/frames/failed/07.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 21717,
@@ -666,7 +666,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/00.png",
+          "file": "kotori-minami/frames/waiting/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14835,
@@ -681,7 +681,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/01.png",
+          "file": "kotori-minami/frames/waiting/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14726,
@@ -696,7 +696,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/02.png",
+          "file": "kotori-minami/frames/waiting/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14710,
@@ -711,7 +711,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/03.png",
+          "file": "kotori-minami/frames/waiting/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14799,
@@ -726,7 +726,7 @@
         },
         {
           "index": 4,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/04.png",
+          "file": "kotori-minami/frames/waiting/04.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14776,
@@ -741,7 +741,7 @@
         },
         {
           "index": 5,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/waiting/05.png",
+          "file": "kotori-minami/frames/waiting/05.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14738,
@@ -767,7 +767,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/00.png",
+          "file": "kotori-minami/frames/running/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14008,
@@ -782,7 +782,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/01.png",
+          "file": "kotori-minami/frames/running/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 13931,
@@ -797,7 +797,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/02.png",
+          "file": "kotori-minami/frames/running/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 13908,
@@ -812,7 +812,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/03.png",
+          "file": "kotori-minami/frames/running/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 13830,
@@ -827,7 +827,7 @@
         },
         {
           "index": 4,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/04.png",
+          "file": "kotori-minami/frames/running/04.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14038,
@@ -842,7 +842,7 @@
         },
         {
           "index": 5,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/running/05.png",
+          "file": "kotori-minami/frames/running/05.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 13904,
@@ -868,7 +868,7 @@
       "frames": [
         {
           "index": 0,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/00.png",
+          "file": "kotori-minami/frames/review/00.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14011,
@@ -883,7 +883,7 @@
         },
         {
           "index": 1,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/01.png",
+          "file": "kotori-minami/frames/review/01.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 13987,
@@ -898,7 +898,7 @@
         },
         {
           "index": 2,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/02.png",
+          "file": "kotori-minami/frames/review/02.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14128,
@@ -913,7 +913,7 @@
         },
         {
           "index": 3,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/03.png",
+          "file": "kotori-minami/frames/review/03.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 13962,
@@ -928,7 +928,7 @@
         },
         {
           "index": 4,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/04.png",
+          "file": "kotori-minami/frames/review/04.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14086,
@@ -943,7 +943,7 @@
         },
         {
           "index": 5,
-          "file": "/Users/yanghao/Lab/vscode/bytedanceai/tmp/hatch-pet/kotori-minami/frames/review/05.png",
+          "file": "kotori-minami/frames/review/05.png",
           "width": 192,
           "height": 208,
           "nontransparent_pixels": 14142,

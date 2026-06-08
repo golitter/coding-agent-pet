@@ -54,11 +54,11 @@ RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
 target/debug/ → target/
 target/       → src-tauri/
 src-tauri/    → cross-platform/    (config 所在目录)
-向父级遍历查找含 kotori-minami/ 的目录 → repo root (pet_base_dir)
+向父级遍历查找含 desktop/cross-platform/ 的目录 → repo root (pet_base_dir)
 ```
 
 所有 `null` 值的路径自动拼接：
-- `frames_dir` → `{pet_base_dir}/{pet_id}/frames`
+- `frames_dir` → `{pet_base_dir}/assets/{pet_id}/frames`
 - `sessions_dir` → `{pet_base_dir}/desktop/cross-platform/runtime/sessions`
 
 支持 `~` 展开和相对路径。
@@ -171,7 +171,8 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。广�
 | 触发 | 间隔配置 | 行为 |
 |---|---|---|
 | 定时器 | `renderer.cleanup_interval_sec` (默认 5s) | **双向清理**：①移除已被 hook 删除的内存 orphan 会话；②删除 mtime >`stale_timeout_sec` 的磁盘孤儿文件（崩溃会话兜底）|
-| 磁盘加载 | 事件驱动 | 跳过 mtime >`stale_timeout_sec`（默认 3600s）的过期文件——判定基于文件系统 mtime，不是 JSON 内 `updatedAt` |
+| 启动加载 | 一次性 | `load_from_disk()` 全量恢复磁盘会话（跳过 terminal 与过期文件）|
+| 文件对账 | 事件驱动（debounce 100ms）| `reconcile_with_disk()` 增量补漏 + 清理 terminal/过期一次性状态残留，**不覆盖** socket 通道已写入的新鲜状态——socket 为主、文件为兜底 |
 | terminal 标记 | 即时 | 收到 `isTerminal: true` 时立即删除 |
 | `Stop` 延迟删除 | 2s | `watcher.rs` 中 `tokio::time::sleep` + `remove_if_state("jumping")` —— 期间收到新事件改变 state 则取消删除 |
 | 手动 purge | 即时（`purge_all`） | **无视 mtime**：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除数；由前端三连击触发，是用户「给我干净状态」的逃生口 |
@@ -214,7 +215,8 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 - 使用 `notify::recommended_watcher`（跨平台）
 - 监听目录的任何变更事件
-- **防抖**: 100ms 窗口内合并多个事件，只触发一次 `load_from_disk()`，避免高频写入导致的冗余 I/O
+- **防抖**: 等待 100ms 静默窗口后触发一次 `reconcile_with_disk()`（经典 debounce——窗口内每来一个事件就续命，不再丢弃突发末尾事件）
+- **增量对账**（非全量重载）: 只补内存缺失的会话、清理 terminal 与过期一次性状态（jumping/waving）的残留文件，**绝不覆盖** socket 通道已写入的更新鲜状态
 - 在独立阻塞线程中运行
 
 ---

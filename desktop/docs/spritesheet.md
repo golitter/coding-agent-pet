@@ -29,7 +29,7 @@
 ## 帧文件目录
 
 ```
-kotori-minami/frames/
+assets/kotori-minami/frames/
 ├── idle/            00.png, 01.png, 02.png, 03.png, 04.png, 05.png
 ├── running-right/   00.png, 01.png, 02.png, 03.png, 04.png, 05.png, 06.png, 07.png
 ├── running-left/    00.png, 01.png, 02.png, 03.png, 04.png, 05.png, 06.png, 07.png
@@ -53,7 +53,7 @@ kotori-minami/frames/
 
 ## 关联文件
 
-- 精灵图合并: `kotori-minami/final/spritesheet.webp` / `spritesheet.png`
-- 精灵图清单: `kotori-minami/frames/frames-manifest.json`
-- 宠物定义: `kotori-minami/pet_request.json`
+- 精灵图合并: `assets/kotori-minami/imagegen/final/spritesheet.webp` / `spritesheet.png`
+- 精灵图清单: `assets/kotori-minami/frames/frames-manifest.json`
+- 宠物定义: `assets/kotori-minami/imagegen/pet_request.json`
 - 帧加载器: `desktop/cross-platform/src/animator.js`

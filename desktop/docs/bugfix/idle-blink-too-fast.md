@@ -6,7 +6,7 @@
 
 ## 复现快照
 
-- `idle` 只有 **6 帧**（[frames-manifest.json](../../../kotori-minami/frames/frames-manifest.json) `idle` 行，`00.png`~`05.png`），且设计意图就是 [pet_request.json:19](../../../kotori-minami/pet_request.json#L19) 里写的 `"calm resting, breathing, and blinking loop"`——6 帧同时编码了「呼吸 + 眨眼」一整套循环。
+- `idle` 只有 **6 帧**（[frames-manifest.json](../../../assets/kotori-minami/frames/frames-manifest.json) `idle` 行，`00.png`~`05.png`），且设计意图就是 [pet_request.json:19](../../../assets/kotori-minami/imagegen/pet_request.json#L19) 里写的 `"calm resting, breathing, and blinking loop"`——6 帧同时编码了「呼吸 + 眨眼」一整套循环。
 - 全局帧率写死 **10 fps**（[config.json:10](../../cross-platform/config.json#L10) `"fps": 10`），所以每一帧固定停留 100ms。
 
 于是整段 idle 循环耗时 = 6 帧 × 100ms = **600ms 转一圈**，眨眼动作大约每秒重复 1~2 次。真人眨眼频率是 3~4 秒一次，差了一个数量级。
@@ -37,7 +37,7 @@ tick() {
 
 ### 根因 2：idle 把「呼吸」和「眨眼」塞进同一条 6 帧循环
 
-[pet_request.json:19](../../../kotori-minami/pet_request.json#L19) 把 idle 的 purpose 写成 `breathing, and blinking loop`——两个节奏完全不同的动作被压进同一条轨道。呼吸应该是慢周期（1~2s），眨眼是偶发事件（几秒一次），但这里两者共享同一组 6 帧、同一个 100ms/帧 的节拍，于是眨眼被呼吸的循环频率拖着一起变快。
+[pet_request.json:19](../../../assets/kotori-minami/imagegen/pet_request.json#L19) 把 idle 的 purpose 写成 `breathing, and blinking loop`——两个节奏完全不同的动作被压进同一条轨道。呼吸应该是慢周期（1~2s），眨眼是偶发事件（几秒一次），但这里两者共享同一组 6 帧、同一个 100ms/帧 的节拍，于是眨眼被呼吸的循环频率拖着一起变快。
 
 ### 根因 3：全局 fps=10 对所有状态一刀切
 
@@ -137,7 +137,7 @@ tick() {
 }
 ```
 
-**⚠️ 前置确认**：上面 `idle.holds` 的具体数组**需要先用肉眼看一遍 [idle/](../../../kotori-minami/frames/idle) 的 6 帧到底是哪几帧睁眼、哪几帧半闭、哪几帧全闭**，再据此分配 hold 值（睁眼帧给大值、眨眼帧给 1）。当前文档里的 `[3,2,1,1,1,10]` 是占位示例，不代表真实帧序。确认后把数组写实，并在本文件补一行注明「第 N 帧是睁眼」。
+**⚠️ 前置确认**：上面 `idle.holds` 的具体数组**需要先用肉眼看一遍 [idle/](../../../assets/kotori-minami/frames/idle) 的 6 帧到底是哪几帧睁眼、哪几帧半闭、哪几帧全闭**，再据此分配 hold 值（睁眼帧给大值、眨眼帧给 1）。当前文档里的 `[3,2,1,1,1,10]` 是占位示例，不代表真实帧序。确认后把数组写实，并在本文件补一行注明「第 N 帧是睁眼」。
 
 **效果**：以 `[3,2,1,1,1,10]` 为例，idle 一圈 = (3+2+1+1+1+10) × 100ms = **1.8s**，其中眨眼那几帧只占 300ms，睁眼停留 1s+，节奏接近真人。
 
@@ -155,7 +155,7 @@ tick() {
 
 - [ ] 改动 ①：[animator.js](../../cross-platform/src/animator.js) 加 `frameTiming` / `holdRemaining` / `holdFor`，改 `tick()`；`transitionTo`/`triggerOneShot`/`handleDrag` 切换后重置 `holdRemaining`
 - [ ] 改动 ①：[main.js](../../cross-platform/src/main.js) 从 config 灌入 `frame_timing`
-- [ ] 改动 ②：肉眼确认 [idle/](../../../kotori-minami/frames/idle) 6 帧的睁眼/闭眼分布，把真实 `holds` 数组写实
+- [ ] 改动 ②：肉眼确认 [idle/](../../../assets/kotori-minami/frames/idle) 6 帧的睁眼/闭眼分布，把真实 `holds` 数组写实
 - [ ] 改动 ②：[config.json](../../cross-platform/config.json) + [config.example.json](../../cross-platform/config.example.json) 加 `frame_timing` 字段及注释
 - [ ] 手动验证：
   - [ ] idle 状态下眨眼间隔 ≥ 2~3s，睁眼帧明显停留

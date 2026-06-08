@@ -40,14 +40,16 @@ Claude Code / Codex → JSON 事件 (hooks) → session 文件 → Unix Socket �
 ## 目录结构
 
 ```
-desktop/
-├── cross-platform/        # 主实现 (Tauri)
-│   ├── src/               #   前端 (HTML/CSS/JS)
-│   ├── src-tauri/         #   后端 (Rust)
-│   ├── hooks/             #   Hook 脚本
-│   └── runtime/sessions/  #   运行时状态
-├── docs/                  # 文档
-└── kotori-minami/         # 宠物资源 (只读)
+.
+├── assets/kotori-minami/  # 宠物资料包 (frames 运行时资源 + imagegen 生成工件)
+├── desktop/
+│   ├── cross-platform/    # 主实现 (Tauri)
+│   │   ├── src/           #   前端 (HTML/CSS/JS)
+│   │   ├── src-tauri/     #   后端 (Rust)
+│   │   ├── hooks/         #   Hook 脚本
+│   │   └── runtime/sessions/  运行时状态
+│   └── docs/              #   文档 (架构/hook/渲染器)
+└── docs/                  # 顶层文档 (生成教程)
 ```
 
 ## 要求

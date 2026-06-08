@@ -47,52 +47,54 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
 ## 目录结构
 
 ```
-desktop/
-├── docs/                              # 文档
-│   ├── overview.md                    #   本文件 — 概述
-│   ├── renderer.md                    #   Tauri 渲染器详解
-│   ├── spritesheet.md                 #   精灵图规格
-│   └── agent-hooks/                   #   各平台 Hook 机制详解
-│       ├── README.md                  #     索引 + 两平台对比
-│       ├── claude-code.md             #     Claude Code Hooks → 宠物渲染
-│       └── codex.md                   #     Codex Hooks → 宠物渲染
-├── cross-platform/                    # 主实现 (Tauri)
-│   ├── config.example.json            # 配置模板（提交到 git）
-│   ├── config.json                    # 用户配置（自动生成，.gitignore）
-│   ├── setup.sh                       # 一键安装/更新脚本
-│   ├── setup-hooks.sh                 # Hook 配置脚本
-│   ├── build-and-run.sh               # 编译并启动脚本
-│   ├── package.json                   # Node.js 前端依赖
-│   ├── hooks/                         # Hook 脚本
-│   │   ├── pet-claude-hook.sh         #   Claude Code 入口 (shell wrapper)
-│   │   ├── pet-codex-hook.sh          #   Codex 入口 (shell wrapper)
-│   │   └── scripts/                   #   Python 实现
-│   │       ├── common.py              #     共享逻辑
-│   │       ├── claude_hook.py         #     Claude Code 事件处理
-│   │       └── codex_hook.py          #     Codex 事件处理
-│   ├── src/                           # 前端源码 (HTML/CSS/JS)
-│   │   ├── index.html                 #   主页面
-│   │   ├── main.js                    #   入口, 窗口设置, 交互绑定
-│   │   ├── animator.js                #   精灵动画引擎
-│   │   ├── bubble.js                  #   对话气泡
-│   │   └── style.css                  #   全局样式
-│   ├── src-tauri/                     # Rust 后端 (Tauri)
-│   │   ├── Cargo.toml                 #   Rust 依赖
-│   │   ├── tauri.conf.json            #   Tauri 窗口/安全配置
-│   │   ├── build.rs                   #   Tauri 构建脚本
-│   │   ├── capabilities/default.json  #   权限声明
-│   │   └── src/
-│   │       ├── main.rs                #   入口
-│   │       ├── lib.rs                 #   应用初始化, 组件串联
-│   │       ├── config.rs              #   配置加载 + 路径自动检测
-│   │       ├── commands.rs            #   Tauri commands (前端调用)
-│   │       ├── aggregator.rs             #   多会话聚合
-│   │       └── watcher.rs             #   双通道状态监听
-│   └── runtime/
-│       └── sessions/                  # 运行时会话状态文件
-└── kotori-minami/                     # 宠物资源 (只读)
-    ├── frames/                        #   55 帧 PNG 动画
-    └── final/spritesheet.webp         #   精灵图
+.
+├── assets/
+│   └── kotori-minami/                 # 宠物资料包 (只读)
+│       ├── frames/                    #   55 帧 PNG 动画 (运行时资源)
+│       └── imagegen/                  #   生成流水线工件 (prompts/qa/decoded/...)
+└── desktop/
+    ├── docs/                          # 文档
+    │   ├── overview.md                #   本文件 — 概述
+    │   ├── renderer.md                #   Tauri 渲染器详解
+    │   ├── spritesheet.md             #   精灵图规格
+    │   └── agent-hooks/               #   各平台 Hook 机制详解
+    │       ├── README.md              #     索引 + 两平台对比
+    │       ├── claude-code.md         #     Claude Code Hooks → 宠物渲染
+    │       └── codex.md               #     Codex Hooks → 宠物渲染
+    └── cross-platform/                # 主实现 (Tauri)
+        ├── config.example.json        #   配置模板（提交到 git）
+        ├── config.json                #   用户配置（自动生成，.gitignore）
+        ├── setup.sh                   #   一键安装/更新脚本
+        ├── setup-hooks.sh             #   Hook 配置脚本
+        ├── build-and-run.sh           #   编译并启动脚本
+        ├── package.json               #   Node.js 前端依赖
+        ├── hooks/                     #   Hook 脚本
+        │   ├── pet-claude-hook.sh     #     Claude Code 入口 (shell wrapper)
+        │   ├── pet-codex-hook.sh      #     Codex 入口 (shell wrapper)
+        │   └── scripts/               #     Python 实现
+        │       ├── common.py          #       共享逻辑
+        │       ├── claude_hook.py     #       Claude Code 事件处理
+        │       └── codex_hook.py      #       Codex 事件处理
+        ├── src/                       #   前端源码 (HTML/CSS/JS)
+        │   ├── index.html             #     主页面
+        │   ├── main.js                #     入口, 窗口设置, 交互绑定
+        │   ├── animator.js            #     精灵动画引擎
+        │   ├── bubble.js              #     对话气泡
+        │   └── style.css              #     全局样式
+        ├── src-tauri/                 #   Rust 后端 (Tauri)
+        │   ├── Cargo.toml             #     Rust 依赖
+        │   ├── tauri.conf.json        #     Tauri 窗口/安全配置
+        │   ├── build.rs               #     Tauri 构建脚本
+        │   ├── capabilities/default.json  # 权限声明
+        │   └── src/
+        │       ├── main.rs            #       入口
+        │       ├── lib.rs             #       应用初始化, 组件串联
+        │       ├── config.rs          #       配置加载 + 路径自动检测
+        │       ├── commands.rs        #       Tauri commands (前端调用)
+        │       ├── aggregator.rs      #       多会话聚合 + 磁盘对账
+        │       └── watcher.rs         #       双通道状态监听 (socket 主 + 文件对账)
+        └── runtime/
+            └── sessions/              #     运行时会话状态文件
 ```
 
 ## 快速开始

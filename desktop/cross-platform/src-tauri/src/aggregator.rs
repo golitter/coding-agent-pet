@@ -38,19 +38,33 @@ fn get_priority(state: &str) -> i32 {
         .unwrap_or(0)
 }
 
-/// A session file is stale if its filesystem mtime is older than `timeout` seconds.
+/// Filesystem mtime of a path, as unix seconds (0 if unavailable).
 /// Uses mtime (source of truth), not the JSON's `updatedAt` field — the filesystem
 /// is what reflects reality after `common.py` does an atomic `os.replace()` write.
-fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool {
-    let mtime = path
-        .metadata()
+fn file_mtime_secs(path: &Path) -> u64 {
+    path.metadata()
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
-        .unwrap_or(0);
-    now.saturating_sub(mtime) > timeout
+        .unwrap_or(0)
 }
+
+/// A session file is stale if its filesystem mtime is older than `timeout` seconds.
+fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool {
+    now.saturating_sub(file_mtime_secs(path)) > timeout
+}
+
+/// States that play once and revert (celebrations). Their session files should
+/// not linger beyond the display window — see `reconcile_with_disk`.
+fn is_oneshot_state(state: &str) -> bool {
+    state == "jumping" || state == "waving"
+}
+
+/// How long a one-shot celebration file may survive on disk before the file
+/// watcher's reconciliation clears it. Generous vs. the socket channel's 2s
+/// `remove_if_state` delay so the animation finishes even under load.
+const ONESHOT_DISPLAY_WINDOW_SEC: u64 = 5;
 
 #[derive(Debug, Clone)]
 pub struct AgentActivity {
@@ -384,6 +398,136 @@ impl ActivityAggregator {
                 "Cleaned up {} memory-orphans, {} disk-orphans",
                 orphaned.len(),
                 stale_on_disk
+            );
+            self.aggregate_and_notify();
+        }
+    }
+
+    /// Incremental reconciliation against disk — the file watcher's consumption
+    /// path. Brings in activities that exist on disk but are missing from memory
+    /// (covers events the socket channel missed), and prunes residue files the
+    /// socket channel would otherwise have deleted (terminal files, and one-shot
+    /// celebrations whose display window has elapsed).
+    ///
+    /// Activities already in memory are NEVER overwritten: the socket channel is
+    /// authoritative and always at least as fresh as the file (both originate
+    /// from the same hook payload, but the socket arrives without the watcher's
+    /// debounce delay). The file channel exists only to backfill gaps and clear
+    /// residue — replacing the old "replace_all on every change" that did O(n)
+    /// reads per event and could clobber socket-fresh state.
+    ///
+    /// Contrast with `load_from_disk`, the startup full reload.
+    pub fn reconcile_with_disk(&self) {
+        let read_dir = match std::fs::read_dir(&self.sessions_dir) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Stage all disk reads outside the lock; apply under one short lock.
+        let mut to_insert: Vec<(String, AgentActivity)> = Vec::new();
+        let mut to_remove: Vec<String> = Vec::new();
+        let mut files_pruned = 0usize;
+
+        for entry in read_dir.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let stem = match path.file_stem().and_then(|s| s.to_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+
+            let data = match std::fs::read_to_string(&path) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            let json: serde_json::Value = match serde_json::from_str(&data) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let is_terminal = json["isTerminal"].as_bool().unwrap_or(false);
+
+            // Terminal residue: `update()` deletes these on sight over the
+            // socket channel. A file still on disk means socket missed the
+            // event — do its job so the dead agent stops showing.
+            if is_terminal {
+                let _ = std::fs::remove_file(&path);
+                to_remove.push(stem);
+                files_pruned += 1;
+                continue;
+            }
+
+            // Stale by mtime — leave for cleanup_stale (its TTL backstop).
+            if is_session_file_stale(&path, now, self.stale_timeout_sec) {
+                continue;
+            }
+
+            let state = json["state"].as_str().unwrap_or("idle").to_string();
+
+            // One-shot celebration whose display window has elapsed. The socket
+            // channel clears these via `remove_if_state` ~2s after Stop; if
+            // socket is down, the pet would otherwise stay stuck "jumping".
+            if is_oneshot_state(&state)
+                && now.saturating_sub(file_mtime_secs(&path)) > ONESHOT_DISPLAY_WINDOW_SEC
+            {
+                let _ = std::fs::remove_file(&path);
+                to_remove.push(stem);
+                files_pruned += 1;
+                continue;
+            }
+
+            let dialogue = json["dialogue"].as_str().unwrap_or("").to_string();
+            let source = json["source"].as_str().unwrap_or("").to_string();
+            let updated_at = json["updatedAt"]
+                .as_str()
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.timestamp() as u64)
+                .unwrap_or(0);
+
+            to_insert.push((
+                stem,
+                AgentActivity {
+                    state,
+                    dialogue,
+                    source,
+                    is_terminal: false,
+                    updated_at,
+                },
+            ));
+        }
+
+        // Apply under one lock. Insert is idempotent against a fresher socket
+        // update: if the socket channel populated `id` while we read disk,
+        // skip — never let a stale disk read clobber authoritative socket state.
+        let mut backfilled = 0usize;
+        let mut removed = 0usize;
+        {
+            let mut inner = self.inner.lock().unwrap();
+            for id in &to_remove {
+                if inner.activities.remove(id).is_some() {
+                    removed += 1;
+                }
+            }
+            for (id, act) in to_insert {
+                if inner.activities.contains_key(&id) {
+                    continue;
+                }
+                inner.activities.insert(id, act);
+                backfilled += 1;
+            }
+        }
+
+        if backfilled > 0 || removed > 0 {
+            info!(
+                "Reconciled disk: {} backfilled, {} memory entries removed, {} residue files pruned",
+                backfilled, removed, files_pruned
             );
             self.aggregate_and_notify();
         }

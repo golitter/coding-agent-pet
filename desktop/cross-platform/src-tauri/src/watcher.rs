@@ -2,7 +2,7 @@ use crate::aggregator::ActivityAggregator;
 use notify::Watcher;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tracing::{info, warn};
 
 /// Start a Unix socket server that receives JSON payloads from hook scripts.
@@ -114,20 +114,29 @@ pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<ActivityAggregato
 
     info!("Watching directory: {}", dir);
 
-    // Process events with debounce: coalesce rapid fs events (100ms window)
-    // so that multiple file changes in quick succession only trigger one reload.
+    // Debounce: coalesce a burst of filesystem events into exactly one
+    // reconcile after activity settles. Unlike the previous "skip events inside
+    // the window" scheme, this never drops the trailing event of a burst — it
+    // waits for `debounce` of silence, then reconciles once.
     let debounce = Duration::from_millis(100);
-    let mut last_reload = Instant::now() - debounce; // allow first event immediately
 
     while let Ok(_event) = rx.recv() {
-        // Drain any queued events first
+        // Drain any events already queued from the same burst.
         while rx.try_recv().is_ok() {}
 
-        let now = Instant::now();
-        if now.duration_since(last_reload) >= debounce {
-            session_mgr.load_from_disk();
-            last_reload = now;
+        // Extend the quiet window on each new event; only reconcile after the
+        // channel falls silent for the full debounce interval.
+        loop {
+            match rx.recv_timeout(debounce) {
+                Ok(_) => while rx.try_recv().is_ok() {},
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+            }
         }
-        // else: within debounce window, skip — the next event will pick it up
+
+        // Incremental reconciliation — backfills socket misses, prunes residue
+        // (terminal files + elapsed one-shots), never overwrites socket-fresh
+        // state. Contrast `load_from_disk` (the startup full reload).
+        session_mgr.reconcile_with_disk();
     }
 }
