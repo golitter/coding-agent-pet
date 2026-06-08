@@ -26,6 +26,10 @@
 
 **注册数**：Claude Code 11 个，Codex 9 个。
 
+**注意**：
+- **SessionStart 触发时机不同**：Claude Code 在 CLI/IDE **启动瞬间**就触发 `SessionStart`，与首次 `UserPromptSubmit` 之间隔用户思考时间（秒～分钟级）；Codex 0.133.0 的 `session_start` 是**懒触发**——只在用户**首次提交 prompt** 时与 `user_prompt_submit` 一起补发（间隔仅 30~50ms）。若用户启动 codex 后不发消息直接退出，两个事件都不会发。结果：Codex 的挥手动画会被紧随的奔跑动画瞬时覆盖，肉眼几乎不可见。
+- **`SessionEnd` Claude 独有**：Codex 不提供此事件，会话死亡检测依赖 [pseudo-session-end](../codex/v01330/pseudo-session-end.md) 的 SQLite 轮询兜底（详见第 25、39 行表格）。
+
 ---
 
 ## 二、按生命周期阶段分组
