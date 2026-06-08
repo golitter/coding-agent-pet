@@ -65,7 +65,8 @@ src-tauri/    → cross-platform/    (config 所在目录)
 | Command | 说明 |
 |---|---|
 | `get_config` | 返回前端所需的配置子集（frames_dir, scale, fps, dialogue_*, menu_items） |
-| `run_applescript` | 执行 AppleScript 命令（用于菜单项"打开/关闭应用"） |
+| `run_applescript` | 执行 AppleScript 命令（用于菜单项"打开应用"） |
+| `quit_app` | 退出应用（`app.exit(0)`） |
 
 前端通过 `window.__TAURI__.core.invoke('get_config')` 调用。
 
@@ -231,10 +232,10 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。
 | action | 说明 |
 |---|---|
 | `applescript` | 通过 `invoke('run_applescript')` 执行 AppleScript |
-| `quit` | 关闭窗口 (`getCurrentWindow().close()`) |
+| `quit` | 退出应用 (`invoke('quit_app')` → `app.exit(0)`) |
 | `separator` | 分隔线 |
 
-默认菜单：打开 Codex、关闭 Codex、打开 VS Code、关闭 VS Code、关闭宠物。
+默认菜单：打开 Codex、打开 VS Code、分隔线、关闭宠物。
 
 ---
 

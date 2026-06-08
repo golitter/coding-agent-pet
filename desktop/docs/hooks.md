@@ -9,9 +9,15 @@
 
 ## 机制
 
-两个脚本结构相同，区别仅在事件字段名：
-- **Claude Code**: 从 stdin JSON 的 `hook_event_name` 读取事件
-- **Codex**: 从 stdin JSON 的 `event` 读取事件
+两个脚本结构相似，都从 stdin JSON 解析事件并写入 session 文件。
+
+**事件字段解析：**
+- **Claude Code**: 直接读取 `hook_event_name` 字段
+- **Codex**: 按优先级尝试多个字段名（`hook_event_name` → `event` → `codex_event_type`），并通过 `EVENT_ALIASES` 将 snake_case 转为 PascalCase（如 `stop_failure` → `StopFailure`）
+
+**Session ID 解析：**
+- **Claude Code**: 读取 `session_id`
+- **Codex**: 按优先级尝试 `session_id` → `sessionId` → `conversation_id` → `thread_id`
 
 所有配置（路径、映射、台词）从 `config.json` / `config.example.json` 读取，无硬编码。
 
@@ -116,6 +122,14 @@ SessionEnd → 立即删除 session 文件
 - `desktop/mac/hooks/pet-claude-hook.sh`
 - `desktop/mac/hooks/pet-codex-hook.sh`
 
+## 调试
+
+Codex hook 会将每次事件的摘要写入 `/tmp/kotori-pet-codex-hook.log`，格式：
+
+```json
+{"time": "...", "raw_event": "stop", "event": "Stop", "session_id": "...", "state": "jumping", "dialogue": "搞定啦！✨"}
+```
+
 ## 支持新平台
 
-复制 `pet-claude-hook.sh`，修改事件字段名即可。所有平台共享 config.json。
+复制 `pet-claude-hook.sh`，修改事件字段名和别名映射即可。所有平台共享 config.json。
