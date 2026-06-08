@@ -1,4 +1,4 @@
-use crate::session::SessionManager;
+use crate::aggregator::ActivityAggregator;
 use notify::Watcher;
 use std::path::Path;
 use std::sync::Arc;
@@ -7,7 +7,7 @@ use tracing::{info, warn};
 
 /// Start a Unix socket server that receives JSON payloads from hook scripts.
 /// Runs as a Tokio async task.
-pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<SessionManager>) {
+pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAggregator>) {
     let path = socket_path.to_string();
 
     // Clean up stale socket
@@ -94,7 +94,7 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<SessionMana
 
 /// Start a file system watcher on the sessions directory.
 /// Uses the `notify` crate and runs in a blocking thread.
-pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<SessionManager>) {
+pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<ActivityAggregator>) {
     let dir = sessions_dir.to_string();
 
     let (tx, rx) = std::sync::mpsc::channel();

@@ -2,13 +2,13 @@
 // See: https://github.com/rust-lang/rust/issues/123797
 #![allow(unexpected_cfgs)]
 
+mod aggregator;
 mod commands;
 mod config;
-mod session;
 mod watcher;
 
+use aggregator::ActivityAggregator;
 use config::PetConfig;
-use session::SessionManager;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
@@ -71,8 +71,8 @@ pub fn run() {
             // 3. Ensure sessions directory exists
             std::fs::create_dir_all(&config.sessions_dir).ok();
 
-            // 4. Create session manager
-            let session_mgr = Arc::new(SessionManager::new(
+            // 4. Create activity aggregator (tracks per-agent activity, rolls up to display state)
+            let session_mgr = Arc::new(ActivityAggregator::new(
                 config.sessions_dir.clone(),
                 config.stale_timeout_sec,
             ));
@@ -87,7 +87,7 @@ pub fn run() {
                             let _ = app_handle.emit("state-change", &change);
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                            warn!("SessionManager lagged {} events", n);
+                            warn!("ActivityAggregator lagged {} events", n);
                         }
                         Err(_) => break,
                     }

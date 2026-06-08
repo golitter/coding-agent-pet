@@ -6,7 +6,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use tracing::info;
 
-/// Priority order for aggregating multi-session states.
+/// Activity aggregator — owns the live view of every AI agent process
+/// (Claude Code / Codex / …) currently producing events, and rolls them up
+/// into a single display state for the pet renderer.
+///
+/// Naming note: the wire protocol and on-disk filename still use `session_id`
+/// (e.g. `019ea736-...json`), since that identifier is owned by the agent.
+/// Internally, however, what we are tracking is the *agent's current activity*
+/// (running / waiting / jumping / …), not a long-lived session. Hence
+/// `ActivityAggregator` + `AgentActivity` for the in-memory model.
+
+/// Priority order for aggregating multi-agent activities.
 /// Higher number = higher priority.
 const STATE_PRIORITY: &[(&str, i32)] = &[
     ("waiting", 8),
@@ -43,7 +53,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool {
 }
 
 #[derive(Debug, Clone)]
-pub struct SessionState {
+pub struct AgentActivity {
     pub state: String,
     pub dialogue: String,
     #[allow(dead_code)]
@@ -68,64 +78,67 @@ struct AggregatedState {
     active_count: usize,
 }
 
-/// All mutable state behind ONE Mutex.
+/// All mutable state behind ONE Mutex. The map key is the agent's session_id
+/// (kept as `String` here to honor the wire-protocol naming).
 struct Inner {
-    sessions: HashMap<String, SessionState>,
+    activities: HashMap<String, AgentActivity>,
     aggregated: AggregatedState,
 }
 
-/// Manages multiple concurrent sessions, aggregates them into a single display state.
-pub struct SessionManager {
+/// Aggregates the live activity of multiple concurrent AI agents into a
+/// single display state consumed by the pet renderer.
+pub struct ActivityAggregator {
     inner: Mutex<Inner>,
     sessions_dir: String,
     stale_timeout_sec: u64,
     tx: broadcast::Sender<StateChange>,
 }
 
-// ── Convenience helpers for accessing `inner.sessions` ──
+// ── Convenience helpers for accessing `inner.activities` ──
 
-impl SessionManager {
-    /// Lock inner and remove a session by id. Returns true if removed.
+impl ActivityAggregator {
+    /// Lock inner and remove an activity by session_id. Returns true if removed.
     fn remove_session(&self, id: &str) -> bool {
-        self.inner.lock().unwrap().sessions.remove(id).is_some()
+        self.inner.lock().unwrap().activities.remove(id).is_some()
     }
 
-    /// Lock inner and insert a session.
-    fn insert_session(&self, id: String, state: SessionState) {
-        self.inner.lock().unwrap().sessions.insert(id, state);
+    /// Lock inner and insert an activity.
+    fn insert_session(&self, id: String, activity: AgentActivity) {
+        self.inner.lock().unwrap().activities.insert(id, activity);
     }
 
-    /// Lock inner and replace all sessions atomically.
-    fn replace_all_sessions(&self, new: HashMap<String, SessionState>) {
+    /// Lock inner and replace all activities atomically.
+    fn replace_all_sessions(&self, new: HashMap<String, AgentActivity>) {
         let mut inner = self.inner.lock().unwrap();
-        inner.sessions = new;
+        inner.activities = new;
     }
 
-    /// Lock inner, collect orphaned session ids (those not in `file_ids`), then remove them.
+    /// Lock inner, collect orphaned session ids (those not in `file_ids`),
+    /// then remove them. Returns the removed ids for logging.
     fn remove_orphaned_sessions(
         &self,
         file_ids: &std::collections::HashSet<String>,
     ) -> Vec<String> {
         let mut inner = self.inner.lock().unwrap();
         let orphaned: Vec<String> = inner
-            .sessions
+            .activities
             .keys()
             .filter(|id| !file_ids.contains(*id))
             .cloned()
             .collect();
         for id in &orphaned {
-            inner.sessions.remove(id);
+            inner.activities.remove(id);
         }
         orphaned
     }
 }
 
-impl SessionManager {
+impl ActivityAggregator {
     pub fn new(sessions_dir: String, stale_timeout_sec: u64) -> Self {
         let (tx, _) = broadcast::channel(16);
         Self {
             inner: Mutex::new(Inner {
-                sessions: HashMap::new(),
+                activities: HashMap::new(),
                 aggregated: AggregatedState {
                     current_state: "idle".to_string(),
                     current_dialogue: String::new(),
@@ -142,7 +155,7 @@ impl SessionManager {
         self.tx.subscribe()
     }
 
-    /// Update a session's state from a hook event.
+    /// Update an agent's activity from a hook event.
     pub fn update(
         &self,
         session_id: &str,
@@ -165,7 +178,7 @@ impl SessionManager {
             .unwrap()
             .as_secs();
 
-        let session = SessionState {
+        let activity = AgentActivity {
             state: state.to_string(),
             dialogue: dialogue.to_string(),
             source: source.to_string(),
@@ -173,30 +186,30 @@ impl SessionManager {
             updated_at: now,
         };
 
-        self.insert_session(session_id.to_string(), session);
+        self.insert_session(session_id.to_string(), activity);
         self.aggregate_and_notify();
     }
 
-    /// Remove a session iff it is still in `expected_state`.
+    /// Remove an agent's activity iff it is still in `expected_state`.
     ///
     /// Used for the Stop-delayed cleanup: when a Stop arrives we schedule a
     /// removal ~2s later so the "搞定啦" celebration is visible, but only
     /// commit it if the session is *still* in the Stop state ("jumping") when
     /// the timer fires. If a fresh event (UserPromptSubmit, PreToolUse, …)
-    /// updated the session in the meantime, its state changed and this is a
-    /// no-op — the live session survives. This cancellation-by-state check is
+    /// updated the activity in the meantime, its state changed and this is a
+    /// no-op — the live activity survives. This cancellation-by-state check is
     /// why the cleanup lives in the backend (a long-lived process) rather than
     /// in the short-lived hook script, whose timer would never fire.
     pub fn remove_if_state(&self, session_id: &str, expected_state: &str) -> bool {
         let removed = {
             let mut inner = self.inner.lock().unwrap();
             let matches = inner
-                .sessions
+                .activities
                 .get(session_id)
                 .map(|s| s.state == expected_state)
                 .unwrap_or(false);
             if matches {
-                inner.sessions.remove(session_id);
+                inner.activities.remove(session_id);
                 true
             } else {
                 false
@@ -217,7 +230,7 @@ impl SessionManager {
             Err(_) => return,
         };
 
-        let mut loaded: HashMap<String, SessionState> = HashMap::new();
+        let mut loaded: HashMap<String, AgentActivity> = HashMap::new();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -265,7 +278,7 @@ impl SessionManager {
 
             loaded.insert(
                 file_stem,
-                SessionState {
+                AgentActivity {
                     state,
                     dialogue,
                     source,
@@ -279,9 +292,9 @@ impl SessionManager {
         self.aggregate_and_notify();
     }
 
-    /// Clean up sessions whose files have been deleted (memory-orphans),
+    /// Clean up activities whose files have been deleted (memory-orphans),
     /// AND delete session files whose mtime exceeds `stale_timeout_sec` (disk-orphans).
-    /// The disk-side cleanup is the backstop for crashed sessions that never fire
+    /// The disk-side cleanup is the backstop for crashed agents that never fire
     /// Stop — without it, files would accumulate until app restart.
     pub fn cleanup_stale(&self) {
         let read_dir = match std::fs::read_dir(&self.sessions_dir) {
@@ -319,7 +332,7 @@ impl SessionManager {
             file_ids.insert(file_stem);
         }
 
-        // Sessions in memory with no surviving file → drop. This covers both
+        // Activities in memory with no surviving file → drop. This covers both
         // legacy orphan-in-memory (file deleted externally) and the just-deleted
         // stale-on-disk cases.
         let orphaned = self.remove_orphaned_sessions(&file_ids);
@@ -334,11 +347,11 @@ impl SessionManager {
         }
     }
 
-    /// Aggregate all sessions into a single display state using priority.
+    /// Aggregate all activities into a single display state using priority.
     fn aggregate_and_notify(&self) {
         let mut inner = self.inner.lock().unwrap();
 
-        if inner.sessions.is_empty() {
+        if inner.activities.is_empty() {
             let changed = inner.aggregated.current_state != "idle"
                 || !inner.aggregated.current_dialogue.is_empty()
                 || inner.aggregated.active_count != 0;
@@ -357,25 +370,25 @@ impl SessionManager {
             return;
         }
 
-        let mut best_session: Option<&SessionState> = None;
+        let mut best: Option<&AgentActivity> = None;
         let mut best_priority = -1i32;
 
-        for s in inner.sessions.values() {
+        for s in inner.activities.values() {
             let priority = get_priority(&s.state);
             if priority > best_priority {
                 best_priority = priority;
-                best_session = Some(s);
+                best = Some(s);
             }
         }
 
-        let new_state = best_session
+        let new_state = best
             .map(|s| s.state.clone())
             .unwrap_or_else(|| "idle".to_string());
-        let new_dialogue = best_session.map(|s| s.dialogue.clone()).unwrap_or_default();
-        // Count every known session — "active_count" means "sessions currently
-        // known to be alive", not "sessions visibly producing output". A session
+        let new_dialogue = best.map(|s| s.dialogue.clone()).unwrap_or_default();
+        // Count every known activity — "active_count" means "agents currently
+        // known to be alive", not "agents visibly producing output". An agent
         // in `idle` (e.g. after SubagentStop) is still alive and should count.
-        let new_count = inner.sessions.len();
+        let new_count = inner.activities.len();
 
         let changed = inner.aggregated.current_state != new_state
             || inner.aggregated.current_dialogue != new_dialogue
