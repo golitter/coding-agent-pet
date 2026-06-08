@@ -177,6 +177,39 @@ impl SessionManager {
         self.aggregate_and_notify();
     }
 
+    /// Remove a session iff it is still in `expected_state`.
+    ///
+    /// Used for the Stop-delayed cleanup: when a Stop arrives we schedule a
+    /// removal ~2s later so the "搞定啦" celebration is visible, but only
+    /// commit it if the session is *still* in the Stop state ("jumping") when
+    /// the timer fires. If a fresh event (UserPromptSubmit, PreToolUse, …)
+    /// updated the session in the meantime, its state changed and this is a
+    /// no-op — the live session survives. This cancellation-by-state check is
+    /// why the cleanup lives in the backend (a long-lived process) rather than
+    /// in the short-lived hook script, whose timer would never fire.
+    pub fn remove_if_state(&self, session_id: &str, expected_state: &str) -> bool {
+        let removed = {
+            let mut inner = self.inner.lock().unwrap();
+            let matches = inner
+                .sessions
+                .get(session_id)
+                .map(|s| s.state == expected_state)
+                .unwrap_or(false);
+            if matches {
+                inner.sessions.remove(session_id);
+                true
+            } else {
+                false
+            }
+        };
+        if removed {
+            let path = PathBuf::from(&self.sessions_dir).join(format!("{}.json", session_id));
+            let _ = std::fs::remove_file(path);
+            self.aggregate_and_notify();
+        }
+        removed
+    }
+
     /// Load all session files from disk.
     pub fn load_from_disk(&self) {
         let read_dir = match std::fs::read_dir(&self.sessions_dir) {
@@ -249,7 +282,7 @@ impl SessionManager {
     /// Clean up sessions whose files have been deleted (memory-orphans),
     /// AND delete session files whose mtime exceeds `stale_timeout_sec` (disk-orphans).
     /// The disk-side cleanup is the backstop for crashed sessions that never fire
-    /// SessionEnd/Stop — without it, files would accumulate until app restart.
+    /// Stop — without it, files would accumulate until app restart.
     pub fn cleanup_stale(&self) {
         let read_dir = match std::fs::read_dir(&self.sessions_dir) {
             Ok(d) => d,

@@ -8,6 +8,7 @@
 
 | 文件 | 内容 |
 |---|---|
+| [events.md](events.md) | 所有 Hook 事件类型 + 两个平台各自行为的对照表（速查） |
 | [claude-code.md](claude-code.md) | Claude Code 如何通过 Hooks 触发宠物状态变化 |
 | [codex.md](codex.md) | OpenAI Codex 如何通过 Hooks 触发宠物状态变化 |
 
@@ -34,7 +35,9 @@ stdin JSON
   → config.json state_map 查表 → 得到 {state, dialogue}
   → 原子写入 sessions/{session_id}.json
   → 推送 Unix socket /tmp/kotori-pet.sock
-  → terminal 事件: 延迟删除 session 文件
+  → 后端处理 isTerminal:
+       Stop → 2s 延迟删除（让"搞定啦"播完，期间收到新事件则取消）
+       StopFailure / SessionEnd → 立即删除 session 文件
 ```
 
 详见各平台的独立文档。

@@ -22,7 +22,6 @@ EVENT_ALIASES = {
     'permission_request':  'PermissionRequest',
     'post_tool_use':       'PostToolUse',
     'pre_tool_use':        'PreToolUse',
-    'session_end':         'SessionEnd',
     'session_start':       'SessionStart',
     'stop':                'Stop',
     'stop_failure':        'StopFailure',

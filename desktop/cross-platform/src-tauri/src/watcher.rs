@@ -65,8 +65,24 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<SessionMana
                     let dialogue = json["dialogue"].as_str().unwrap_or("").to_string();
                     let source = json["source"].as_str().unwrap_or("").to_string();
                     let is_terminal = json["isTerminal"].as_bool().unwrap_or(false);
+                    let event = json["event"].as_str().unwrap_or("").to_string();
 
                     mgr.update(&session_id, &state, &dialogue, &source, is_terminal);
+
+                    // Stop → schedule a delayed removal in the backend. The hook
+                    // script is short-lived and cannot reliably run a timer (a
+                    // threading.Timer there is killed when the process exits),
+                    // so we do it here. The 2s delay lets the "搞定啦" celebration
+                    // show; remove_if_state cancels the removal if a new turn
+                    // (state no longer "jumping") started within the window.
+                    if event == "Stop" {
+                        let mgr2 = mgr.clone();
+                        let sid = session_id.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep(Duration::from_secs(2)).await;
+                            mgr2.remove_if_state(&sid, "jumping");
+                        });
+                    }
                 });
             }
             Err(e) => {

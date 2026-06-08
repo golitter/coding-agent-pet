@@ -51,7 +51,16 @@ async function main() {
   // 10. Listen for state changes from backend
   await listen("state-change", (event) => {
     const { state, dialogue, active_count } = event.payload;
-    animator.transitionTo(state);
+    // One-shot states (jumping on Stop, waving on SessionStart/Notification)
+    // must go through triggerOneShot: it saves the prior state and restores it
+    // after the animation plays once. transitionTo would skip them via its
+    // same-state guard and never set preOneShotState, so Stop's jump flashed
+    // for ~0.5s then vanished to a stale idle.
+    if (state === "jumping" || state === "waving") {
+      animator.triggerOneShot(state);
+    } else {
+      animator.transitionTo(state);
+    }
     bubble.show(dialogue, active_count, state);
   });
 

@@ -76,7 +76,7 @@ timeout = 30
 | `PermissionRequest` | 请求权限时 | 宠物等待："需要你的授权～" |
 | `SubagentStop` | 子代理完成时 | 宠物回到 idle |
 
-**与 Claude Code 的差异**：Codex 没有注册 `PreCompact` 和 `SessionEnd`，因为这两个事件在宠物 config 的 Codex 事件列表中未启用。
+**与 Claude Code 的差异**：Codex 没有注册 `PreCompact`，因为该事件在宠物 config 的 Codex 事件列表中未启用。Codex 也不注册 `SessionEnd`（Codex 当前不提供该事件，会话死亡检测依赖 [pseudo-session-end.md](../codex/v01330/pseudo-session-end.md) 的 SQLite 轮询方案）。
 
 ### matcher 字段
 
@@ -237,7 +237,7 @@ common.process_event()
         │ 5. state_map 查表 → {state, dialogue}
         │ 6. 写 session 文件 (原子写入)
         │ 7. 推送 Unix socket
-        │ 8. terminal 事件: 延迟删除
+        │ 8. terminal 事件: 后端立即删除
         ▼
 Tauri 渲染器 → 宠物动画更新
 ```
@@ -277,7 +277,6 @@ EVENT_ALIASES = {
     'permission_request':  'PermissionRequest',
     'post_tool_use':       'PostToolUse',
     'pre_tool_use':        'PreToolUse',
-    'session_end':         'SessionEnd',
     'session_start':       'SessionStart',
     'stop':                'Stop',
     'stop_failure':        'StopFailure',
@@ -299,7 +298,7 @@ EVENT_ALIASES = {
 | `PreToolUse` | `running` | "执行中..." | 循环动画 |
 | `PostToolUse` | `running` | "处理中..." | 硬编码 |
 | `Stop` | `jumping` | "搞定啦！✨" | 一次性动画，2s 后删除 |
-| `StopFailure` | `failed` | "呜...出了点问题" | terminal，3s 后删除 |
+| `StopFailure` | `failed` | "呜...出了点问题" | terminal，立即删除 |
 | `Notification` | `waving` | "注意哦～" | 一次性动画 |
 | `PermissionRequest` | `waiting` | "需要你的授权～" | 黄色警告气泡 |
 | `SubagentStop` | `idle` | "" | 回到静息 |

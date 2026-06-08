@@ -57,30 +57,6 @@ def write_session(session_file, payload):
         pass
 
 
-def schedule_cleanup(session_file, delay):
-    """Schedule async deletion of session file after `delay` seconds.
-
-    Uses threading.Timer to avoid shell injection from file paths
-    containing special characters.
-    """
-    import threading
-
-    def _delete():
-        try:
-            os.remove(session_file)
-        except FileNotFoundError:
-            pass
-        except Exception:
-            pass
-
-    try:
-        timer = threading.Timer(delay, _delete)
-        timer.daemon = True
-        timer.start()
-    except Exception:
-        pass
-
-
 def push_socket(socket_path, payload):
     """Best-effort push of payload JSON to Unix socket. Silent on failure."""
     try:
@@ -115,7 +91,7 @@ def process_event(platform_dir, source, hook_event, session_id, tool_name,
                                 'desktop', 'cross-platform', 'runtime', 'sessions')
     socket_path      = config.get('socket_path') or '/tmp/kotori-pet.sock'
     state_map        = config.get('state_map', {})
-    terminal_events  = set(config.get('terminal_events', ['StopFailure', 'SessionEnd']))
+    terminal_events  = set(config.get('terminal_events', ['StopFailure']))
 
     os.makedirs(sessions_dir, exist_ok=True)
 
@@ -169,16 +145,11 @@ def process_event(platform_dir, source, hook_event, session_id, tool_name,
     # ── Session file lifecycle ──
     session_file = os.path.join(sessions_dir, session_id + '.json')
 
-    if hook_event == 'SessionEnd':
-        try:
-            os.remove(session_file)
-        except FileNotFoundError:
-            pass
-    else:
-        write_session(session_file, payload)
-        if is_terminal or hook_event == 'Stop':
-            delay = 2 if hook_event == 'Stop' else 3
-            schedule_cleanup(session_file, delay)
+    # Delayed cleanup after Stop/terminal events is handled by the Rust backend
+    # (SessionManager schedules the removal on receiving this payload), NOT here.
+    # Hook scripts are short-lived processes — a threading.Timer here would be
+    # killed when the process exits, before it could ever fire.
+    write_session(session_file, payload)
 
     # ── Best-effort socket push ──
     push_socket(socket_path, payload)

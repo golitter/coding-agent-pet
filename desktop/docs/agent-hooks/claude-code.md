@@ -65,9 +65,11 @@ Claude Code 的 hooks 配置写在 `~/.claude/settings.json` 中：
 | `PermissionRequest` | 请求权限时 | 宠物等待："需要你的授权～" |
 | `SubagentStop` | 子代理完成时 | 宠物回到 idle |
 | `PreCompact` | 压缩上下文之前 | 宠物等待："整理一下记忆..." |
-| `SessionEnd` | 会话结束时 | 宠物挥手："下次见！♪" |
+| `SessionEnd` | Claude Code 会话结束 | 宠物挥手："下次见！♪"，立即删除 session 文件 |
 
 **注意**：宠物 hook 不使用 `matcher` 字段，匹配所有工具调用，因为宠物的目的是反映整体工作状态，而非拦截特定工具。
+
+**SessionEnd 是 terminal 事件**：与 `StopFailure` 一样，被列入 `config.json` 的 `terminal_events`。hook 把 `isTerminal: true` 通过 socket 推给 Rust 后端，后端立即 `remove_session` + 删除 session 文件（无延迟，区别于 `Stop` 的 2s 延迟）。
 
 ---
 
@@ -119,18 +121,6 @@ Claude Code 通过 stdin 传递 JSON，每个事件的字段略有不同。
   "last_assistant_message": "我已经完成了重构..."
 }
 ```
-
-### SessionEnd 额外字段
-
-```json
-{
-  "session_id": "...",
-  "hook_event_name": "SessionEnd",
-  "reason": "prompt_input_exit"
-}
-```
-
-`reason` 取值：`clear` | `logout` | `prompt_input_exit` | `other`
 
 ---
 
@@ -185,12 +175,12 @@ Claude Code 的事件名已经是 PascalCase（如 `PreToolUse`），直接使�
 | `PreToolUse` | `running` | "执行中..." | 循环动画 |
 | `PostToolUse` | `running` | "处理中..." | 硬编码（不在 state_map 中） |
 | `Stop` | `jumping` | "搞定啦！✨" | 一次性动画，2s 后删除 session |
-| `StopFailure` | `failed` | "呜...出了点问题" | terminal 事件，3s 后删除 session |
+| `StopFailure` | `failed` | "呜...出了点问题" | terminal 事件，立即删除 session |
 | `Notification` | `waving` | "注意哦～" | 一次性动画 |
 | `PermissionRequest` | `waiting` | "需要你的授权～" | 循环动画，黄色警告气泡 |
 | `SubagentStop` | `idle` | "" | 回到静息 |
 | `PreCompact` | `waiting` | "整理一下记忆..." | 循环动画 |
-| `SessionEnd` | `waving` | "下次见！♪" | terminal 事件，立即删除 session |
+| `SessionEnd` | `waving` | "下次见！♪" | terminal 事件，立即删除 session 文件 |
 
 ---
 
