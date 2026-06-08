@@ -2,6 +2,8 @@
 
 > 参考教程：<https://zhuanlan.zhihu.com/p/2034795997839221924>
 
+> 💡 **本项目使用的图像资源即由此流程生成。** 资料包位于 [../assets/kotori-minami/](../assets/kotori-minami/)，包含 55 帧动画 + 精灵图，由 `/hatch-pet` Skill 输出后按本项目 9 个状态机重新解帧归档。
+
 ---
 
 ## 1. 安装宠物 Skill
@@ -56,3 +58,13 @@ $skill-installer hatch-pet
 ```
 /宠物
 ```
+
+---
+
+## 5. 与本项目的关系
+
+Skill 默认输出的 6 个动作（idle / working / thinking / waiting / done / sleeping）需要按本项目的 **9 个状态机**重新生成、解帧、归档。完整的状态映射、精灵图规格、重新生成流程见：
+
+- 资源目录：[../assets/kotori-minami/](../assets/kotori-minami/)（`frames/` 运行时帧 + `imagegen/` 生成产物与 prompt）
+- 精灵图规格：[../desktop/docs/spritesheet.md](../desktop/docs/spritesheet.md)
+- 事件 → 状态映射：[../desktop/docs/agent-hooks/events.md](../desktop/docs/agent-hooks/events.md)
