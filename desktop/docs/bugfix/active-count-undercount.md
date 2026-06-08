@@ -208,10 +208,10 @@ pub fn cleanup_stale(&self) {
 - [x] 改动 ②：[config.json](../../cross-platform/config.json) + [config.example.json](../../cross-platform/config.example.json) `stale_timeout_sec: 3600`，[config.rs](../../cross-platform/src-tauri/src/config.rs) 字段加文档注释，JSON 文件加 `_stale_timeout_sec_comment` 说明
 - [x] 改动 ③：扩展 [session.rs `cleanup_stale`](../../cross-platform/src-tauri/src/session.rs)，抽 `is_session_file_stale` helper 让 `load_from_disk` 也共用
 - [x] 更新 [renderer.md](../renderer.md) "清理机制"表格
-- [ ] 手动验证：
-  - [ ] 开 3 个会话，气泡稳定显示 ×3
-  - [ ] 杀掉其中一个（不触发 SessionEnd），等待 1h，确认被自动清理
-  - [ ] 触发 `SubagentStop`，确认主会话仍被计数
+- [x] 手动验证：
+  - [x] 开 3 个会话，气泡稳定显示 ×3
+  - [x] 杀掉其中一个（不触发 SessionEnd），等待 1h，确认被自动清理
+  - [x] 触发 `SubagentStop`，确认主会话仍被计数
 
 ---
 

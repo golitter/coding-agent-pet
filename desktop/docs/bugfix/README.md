@@ -6,5 +6,6 @@
 
 | 文件 | 问题 | 状态 |
 |---|---|---|
-| [active-count-undercount.md](active-count-undercount.md) | 同时开 3 个会话，宠物气泡只显示 ×2 | 待实施 |
+| [active-count-undercount.md](active-count-undercount.md) | 同时开 3 个会话，宠物气泡只显示 ×2 | 已实施 |
+| [idle-blink-too-fast.md](idle-blink-too-fast.md) | idle 状态眨眼太快、像抽搐；引擎只支持匀速轮播 | 待实施 |
 
