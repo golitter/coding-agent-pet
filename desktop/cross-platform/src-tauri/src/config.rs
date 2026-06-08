@@ -96,7 +96,7 @@ impl PetConfig {
         // Look in the cross-platform directory (3 levels up from exe_dir):
         //   target/debug/ → target/ → src-tauri/ → cross-platform/
         let config_dir = exe_dir
-            .parent()              // target/
+            .parent() // target/
             .and_then(|p| p.parent()) // src-tauri/
             .and_then(|p| p.parent()) // cross-platform/
             .map(|p| p.to_path_buf())
@@ -188,8 +188,8 @@ impl PetConfig {
             }
         }
 
-        let frames_dir = frames_dir_override
-            .unwrap_or_else(|| format!("{}/{}/frames", pet_base_dir, pet_id));
+        let frames_dir =
+            frames_dir_override.unwrap_or_else(|| format!("{}/{}/frames", pet_base_dir, pet_id));
         let sessions_dir = sessions_dir_override
             .unwrap_or_else(|| format!("{}/desktop/cross-platform/runtime/sessions", pet_base_dir));
 

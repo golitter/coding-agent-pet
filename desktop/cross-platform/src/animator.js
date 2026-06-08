@@ -4,22 +4,29 @@
  */
 
 const STATES = [
-  'idle', 'running-right', 'running-left', 'waving',
-  'jumping', 'failed', 'waiting', 'running', 'review'
+  "idle",
+  "running-right",
+  "running-left",
+  "waving",
+  "jumping",
+  "failed",
+  "waiting",
+  "running",
+  "review",
 ];
 
-const ONE_SHOT_STATES = new Set(['jumping', 'waving']);
+const ONE_SHOT_STATES = new Set(["jumping", "waving"]);
 
 export class SpriteAnimator {
   constructor() {
-    this.frames = {};           // { stateName: [Image, ...] }
-    this.currentState = 'idle';
+    this.frames = {}; // { stateName: [Image, ...] }
+    this.currentState = "idle";
     this.currentFrameIndex = 0;
-    this.preDragState = 'idle';
-    this.preOneShotState = 'idle';
+    this.preDragState = "idle";
+    this.preOneShotState = "idle";
     this.timer = null;
     this.fps = 10;
-    this.onFrame = null;       // callback(imageElement)
+    this.onFrame = null; // callback(imageElement)
   }
 
   /** Pre-load all sprite frames from disk via Tauri asset protocol */
@@ -31,7 +38,7 @@ export class SpriteAnimator {
       const frames = [];
       let i = 0;
       while (true) {
-        const padded = String(i).padStart(2, '0');
+        const padded = String(i).padStart(2, "0");
         const filePath = `${framesDir}/${state}/${padded}.png`;
         const url = convertFileSrc(filePath);
         const img = new Image();
@@ -50,7 +57,9 @@ export class SpriteAnimator {
     }
 
     const total = Object.values(this.frames).reduce((sum, arr) => sum + arr.length, 0);
-    console.log(`[Animator] ✓ Loaded ${total} frames across ${Object.keys(this.frames).length} states`);
+    console.log(
+      `[Animator] ✓ Loaded ${total} frames across ${Object.keys(this.frames).length} states`,
+    );
   }
 
   /** Start the animation loop */
@@ -100,25 +109,27 @@ export class SpriteAnimator {
   /** Handle drag direction for running animation */
   handleDrag(dx) {
     if (dx > 0.5) {
-      if (this.currentState !== 'running-right' && this.currentState !== 'running-left') {
+      if (this.currentState !== "running-right" && this.currentState !== "running-left") {
         this.preDragState = this.currentState;
       }
-      if (this.currentState !== 'running-right') {
-        this.currentState = 'running-right';
+      if (this.currentState !== "running-right") {
+        this.currentState = "running-right";
         this.currentFrameIndex = 0;
       }
     } else if (dx < -0.5) {
-      if (this.currentState !== 'running-right' && this.currentState !== 'running-left') {
+      if (this.currentState !== "running-right" && this.currentState !== "running-left") {
         this.preDragState = this.currentState;
       }
-      if (this.currentState !== 'running-left') {
-        this.currentState = 'running-left';
+      if (this.currentState !== "running-left") {
+        this.currentState = "running-left";
         this.currentFrameIndex = 0;
       }
     } else if (dx === 0) {
-      if (this.currentState === 'running-right' || this.currentState === 'running-left') {
-        const restore = (this.preDragState === 'running-right' || this.preDragState === 'running-left')
-          ? 'idle' : this.preDragState;
+      if (this.currentState === "running-right" || this.currentState === "running-left") {
+        const restore =
+          this.preDragState === "running-right" || this.preDragState === "running-left"
+            ? "idle"
+            : this.preDragState;
         this.currentState = restore;
         this.currentFrameIndex = 0;
         this.showCurrentFrame();
@@ -137,7 +148,7 @@ export class SpriteAnimator {
     // One-shot: play full cycle then return to previous state
     if (ONE_SHOT_STATES.has(this.currentState) && this.currentFrameIndex >= frames.length) {
       this.currentState = this.preOneShotState;
-      this.preOneShotState = 'idle';
+      this.preOneShotState = "idle";
       this.currentFrameIndex = 0;
     } else {
       this.currentFrameIndex = this.currentFrameIndex % frames.length;

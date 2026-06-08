@@ -14,26 +14,26 @@ cp config.example.json config.json   # 按需修改配置
 
 ## 使用
 
-| 操作 | 效果 |
-|---|---|
-| 点击宠物 | 触发跳跃动画 🎉 |
-| 拖动宠物 | 移动位置，宠物会跑起来 |
-| 右键宠物 | 菜单：打开 Codex / VS Code / 关闭宠物 |
-| 正常使用 Claude Code 或 Codex | 宠物自动反应工作状态 |
+| 操作                          | 效果                                  |
+| ----------------------------- | ------------------------------------- |
+| 点击宠物                      | 触发跳跃动画 🎉                       |
+| 拖动宠物                      | 移动位置，宠物会跑起来                |
+| 右键宠物                      | 菜单：打开 Codex / VS Code / 关闭宠物 |
+| 正常使用 Claude Code 或 Codex | 宠物自动反应工作状态                  |
 
 ## 动画状态
 
-| 场景 | 动画 | 气泡台词 |
-|---|---|---|
-| 点击宠物 | 跳跃 🎉 | — |
-| 启动会话 | 挥手 👋 | 嗨！小鸟来啦～ |
-| 用户发送指令 | 奔跑 🏃 | 收到！开始工作～ |
-| 执行工具 | 奔跑 🏃 | 执行中... |
-| 任务完成 | 跳跃 🎉 | 搞定啦！✨ |
-| 需要授权 | 等待 ⚠️ | 需要你的授权～ |
-| 出错 | 失败 💔 | 呜...出了点问题 |
-| 拖动宠物 | 方向奔跑 →← | — |
-| 会话结束 | 挥手 👋 | 下次见！♪ |
+| 场景         | 动画        | 气泡台词         |
+| ------------ | ----------- | ---------------- |
+| 点击宠物     | 跳跃 🎉     | —                |
+| 启动会话     | 挥手 👋     | 嗨！小鸟来啦～   |
+| 用户发送指令 | 奔跑 🏃     | 收到！开始工作～ |
+| 执行工具     | 奔跑 🏃     | 执行中...        |
+| 任务完成     | 跳跃 🎉     | 搞定啦！✨       |
+| 需要授权     | 等待 ⚠️     | 需要你的授权～   |
+| 出错         | 失败 💔     | 呜...出了点问题  |
+| 拖动宠物     | 方向奔跑 →← | —                |
+| 会话结束     | 挥手 👋     | 下次见！♪        |
 
 ## 架构
 
@@ -48,13 +48,13 @@ Claude Code / Codex → JSON 事件 (hooks) → session 文件 → Unix Socket �
 
 ### 安全措施
 
-| 措施 | 说明 |
-|---|---|
-| Socket 权限 `0o600` | 仅 owner 可连接，防止本地注入 |
-| AppleScript 内容过滤 | 拒绝 `do shell script` 和反引号 |
-| 最小 capabilities | 仅声明实际使用的权限 |
-| Mutex 合并 | 所有可变状态在单个 Mutex 后，消除死锁风险 |
-| Shell 注入防护 | Python hook 使用 `threading.Timer` 而非 shell 拼接 |
+| 措施                 | 说明                                               |
+| -------------------- | -------------------------------------------------- |
+| Socket 权限 `0o600`  | 仅 owner 可连接，防止本地注入                      |
+| AppleScript 内容过滤 | 拒绝 `do shell script` 和反引号                    |
+| 最小 capabilities    | 仅声明实际使用的权限                               |
+| Mutex 合并           | 所有可变状态在单个 Mutex 后，消除死锁风险          |
+| Shell 注入防护       | Python hook 使用 `threading.Timer` 而非 shell 拼接 |
 
 ## 目录结构
 
@@ -113,7 +113,11 @@ desktop/cross-platform/
   },
   "menu": {
     "items": [
-      { "title": "Codex", "action": "applescript", "script": "tell application \"Codex\"\nactivate\nend tell" },
+      {
+        "title": "Codex",
+        "action": "applescript",
+        "script": "tell application \"Codex\"\nactivate\nend tell"
+      },
       { "type": "separator" },
       { "title": "关闭宠物", "action": "quit" }
     ]
@@ -141,9 +145,9 @@ RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
 
 ## 相关文档
 
-| 文档 | 说明 |
-|---|---|
-| [../docs/overview.md](../docs/overview.md) | 跨平台实现概述 |
-| [../docs/hooks.md](../docs/hooks.md) | Hook 脚本详解 |
-| [../docs/renderer.md](../docs/renderer.md) | Tauri 渲染器详解 |
-| [../docs/spritesheet.md](../docs/spritesheet.md) | 精灵图规格 |
+| 文档                                             | 说明             |
+| ------------------------------------------------ | ---------------- |
+| [../docs/overview.md](../docs/overview.md)       | 跨平台实现概述   |
+| [../docs/hooks.md](../docs/hooks.md)             | Hook 脚本详解    |
+| [../docs/renderer.md](../docs/renderer.md)       | Tauri 渲染器详解 |
+| [../docs/spritesheet.md](../docs/spritesheet.md) | 精灵图规格       |

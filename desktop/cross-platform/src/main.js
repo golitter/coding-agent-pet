@@ -3,8 +3,8 @@
  * Wires up all components and handles mouse events.
  */
 
-import { SpriteAnimator } from './animator.js';
-import { DialogueBubble } from './bubble.js';
+import { SpriteAnimator } from "./animator.js";
+import { DialogueBubble } from "./bubble.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
@@ -12,17 +12,17 @@ const { listen } = window.__TAURI__.event;
 
 async function main() {
   // 1. Fetch config from Rust backend
-  const config = await invoke('get_config');
-  console.log('[Main] ✓ Config loaded', config);
+  const config = await invoke("get_config");
+  console.log("[Main] ✓ Config loaded", config);
 
   // 2. Create animator
   const animator = new SpriteAnimator();
   await animator.loadFrames(config.frames_dir, config.fps);
 
   // 3. Get DOM elements
-  const petSprite = document.getElementById('pet-sprite');
-  const bubbleEl = document.getElementById('bubble');
-  const contextMenu = document.getElementById('context-menu');
+  const petSprite = document.getElementById("pet-sprite");
+  const bubbleEl = document.getElementById("bubble");
+  const contextMenu = document.getElementById("context-menu");
 
   // 4. Set sprite scale — same as mac: scaledWidth = 192 * scale, scaledHeight = 208 * scale
   const scaledWidth = 192 * config.scale;
@@ -46,10 +46,10 @@ async function main() {
   animator.start();
 
   // 9. Show initial dialogue
-  bubble.show('准备好了～', 0, 'idle');
+  bubble.show("准备好了～", 0, "idle");
 
   // 10. Listen for state changes from backend
-  await listen('state-change', (event) => {
+  await listen("state-change", (event) => {
     const { state, dialogue, active_count } = event.payload;
     animator.transitionTo(state);
     bubble.show(dialogue, active_count, state);
@@ -61,7 +61,7 @@ async function main() {
   // 12. Setup mouse interaction handlers
   setupInteractions(animator, contextMenu);
 
-  console.log('[Main] ✓ Pet initialized');
+  console.log("[Main] ✓ Pet initialized");
 }
 
 /** Set window size and position — matches mac PetWindow dimensions exactly */
@@ -86,55 +86,71 @@ async function setupWindow(config, scaledW, scaledH) {
 
     await appWindow.setPosition(new window.__TAURI__.window.LogicalPosition(x, y));
   } catch (e) {
-    console.warn('[Main] ⚠️ Could not setup window:', e);
+    console.warn("[Main] ⚠️ Could not setup window:", e);
   }
 }
 
 /** Build the right-click context menu */
 function buildContextMenu(menuEl, items) {
-  menuEl.innerHTML = '';
+  menuEl.innerHTML = "";
   if (!items || items.length === 0) {
     // Fallback menu
-    menuEl.appendChild(createMenuItem('关闭宠物', () => {
-      invoke('quit_app').catch(e => console.error('[Menu] quit_app failed:', e));
-    }, getQuitShortcut()));
+    menuEl.appendChild(
+      createMenuItem(
+        "关闭宠物",
+        () => {
+          invoke("quit_app").catch((e) => console.error("[Menu] quit_app failed:", e));
+        },
+        getQuitShortcut(),
+      ),
+    );
     return;
   }
 
   for (const item of items) {
-    if (item.action === 'separator') {
-      const sep = document.createElement('div');
-      sep.className = 'context-menu-separator';
+    if (item.action === "separator") {
+      const sep = document.createElement("div");
+      sep.className = "context-menu-separator";
       menuEl.appendChild(sep);
-    } else if (item.action === 'quit') {
-      menuEl.appendChild(createMenuItem(item.title, () => {
-        invoke('quit_app').catch(e => console.error('[Menu] quit_app failed:', e));
-      }, getQuitShortcut()));
-    } else if (item.action === 'applescript' && item.script) {
-      menuEl.appendChild(createMenuItem(item.title, () => {
-        invoke('run_applescript', { script: item.script }).catch(e => console.error('[Menu] run_applescript failed:', e));
-      }));
+    } else if (item.action === "quit") {
+      menuEl.appendChild(
+        createMenuItem(
+          item.title,
+          () => {
+            invoke("quit_app").catch((e) => console.error("[Menu] quit_app failed:", e));
+          },
+          getQuitShortcut(),
+        ),
+      );
+    } else if (item.action === "applescript" && item.script) {
+      menuEl.appendChild(
+        createMenuItem(item.title, () => {
+          invoke("run_applescript", { script: item.script }).catch((e) =>
+            console.error("[Menu] run_applescript failed:", e),
+          );
+        }),
+      );
     }
   }
 }
 
-function createMenuItem(title, onClick, shortcut = '') {
-  const el = document.createElement('div');
-  el.className = 'context-menu-item';
+function createMenuItem(title, onClick, shortcut = "") {
+  const el = document.createElement("div");
+  el.className = "context-menu-item";
 
-  const label = document.createElement('span');
-  label.className = 'context-menu-label';
+  const label = document.createElement("span");
+  label.className = "context-menu-label";
   label.textContent = title;
   el.appendChild(label);
 
   if (shortcut) {
-    const shortcutEl = document.createElement('span');
-    shortcutEl.className = 'context-menu-shortcut';
+    const shortcutEl = document.createElement("span");
+    shortcutEl.className = "context-menu-shortcut";
     shortcutEl.textContent = shortcut;
     el.appendChild(shortcutEl);
   }
 
-  el.addEventListener('click', (e) => {
+  el.addEventListener("click", (e) => {
     e.stopPropagation();
     hideAllMenus();
     onClick();
@@ -143,19 +159,19 @@ function createMenuItem(title, onClick, shortcut = '') {
 }
 
 function hideAllMenus() {
-  const menus = document.querySelectorAll('.context-menu');
-  menus.forEach(m => m.classList.add('hidden'));
+  const menus = document.querySelectorAll(".context-menu");
+  menus.forEach((m) => m.classList.add("hidden"));
 }
 
 function isMacPlatform() {
   if (navigator.userAgentData) {
-    return navigator.userAgentData.platform === 'macOS';
+    return navigator.userAgentData.platform === "macOS";
   }
   return /mac/i.test(navigator.userAgent);
 }
 
 function getQuitShortcut() {
-  return isMacPlatform() ? '⌘ Q' : 'Ctrl Q';
+  return isMacPlatform() ? "⌘ Q" : "Ctrl Q";
 }
 
 /** Setup click, drag, and right-click handlers */
@@ -167,13 +183,13 @@ function setupInteractions(animator, contextMenu) {
 
   // Left click: mousedown → mouseup without drag = click → trigger jump
   // Drag: mousedown → mousemove with threshold → drag window + directional anim
-  document.addEventListener('mousedown', (e) => {
+  document.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // left button only
     dragStart = { x: e.screenX, y: e.screenY };
     isDragging = false;
   });
 
-  document.addEventListener('mousemove', (e) => {
+  document.addEventListener("mousemove", (e) => {
     if (!dragStart || e.button !== 0) return;
 
     const dx = e.screenX - dragStart.x;
@@ -190,14 +206,14 @@ function setupInteractions(animator, contextMenu) {
     }
   });
 
-  document.addEventListener('mouseup', (e) => {
+  document.addEventListener("mouseup", (e) => {
     if (e.button !== 0) return;
 
     if (isDragging) {
       animator.handleDrag(0); // signal: drag ended
     } else if (dragStart) {
       // Single click → trigger jump
-      animator.triggerOneShot('jumping');
+      animator.triggerOneShot("jumping");
     }
 
     dragStart = null;
@@ -205,9 +221,9 @@ function setupInteractions(animator, contextMenu) {
   });
 
   // Right-click → context menu
-  document.addEventListener('contextmenu', (e) => {
+  document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    contextMenu.classList.remove('hidden');
+    contextMenu.classList.remove("hidden");
     contextMenu.style.left = `${e.clientX}px`;
     contextMenu.style.top = `${e.clientY}px`;
 
@@ -222,24 +238,24 @@ function setupInteractions(animator, contextMenu) {
   });
 
   // Click anywhere else to close menu
-  document.addEventListener('click', () => {
+  document.addEventListener("click", () => {
     hideAllMenus();
   });
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
       hideAllMenus();
       return;
     }
 
     const quitModifierPressed = isMacPlatform() ? e.metaKey : e.ctrlKey;
-    if (quitModifierPressed && e.key.toLowerCase() === 'q') {
+    if (quitModifierPressed && e.key.toLowerCase() === "q") {
       e.preventDefault();
       hideAllMenus();
-      invoke('quit_app').catch(e => console.error('[Keyboard] quit_app failed:', e));
+      invoke("quit_app").catch((e) => console.error("[Keyboard] quit_app failed:", e));
     }
   });
 }
 
 // Start
-main().catch((e) => console.error('[Main] Fatal:', e));
+main().catch((e) => console.error("[Main] Fatal:", e));

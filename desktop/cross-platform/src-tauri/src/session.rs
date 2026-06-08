@@ -88,7 +88,10 @@ impl SessionManager {
     }
 
     /// Lock inner, collect orphaned session ids (those not in `file_ids`), then remove them.
-    fn remove_orphaned_sessions(&self, file_ids: &std::collections::HashSet<String>) -> Vec<String> {
+    fn remove_orphaned_sessions(
+        &self,
+        file_ids: &std::collections::HashSet<String>,
+    ) -> Vec<String> {
         let mut inner = self.inner.lock().unwrap();
         let orphaned: Vec<String> = inner
             .sessions
@@ -126,7 +129,14 @@ impl SessionManager {
     }
 
     /// Update a session's state from a hook event.
-    pub fn update(&self, session_id: &str, state: &str, dialogue: &str, source: &str, is_terminal: bool) {
+    pub fn update(
+        &self,
+        session_id: &str,
+        state: &str,
+        dialogue: &str,
+        source: &str,
+        is_terminal: bool,
+    ) {
         if is_terminal {
             self.remove_session(session_id);
             // Also delete file
@@ -285,10 +295,12 @@ impl SessionManager {
         let new_state = best_session
             .map(|s| s.state.clone())
             .unwrap_or_else(|| "idle".to_string());
-        let new_dialogue = best_session
-            .map(|s| s.dialogue.clone())
-            .unwrap_or_default();
-        let new_count = inner.sessions.values().filter(|s| s.state != "idle").count();
+        let new_dialogue = best_session.map(|s| s.dialogue.clone()).unwrap_or_default();
+        let new_count = inner
+            .sessions
+            .values()
+            .filter(|s| s.state != "idle")
+            .count();
 
         let changed = inner.aggregated.current_state != new_state
             || inner.aggregated.current_dialogue != new_dialogue

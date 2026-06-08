@@ -6,41 +6,41 @@
 export class DialogueBubble {
   constructor(element, config) {
     this.el = element;
-    this.textEl = element.querySelector('#bubble-text');
-    this.countEl = element.querySelector('#bubble-count');
+    this.textEl = element.querySelector("#bubble-text");
+    this.countEl = element.querySelector("#bubble-count");
     this.config = config;
-    this.currentStyle = 'normal';
+    this.currentStyle = "normal";
   }
 
   /** Show the bubble with text, session count, and state-based style */
-  show(text, sessionCount = 0, state = 'idle') {
+  show(text, sessionCount = 0, state = "idle") {
     if (!text && sessionCount <= 1) {
       this.hide();
       return;
     }
 
     // Pick style based on state
-    let style = 'normal';
-    if (state === 'waiting') style = 'warning';
-    else if (state === 'failed') style = 'error';
+    let style = "normal";
+    if (state === "waiting") style = "warning";
+    else if (state === "failed") style = "error";
 
     this.applyStyle(style);
     this.textEl.textContent = text;
-    this.countEl.textContent = sessionCount > 1 ? `×${sessionCount}` : '';
+    this.countEl.textContent = sessionCount > 1 ? `×${sessionCount}` : "";
 
-    this.el.classList.remove('hidden');
-    this.el.classList.add('visible');
+    this.el.classList.remove("hidden");
+    this.el.classList.add("visible");
   }
 
   /** Hide the bubble with fade-out */
   hide() {
-    this.el.classList.remove('visible');
-    this.el.classList.add('hidden');
+    this.el.classList.remove("visible");
+    this.el.classList.add("hidden");
   }
 
   applyStyle(style) {
     if (this.currentStyle === style) return;
-    this.el.classList.remove('style-normal', 'style-warning', 'style-error');
+    this.el.classList.remove("style-normal", "style-warning", "style-error");
     this.el.classList.add(`style-${style}`);
     this.currentStyle = style;
   }

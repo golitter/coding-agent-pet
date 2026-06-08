@@ -24,23 +24,31 @@
   },
   "terminal_events": ["StopFailure", "SessionEnd"],
   "state_map": {
-    "SessionStart":      {"state": "waving",  "dialogue": "嗨！小鸟来啦～"},
-    "UserPromptSubmit":  {"state": "running", "dialogue": "收到！开始工作～"},
-    "PreToolUse":        {"state": "running", "dialogue": "执行中..."},
-    "Stop":              {"state": "jumping", "dialogue": "搞定啦！✨"},
-    "StopFailure":       {"state": "failed",  "dialogue": "呜...出了点问题"},
-    "Notification":      {"state": "waving",  "dialogue": "注意哦～"},
-    "PermissionRequest": {"state": "waiting", "dialogue": "需要你的授权～"},
-    "SubagentStop":      {"state": "idle",    "dialogue": ""},
-    "PreCompact":        {"state": "waiting", "dialogue": "整理一下记忆..."},
-    "SessionEnd":        {"state": "waving",  "dialogue": "下次见！♪"}
+    "SessionStart": { "state": "waving", "dialogue": "嗨！小鸟来啦～" },
+    "UserPromptSubmit": { "state": "running", "dialogue": "收到！开始工作～" },
+    "PreToolUse": { "state": "running", "dialogue": "执行中..." },
+    "Stop": { "state": "jumping", "dialogue": "搞定啦！✨" },
+    "StopFailure": { "state": "failed", "dialogue": "呜...出了点问题" },
+    "Notification": { "state": "waving", "dialogue": "注意哦～" },
+    "PermissionRequest": { "state": "waiting", "dialogue": "需要你的授权～" },
+    "SubagentStop": { "state": "idle", "dialogue": "" },
+    "PreCompact": { "state": "waiting", "dialogue": "整理一下记忆..." },
+    "SessionEnd": { "state": "waving", "dialogue": "下次见！♪" }
   },
   "menu": {
     "items": [
-      {"title": "Codex",   "action": "applescript", "script": "tell application \"Codex\"\nactivate\nend tell"},
-      {"title": "VS Code", "action": "applescript", "script": "tell application \"Visual Studio Code\"\nactivate\nend tell"},
-      {"type": "separator"},
-      {"title": "关闭宠物", "action": "quit"}
+      {
+        "title": "Codex",
+        "action": "applescript",
+        "script": "tell application \"Codex\"\nactivate\nend tell"
+      },
+      {
+        "title": "VS Code",
+        "action": "applescript",
+        "script": "tell application \"Visual Studio Code\"\nactivate\nend tell"
+      },
+      { "type": "separator" },
+      { "title": "关闭宠物", "action": "quit" }
     ]
   }
 }

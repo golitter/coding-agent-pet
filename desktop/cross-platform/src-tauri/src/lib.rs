@@ -33,14 +33,12 @@ fn make_window_transparent(window: &tauri::WebviewWindow) {
     }
 
     // WKWebView transparency via Tauri's with_webview API
-    let _ = window.with_webview(|webview| {
-        unsafe {
-            let wk: *mut Object = webview.inner() as *mut Object;
-            if !wk.is_null() {
-                let clear: *mut Object = msg_send![Class::get("NSColor").unwrap(), clearColor];
-                let _: () = msg_send![wk, setOpaque: NO];
-                let _: () = msg_send![wk, setBackgroundColor: clear];
-            }
+    let _ = window.with_webview(|webview| unsafe {
+        let wk: *mut Object = webview.inner() as *mut Object;
+        if !wk.is_null() {
+            let clear: *mut Object = msg_send![Class::get("NSColor").unwrap(), clearColor];
+            let _: () = msg_send![wk, setOpaque: NO];
+            let _: () = msg_send![wk, setBackgroundColor: clear];
         }
     });
 }
@@ -75,7 +73,10 @@ pub fn run() {
             std::fs::create_dir_all(&config.sessions_dir).ok();
 
             // 4. Create session manager
-            let session_mgr = Arc::new(SessionManager::new(config.sessions_dir.clone(), config.stale_timeout_sec));
+            let session_mgr = Arc::new(SessionManager::new(
+                config.sessions_dir.clone(),
+                config.stale_timeout_sec,
+            ));
 
             // 5. Wire state changes → frontend events
             let app_handle = app.handle().clone();
@@ -129,7 +130,11 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::get_config, commands::run_applescript, commands::quit_app])
+        .invoke_handler(tauri::generate_handler![
+            commands::get_config,
+            commands::run_applescript,
+            commands::quit_app
+        ])
         .run(tauri::generate_context!())
         .expect("error while running KotoriPet");
 }
