@@ -241,12 +241,13 @@ function setupInteractions(animator, contextMenu, bubble) {
   // triggers a full purge of the sessions directory (see `purge_all` in
   // aggregator.rs). Below 3 clicks the counter simply biases toward the
   // regular jump animation — clicks 1 and 2 still fire jumps, click 3 swaps
-  // in the purge. 3s window is intentionally generous so the user can take
-  // their time tapping; the cost is that three stray clicks during normal
-  // interaction within 3s will also fire.
+  // in the purge. Window kept tight (800ms) on purpose: a purge wipes ALL
+  // live sessions, so the cost of a stray trigger is high. A deliberate
+  // triple-tap still lands comfortably inside 800ms; the previous 3s window
+  // fired on ordinary interaction within 3s.
   let clickCount = 0;
   let lastClickTime = 0;
-  const TRIPLE_CLICK_WINDOW_MS = 3000;
+  const TRIPLE_CLICK_WINDOW_MS = 800;
 
   // Left click: mousedown → mouseup without drag = click → trigger jump
   // Drag: mousedown → mousemove with threshold → drag window + directional anim

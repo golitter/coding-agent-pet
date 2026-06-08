@@ -51,7 +51,7 @@ struct RawConfig {
     menu: Option<RawMenu>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct RawRenderer {
     scale: Option<f64>,
     fps: Option<f64>,
@@ -60,7 +60,7 @@ struct RawRenderer {
     corner_margin: Option<i32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct RawDialogue {
     font_size: Option<u32>,
     max_width: Option<u32>,
@@ -122,85 +122,64 @@ impl PetConfig {
             config_path.clone()
         };
 
-        // Defaults
-        let mut pet_id = "kotori-minami".to_string();
-        let mut pet_base_dir = detected_base.clone();
-        let mut socket_path = "/tmp/kotori-pet.sock".to_string();
-        let mut scale = 0.6;
-        let mut fps = 10.0;
-        let mut stale_timeout_sec = 3600u64;
-        let mut cleanup_interval_sec = 5u64;
-        let mut corner_margin = 20i32;
-        let mut dialogue_font_size = 10u32;
-        let mut dialogue_max_width = 160u32;
-        let mut dialogue_corner_radius = 6u32;
-        let mut dialogue_fade_duration = 0.3;
-        let mut style_map: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new();
-        let mut frames_dir_override: Option<String> = None;
-        let mut sessions_dir_override: Option<String> = None;
-        let mut menu_items: Vec<MenuItem> = Vec::new();
+        // Parse config file; fall back to an all-default RawConfig on any failure
+        // (missing file, malformed JSON). Each field below carries its own default
+        // inline in the unwrap_or — no separate `let mut x = default` declaration,
+        // so every default lives in exactly one place.
+        let raw: RawConfig = std::fs::read_to_string(&actual_path)
+            .ok()
+            .and_then(|data| serde_json::from_str(&data).ok())
+            .unwrap_or_default();
 
-        // Parse config file
-        if let Ok(data) = std::fs::read_to_string(&actual_path) {
-            if let Ok(raw) = serde_json::from_str::<RawConfig>(&data) {
-                if let Some(dir) = raw.pet_base_dir {
-                    pet_base_dir = resolve_path(&dir, &detected_base);
-                }
-                if let Some(id) = raw.pet_id {
-                    pet_id = id;
-                }
-                if let Some(dir) = raw.frames_dir {
-                    frames_dir_override = Some(resolve_path(&dir, &pet_base_dir));
-                }
-                if let Some(dir) = raw.sessions_dir {
-                    sessions_dir_override = Some(resolve_path(&dir, &pet_base_dir));
-                }
-                if let Some(sp) = raw.socket_path {
-                    socket_path = sp;
-                }
-                if let Some(r) = raw.renderer {
-                    scale = r.scale.unwrap_or(scale);
-                    fps = r.fps.unwrap_or(fps);
-                    stale_timeout_sec = r.stale_timeout_sec.unwrap_or(stale_timeout_sec);
-                    cleanup_interval_sec = r.cleanup_interval_sec.unwrap_or(cleanup_interval_sec);
-                    corner_margin = r.corner_margin.unwrap_or(corner_margin);
-                }
-                if let Some(d) = raw.dialogue {
-                    dialogue_font_size = d.font_size.unwrap_or(dialogue_font_size);
-                    dialogue_max_width = d.max_width.unwrap_or(dialogue_max_width);
-                    dialogue_corner_radius = d.corner_radius.unwrap_or(dialogue_corner_radius);
-                    dialogue_fade_duration = d.fade_duration_sec.unwrap_or(dialogue_fade_duration);
-                    if let Some(sm) = d.style_map {
-                        style_map = sm;
-                    }
-                }
-                if let Some(menu) = raw.menu {
-                    for item in menu.items {
-                        match item {
-                            RawMenuItem::Separator { .. } => {
-                                menu_items.push(MenuItem {
-                                    title: String::new(),
-                                    action: "separator".to_string(),
-                                    script: None,
-                                });
-                            }
-                            RawMenuItem::Action {
-                                title,
-                                action,
-                                script,
-                            } => {
-                                menu_items.push(MenuItem {
-                                    title,
-                                    action,
-                                    script,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        let pet_id = raw.pet_id.unwrap_or_else(|| "kotori-minami".to_string());
+        let pet_base_dir = raw
+            .pet_base_dir
+            .map(|d| resolve_path(&d, &detected_base))
+            .unwrap_or_else(|| detected_base.clone());
+        let frames_dir_override = raw.frames_dir.map(|d| resolve_path(&d, &pet_base_dir));
+        let sessions_dir_override = raw.sessions_dir.map(|d| resolve_path(&d, &pet_base_dir));
+        let socket_path = raw
+            .socket_path
+            .unwrap_or_else(|| "/tmp/kotori-pet.sock".to_string());
+
+        let renderer = raw.renderer.unwrap_or_default();
+        let scale = renderer.scale.unwrap_or(0.6);
+        let fps = renderer.fps.unwrap_or(10.0);
+        let stale_timeout_sec = renderer.stale_timeout_sec.unwrap_or(3600);
+        let cleanup_interval_sec = renderer.cleanup_interval_sec.unwrap_or(5);
+        let corner_margin = renderer.corner_margin.unwrap_or(20);
+
+        let dialogue = raw.dialogue.unwrap_or_default();
+        let dialogue_font_size = dialogue.font_size.unwrap_or(10);
+        let dialogue_max_width = dialogue.max_width.unwrap_or(160);
+        let dialogue_corner_radius = dialogue.corner_radius.unwrap_or(6);
+        let dialogue_fade_duration = dialogue.fade_duration_sec.unwrap_or(0.3);
+        let style_map = dialogue.style_map.unwrap_or_default();
+
+        let menu_items = raw
+            .menu
+            .map(|m| {
+                m.items
+                    .into_iter()
+                    .map(|item| match item {
+                        RawMenuItem::Separator { .. } => MenuItem {
+                            title: String::new(),
+                            action: "separator".to_string(),
+                            script: None,
+                        },
+                        RawMenuItem::Action {
+                            title,
+                            action,
+                            script,
+                        } => MenuItem {
+                            title,
+                            action,
+                            script,
+                        },
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
         let frames_dir = frames_dir_override
             .unwrap_or_else(|| format!("{}/assets/{}/frames", pet_base_dir, pet_id));
