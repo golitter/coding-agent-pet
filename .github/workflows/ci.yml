@@ -35,6 +35,16 @@ jobs:
         working-directory: desktop/cross-platform/src-tauri
     steps:
       - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -50,13 +60,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
       - name: shellcheck
-        uses: koalaman/shellcheck-action@v1
-        with:
-          paths: |
-            desktop/cross-platform/hooks/*.sh
-            desktop/cross-platform/setup.sh
-            desktop/cross-platform/setup-hooks.sh
+        run: |
+          shellcheck \
+            desktop/cross-platform/hooks/*.sh \
+            desktop/cross-platform/setup.sh \
+            desktop/cross-platform/setup-hooks.sh \
             desktop/cross-platform/build-and-run.sh
       - uses: astral-sh/setup-uv@v3
       - name: ruff
