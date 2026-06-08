@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-frontend:
+    name: Lint Frontend (Prettier + ESLint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop/cross-platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: desktop/cross-platform/package-lock.json
+      - run: npm ci
+      - run: npx prettier --check .
+      - run: npx eslint src
+
+  lint-rust:
+    name: Lint Rust (fmt + clippy + check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop/cross-platform/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/cross-platform/src-tauri
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo check
+
+  lint-scripts:
+    name: Lint Scripts (shellcheck + ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        uses: koalaman/shellcheck-action@v1
+        with:
+          paths: |
+            desktop/cross-platform/hooks/*.sh
+            desktop/cross-platform/setup.sh
+            desktop/cross-platform/setup-hooks.sh
+            desktop/cross-platform/build-and-run.sh
+      - uses: astral-sh/setup-uv@v3
+      - name: ruff
+        run: uvx ruff check desktop/cross-platform/hooks/scripts
+
+  prettier-autofix:
+    name: Prettier Auto-Fix
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: desktop/cross-platform
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: desktop/cross-platform/package-lock.json
+      - run: npm ci
+      - run: npx prettier --write .
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'style: apply prettier formatting'
+          file_pattern: 'desktop/cross-platform/**'

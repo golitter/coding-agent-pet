@@ -5,12 +5,27 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "lint": "eslint src && prettier --check .",
+    "lint:fix": "eslint --fix src && prettier --write .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "cd ../.. && husky desktop/cross-platform/.husky"
   },
-  "devDependencies": {
-    "@tauri-apps/cli": "^2"
+  "lint-staged": {
+    "src/**/*.{js,html,css}": "prettier --write",
+    "src/**/*.js": "eslint --fix",
+    "*.{json,md}": "prettier --write"
   },
   "dependencies": {
     "@tauri-apps/api": "^2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "eslint": "^9.10.0",
+    "globals": "^15.0.0",
+    "husky": "^9.1.0",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.3.3"
   }
 }
