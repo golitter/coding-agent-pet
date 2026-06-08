@@ -1,63 +1,59 @@
 # 🐦 Kotori Pet
 
-一只住在桌面上的小鸟 — 南琴梨（Kotori Minami）像素风格桌面宠物。她跟随 AI 编程工具（Claude Code / Codex）的状态变化做出反应。
+一只住在桌面上的像素风南琴梨（Kotori Minami）。她跟随 Claude Code / Codex 的生命周期事件切换动画与气泡台词。
 
-基于 [Tauri v2](https://v2.tauri.app/) 构建（Rust 后端 + HTML/CSS/JS 前端），具备跨平台潜力。
+基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）构建。
 
 ## 快速开始
 
 ```bash
 cd desktop/cross-platform
-cp config.example.json config.json   # 按需修改配置
-./setup.sh                           # 一键安装 & 启动
+cp config.example.json config.json   # 按需修改
+./setup.sh                           # 一键：依赖 → 配置 → hooks → 编译 → 启动
 ```
 
-`setup.sh` 自动完成：安装前端依赖 → 生成配置 → 注册 hooks → 编译 → 启动。
+## 交互
+
+| 操作 | 效果 |
+|---|---|
+| 单击 | 跳跃 🎉 |
+| 三连击（3s 内） | 清空所有会话 🧹 |
+| 拖动 | 移动位置（方向奔跑动画） |
+| 右键 | 菜单：Codex / VS Code / 关闭 |
 
 ## 架构
 
 ```
-Claude Code / Codex → JSON 事件 (hooks) → session 文件 → Unix Socket → Tauri 渲染器
-                                                                            ├── Rust: 会话聚合 + 状态监听
-                                                                            └── JS: 精灵动画 + 对话气泡
+Claude Code / Codex → hook 脚本 → session 文件 + Unix Socket → Tauri 渲染器
+                                                                ├── Rust: 多会话聚合 + 双通道监听
+                                                                └── JS: 精灵动画 + 对话气泡
 ```
 
-支持多会话同时运行，按优先级聚合状态。
+状态优先级：`waiting > running > review > jumping > waving > idle > failed`
 
-## 内置 Codex 中使用
+## 在 Codex 中生成宠物素材
 
-通过 Codex Skill 自动生成宠物素材，详见 [教程文档](docs/codex实现虚拟宠物.md)。
+通过 Codex Skill 一键生成像素资料包，详见 [教程](docs/codex实现虚拟宠物.md)。
 
 ## 文档
 
-| 文档 | 说明 |
-|---|---|
-| [desktop/docs/overview.md](desktop/docs/overview.md) | 跨平台实现概述 |
-| [desktop/docs/agent-hooks/README.md](desktop/docs/agent-hooks/README.md) | Hook 机制详解（各平台） |
-| [desktop/docs/renderer.md](desktop/docs/renderer.md) | Tauri 渲染器详解 |
-| [desktop/docs/spritesheet.md](desktop/docs/spritesheet.md) | 精灵图规格 |
+完整索引（架构 / Hook 协议 / 源码 / 配置 / 精灵图规格 / Bugfix）详见
+[docs/reference/details.md](docs/reference/details.md)。
 
 ## 目录结构
 
-```
+```text
 .
-├── assets/kotori-minami/  # 宠物资料包 (frames 运行时资源 + imagegen 生成工件)
+├── assets/kotori-minami/   # 资料包（frames/ 运行时 + imagegen/ 生成工件）
 ├── desktop/
-│   ├── cross-platform/    # 主实现 (Tauri)
-│   │   ├── src/           #   前端 (HTML/CSS/JS)
-│   │   ├── src-tauri/     #   后端 (Rust)
-│   │   ├── hooks/         #   Hook 脚本
-│   │   └── runtime/sessions/  运行时状态
-│   └── docs/              #   文档 (架构/hook/渲染器)
-└── docs/                  # 顶层文档 (生成教程)
+│   ├── cross-platform/     # Tauri 主实现（src/ + src-tauri/ + hooks/）
+│   └── docs/               # 跨平台 / Hook / 精灵图 / Bugfix
+└── docs/                   # 顶层文档（教程 + reference/details.md）
 ```
 
 ## 要求
 
-- macOS 13+（当前已测试平台）
-- [Rust](https://rustup.rs/) + Cargo
-- Node.js + npm
-- Python 3（系统自带，hook 脚本使用）
+- macOS 13+ · [Rust](https://rustup.rs/) + Cargo · Node.js + npm · Python 3
 
 ## License
 
