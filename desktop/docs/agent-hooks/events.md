@@ -29,6 +29,10 @@
 **注意**：
 - **SessionStart 触发时机不同**：Claude Code 在 CLI/IDE **启动瞬间**就触发 `SessionStart`，与首次 `UserPromptSubmit` 之间隔用户思考时间（秒～分钟级）；Codex 0.133.0 的 `session_start` 是**懒触发**——只在用户**首次提交 prompt** 时与 `user_prompt_submit` 一起补发（间隔仅 30~50ms）。若用户启动 codex 后不发消息直接退出，两个事件都不会发。结果：Codex 的挥手动画会被紧随的奔跑动画瞬时覆盖，肉眼几乎不可见。
 - **`SessionEnd` Claude 独有**：Codex 不提供此事件，会话死亡检测依赖 [pseudo-session-end](../codex/v01330/pseudo-session-end.md) 的 SQLite 轮询兜底（详见第 25、39 行表格）。
+- **用户中断检测缺失**（两个平台都有）：用户提交 prompt 后**按 Ctrl+C / Esc / 关窗口中断**时，**Claude Code 和 Codex 都不会发任何 hook 事件**。结果：session 文件 mtime 停留在 `UserPromptSubmit` 那一刻，state 永远停在 `running`，宠物卡在"收到！开始工作～"直到 **`stale_timeout_sec`（默认 1h）**后才被 `cleanup_stale` 清理，期间 `active_count` 错误地 +1。
+  - **根因**：两个平台都没有"用户中断"hook 事件——Claude Code 有 [Issue #9516](https://github.com/anthropics/claude-code/issues/9516) feature request 但未实现；Codex 0.133.0 也没有 cancel/interrupt/abort hook。
+  - **当前缓解**：等 1h TTL / 重启宠物 app / 手动删 `sessions/<session_id>.json`。
+  - **未来修复方向**（**不在本次范围**）：在 Rust 后端做 state-aware stale timeout——`running` 状态用 ~180s，其它状态保持 1h。判断时 `is_session_file_stale` 需要读 JSON 的 `state` 字段决定 TTL。详见 [session.rs:34](../../cross-platform/src-tauri/src/session.rs#L34) 现有的 mtime-only 判断。
 
 ---
 

@@ -41,3 +41,7 @@ stdin JSON
 ```
 
 详见各平台的独立文档。
+
+## 已知局限
+
+- **用户中断后宠物卡在 running 长达 1h**：两个平台都没有"用户中断"hook（Claude Code Issue [#9516](https://github.com/anthropics/claude-code/issues/9516)、Codex 0.133.0 同），导致中断后 session 文件不会被刷新，直到 `stale_timeout_sec`（默认 1h）后被自动清理。详细分析与未来修复方向见 [events.md "注意"段](events.md#注意)。
