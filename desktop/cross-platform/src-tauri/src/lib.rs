@@ -122,7 +122,8 @@ pub fn run() {
                 }
             });
 
-            // 10. Store config for frontend access
+            // 10. Store config + aggregator for frontend / command access
+            app.manage(session_mgr.clone());
             app.manage(config);
 
             info!("KotoriPet ✓ Running. Press Ctrl+C to exit.");
@@ -132,7 +133,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::run_applescript,
-            commands::quit_app
+            commands::quit_app,
+            commands::purge_all_sessions
         ])
         .run(tauri::generate_context!())
         .expect("error while running KotoriPet");

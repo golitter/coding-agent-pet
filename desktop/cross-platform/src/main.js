@@ -87,7 +87,7 @@ async function main() {
   buildContextMenu(contextMenu, config.menu_items);
 
   // 12. Setup mouse interaction handlers
-  setupInteractions(animator, contextMenu);
+  setupInteractions(animator, contextMenu, bubble);
 
   console.log("[Main] ✓ Pet initialized");
 }
@@ -202,12 +202,51 @@ function getQuitShortcut() {
   return isMacPlatform() ? "⌘ Q" : "Ctrl Q";
 }
 
+/**
+ * Triple-click handler — wipe every session file on disk and bubble up
+ * feedback. No staleness threshold: this is the user's "give me a clean
+ * slate" escape hatch, so it clears regardless of mtime. Bubble auto-fades
+ * after 2.5s unless a state-change event has overwritten it in the meantime
+ * (checked by comparing text).
+ */
+async function triggerRedundantCleanup(bubble) {
+  let text;
+  try {
+    const count = await invoke("purge_all_sessions");
+    text = count > 0 ? `清理了 ${count} 个会话～` : "没有可清理的会话～";
+    bubble.show(text, 0, "waving");
+  } catch (e) {
+    console.error("[TripleClick] purge_all_sessions failed:", e);
+    text = "清理失败…";
+    bubble.show(text, 0, "failed");
+  }
+
+  // Auto-hide after 2.5s, but only if no state-change event has replaced the
+  // text in the meantime — otherwise we'd clobber a fresh agent update.
+  setTimeout(() => {
+    if (bubble.textEl.textContent === text) {
+      bubble.hide();
+    }
+  }, 2500);
+}
+
 /** Setup click, drag, and right-click handlers */
-function setupInteractions(animator, contextMenu) {
+function setupInteractions(animator, contextMenu, bubble) {
   const appWindow = getCurrentWindow();
   let dragStart = null;
   let isDragging = false;
   const DRAG_THRESHOLD = 3;
+
+  // Triple-click detection: 3 left-clicks within TRIPLE_CLICK_WINDOW_MS
+  // triggers a full purge of the sessions directory (see `purge_all` in
+  // aggregator.rs). Below 3 clicks the counter simply biases toward the
+  // regular jump animation — clicks 1 and 2 still fire jumps, click 3 swaps
+  // in the purge. 3s window is intentionally generous so the user can take
+  // their time tapping; the cost is that three stray clicks during normal
+  // interaction within 3s will also fire.
+  let clickCount = 0;
+  let lastClickTime = 0;
+  const TRIPLE_CLICK_WINDOW_MS = 3000;
 
   // Left click: mousedown → mouseup without drag = click → trigger jump
   // Drag: mousedown → mousemove with threshold → drag window + directional anim
@@ -252,8 +291,24 @@ function setupInteractions(animator, contextMenu) {
     if (isDragging) {
       animator.handleDrag(0); // signal: drag ended
     } else if (dragStart) {
-      // Single click → trigger jump
-      animator.triggerOneShot("jumping");
+      // Click counter — increments while within the triple-click window.
+      const now = performance.now();
+      if (now - lastClickTime < TRIPLE_CLICK_WINDOW_MS) {
+        clickCount++;
+      } else {
+        clickCount = 1;
+      }
+      lastClickTime = now;
+
+      if (clickCount >= 3) {
+        // Triple-click → purge all sessions. Reset counter so a 4th tap
+        // doesn't chain into another purge.
+        clickCount = 0;
+        triggerRedundantCleanup(bubble);
+      } else {
+        // Single click → trigger jump
+        animator.triggerOneShot("jumping");
+      }
     }
 
     dragStart = null;

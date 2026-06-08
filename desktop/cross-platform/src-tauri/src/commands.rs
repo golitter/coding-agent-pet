@@ -1,6 +1,8 @@
+use crate::aggregator::ActivityAggregator;
 use crate::config::PetConfig;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FrontendConfig {
@@ -51,6 +53,16 @@ pub fn get_config(config: tauri::State<'_, PetConfig>) -> FrontendConfig {
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
+}
+
+/// Wipe every session file on disk and clear the in-memory activities map.
+/// Triggered by the frontend's triple-click interaction. Returns the file
+/// count so the renderer can show a per-call bubble message.
+#[tauri::command]
+pub fn purge_all_sessions(
+    aggregator: tauri::State<'_, Arc<ActivityAggregator>>,
+) -> Result<usize, String> {
+    Ok(aggregator.purge_all())
 }
 
 #[tauri::command]

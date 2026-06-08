@@ -292,6 +292,48 @@ impl ActivityAggregator {
         self.aggregate_and_notify();
     }
 
+    /// Manual "purge all" — delete every `.json` file under the sessions dir
+    /// and wipe the in-memory activities map. Triggered by the frontend's
+    /// triple-click interaction regardless of file mtime; the user is asking
+    /// for a clean slate on demand. Returns the number of files deleted so
+    /// the renderer can surface a per-call count in the bubble.
+    ///
+    /// Warning: this kills active agents' session state on disk. They will
+    /// appear idle to the renderer until they fire their next event, at which
+    /// point their entry is recreated from the new file.
+    pub fn purge_all(&self) -> usize {
+        let read_dir = match std::fs::read_dir(&self.sessions_dir) {
+            Ok(d) => d,
+            Err(_) => return 0,
+        };
+
+        let mut deleted_ids: Vec<String> = Vec::new();
+
+        for entry in read_dir.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                deleted_ids.push(stem.to_string());
+            }
+            let _ = std::fs::remove_file(&path);
+        }
+
+        let count = deleted_ids.len();
+        if count > 0 {
+            {
+                let mut inner = self.inner.lock().unwrap();
+                for id in &deleted_ids {
+                    inner.activities.remove(id);
+                }
+            }
+            info!("Purged all {} session files: {:?}", count, deleted_ids);
+            self.aggregate_and_notify();
+        }
+        count
+    }
+
     /// Clean up activities whose files have been deleted (memory-orphans),
     /// AND delete session files whose mtime exceeds `stale_timeout_sec` (disk-orphans).
     /// The disk-side cleanup is the backstop for crashed agents that never fire
