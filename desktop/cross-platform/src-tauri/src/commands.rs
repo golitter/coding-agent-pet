@@ -59,8 +59,12 @@ pub fn run_applescript(script: String) -> Result<String, String> {
 
     #[cfg(target_os = "macos")]
     {
-        // Reject scripts containing shell-escape attempts
-        if script.contains("do shell script") || script.contains("`") {
+        // Reject scripts containing shell-escape attempts.
+        // Case-insensitive: AppleScript is case-insensitive, so a literal
+        // `Do Shell Script` would otherwise bypass a naive `contains("do shell script")`.
+        // Backticks (`do shell script "..."` shorthand) are blocked regardless of case.
+        let lower = script.to_lowercase();
+        if lower.contains("do shell script") || script.contains('`') {
             return Err("Script contains disallowed patterns".into());
         }
 

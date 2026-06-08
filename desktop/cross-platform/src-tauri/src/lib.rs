@@ -54,7 +54,6 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             // 1. Load config
             let config = PetConfig::load();

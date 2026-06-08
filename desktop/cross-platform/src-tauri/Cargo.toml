@@ -5,7 +5,11 @@ edition = "2021"
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "macos-private-api"] }
-tauri-plugin-shell = "2"
+# NOTE: tauri-plugin-shell was removed — it was registered but never granted
+# any `shell:*` capability permission, and no frontend code used it (AppleScript
+# goes through `std::process::Command` in commands::run_applescript directly).
+# Leaving an unpermissioned plugin registered causes silent runtime failures
+# per the Tauri v2 capability model.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["net", "sync", "time", "rt", "macros"] }
