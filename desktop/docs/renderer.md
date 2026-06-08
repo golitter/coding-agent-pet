@@ -270,7 +270,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | **单击** | 触发跳跃动画（一次性），播完后恢复之前状态 |
 | 单击 + 拖动 | 使用 `appWindow.startDragging()` 移动窗口，按方向播放 running-left/right |
 | 松开鼠标 | 停止拖动，恢复之前状态 |
-| **三连击** | 800ms 窗口内连续 3 次左键 → 调用 `purge_all_sessions` 清空所有会话文件，气泡反馈清理数量（`清理了 N 个会话～` / `没有可清理的会话～`），2.5s 后自动隐藏（期间被新 state-change 覆盖则不隐藏）|
+| **三连击** | 800ms 窗口内连续 3 次左键 → 调用 `purge_all_sessions` 清空所有会话文件，气泡反馈清理数量（`清理了 N 个会话～` / `没有可清理的会话～`），3s 后自动淡出（成功 `waving`、失败 `failed` 均传 `forceAutoHide`，机制见下文「对话气泡 → 显示逻辑」）|
 | **右键** | 弹出自定义上下文菜单 |
 
 > 三连击窗口收紧为 800ms（原 3s 过宽，正常交互 3s 内易误触）；刻意的 triple-tap 仍能从容落在窗口内。前两次点击仍播放跳跃动画，第三次切换为清理。
@@ -373,13 +373,16 @@ animator.handleDrag(0)             // 松手 → 恢复 preDragState
 | 字体大小 | `dialogue.font_size` | 10pt |
 | 最大宽度 | `dialogue.max_width` | 160px |
 | 圆角 | `dialogue.cornerRadius` | 6px |
-| 淡入/淡出 | `dialogue.fade_duration_sec` | 0.3s |
+| 淡入/淡出过渡 | `dialogue.fade_duration_sec` | 0.3s |
+| 瞬时态自动淡出延时 | `AUTO_HIDE_MS`（`bubble.js` 源码常量，非 config） | 3000ms |
 
 ### 显示逻辑
 
 - 有文字或多会话时显示，否则隐藏
 - 多会话时显示 `×N` 计数
 - 根据状态自动切换 normal/warning/error 样式
+- **持久态常驻 / 瞬时态 3s 自动淡出**：`running` / `waiting` / `failed`（agent 活跃、等待授权、出错）保持显示，直到下一个事件替换；其余状态（`idle` / `waving` / `jumping` 等问候与庆祝）显示 3s（`AUTO_HIDE_MS`）后自动淡出。每次 `show()` 重置定时器——事件持续期间不会提前消失，停下 3s 才淡出
+- `forceAutoHide` 参数强制瞬时淡出，覆盖持久态判定（三连击清理的失败分支用它让 `failed` 也淡出）
 
 ---
 
