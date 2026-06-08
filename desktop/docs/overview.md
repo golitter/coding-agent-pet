@@ -61,8 +61,12 @@ desktop/
 │   ├── build-and-run.sh               # 编译并启动脚本
 │   ├── package.json                   # Node.js 前端依赖
 │   ├── hooks/                         # Hook 脚本
-│   │   ├── pet-claude-hook.sh         #   Claude Code 事件处理
-│   │   └── pet-codex-hook.sh          #   Codex 事件处理
+│   │   ├── pet-claude-hook.sh         #   Claude Code 入口 (shell wrapper)
+│   │   ├── pet-codex-hook.sh          #   Codex 入口 (shell wrapper)
+│   │   └── scripts/                   #   Python 实现
+│   │       ├── common.py              #     共享逻辑
+│   │       ├── claude_hook.py         #     Claude Code 事件处理
+│   │       └── codex_hook.py          #     Codex 事件处理
 │   ├── src/                           # 前端源码 (HTML/CSS/JS)
 │   │   ├── index.html                 #   主页面
 │   │   ├── main.js                    #   入口, 窗口设置, 交互绑定

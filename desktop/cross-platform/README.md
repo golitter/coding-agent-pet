@@ -73,8 +73,12 @@ desktop/cross-platform/
 │       ├── watcher.rs    #   Unix Socket 服务端 + 文件监听
 │       └── commands.rs   #   Tauri 命令：获取配置 / AppleScript / 退出
 ├── hooks/                # Hook 脚本
-│   ├── pet-claude-hook.sh  # Claude Code hook
-│   └── pet-codex-hook.sh   # Codex hook
+│   ├── pet-claude-hook.sh  # Claude Code hook 入口
+│   ├── pet-codex-hook.sh   # Codex hook 入口
+│   └── scripts/            # Python 实现
+│       ├── common.py       #   共享逻辑
+│       ├── claude_hook.py  #   Claude Code 事件处理
+│       └── codex_hook.py   #   Codex 事件处理
 └── runtime/sessions/     # 运行时状态（不入版本控制）
 ```
 

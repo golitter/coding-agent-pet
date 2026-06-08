@@ -4,12 +4,17 @@
 
 | 文件 | 用途 |
 |---|---|
-| `cross-platform/hooks/pet-claude-hook.sh` | Claude Code 事件处理 |
-| `cross-platform/hooks/pet-codex-hook.sh` | Codex 事件处理 |
+| `cross-platform/hooks/pet-claude-hook.sh` | Claude Code hook 入口（shell wrapper）|
+| `cross-platform/hooks/pet-codex-hook.sh` | Codex hook 入口（shell wrapper）|
+| `cross-platform/hooks/scripts/common.py` | 共享逻辑：配置加载、session 写入、socket 推送 |
+| `cross-platform/hooks/scripts/claude_hook.py` | Claude Code 事件处理 |
+| `cross-platform/hooks/scripts/codex_hook.py` | Codex 事件处理（含 EVENT_ALIASES + 调试日志）|
+
+Shell 脚本仅做调用入口，所有逻辑在 `scripts/*.py` 中。两个 hook 共享 `common.py` 中约 130 行核心代码。
 
 ## 机制
 
-两个脚本结构相似，都从 stdin JSON 解析事件并写入 session 文件。
+两个 Python 入口脚本结构相似，都从 stdin JSON 解析事件并调用 `common.process_event()`：
 
 **事件字段解析：**
 - **Claude Code**: 直接读取 `hook_event_name` 字段
@@ -37,8 +42,8 @@ stdin JSON
 ## 路径自动检测
 
 ```
-hooks/pet-claude-hook.sh   → PLATFORM_DIR = hooks 的父目录 (cross-platform/)
-PLATFORM_DIR.parent.parent  → REPO_ROOT (desktop/ 的父目录)
+hooks/scripts/claude_hook.py   → PLATFORM_DIR = scripts 的父父目录 (cross-platform/)
+PLATFORM_DIR.parent.parent      → REPO_ROOT (desktop/ 的父目录)
 
 null 值自动拼接:
   pet_base_dir → REPO_ROOT
