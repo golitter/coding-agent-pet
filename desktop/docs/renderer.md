@@ -76,6 +76,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 | `get_config` | 返回前端所需的配置子集（frames_dir, scale, fps, dialogue_\*, menu_items） |
 | `run_applescript` | 执行 AppleScript 命令（**仅 macOS**，含安全检查） |
 | `quit_app` | 退出应用（`app.exit(0)`） |
+| `purge_all_sessions` | 手动清空：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除文件数 |
 
 前端通过 `window.__TAURI__.core.invoke('get_config')` 调用。
 
@@ -173,6 +174,9 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。广�
 | 磁盘加载 | 事件驱动 | 跳过 mtime >`stale_timeout_sec`（默认 3600s）的过期文件——判定基于文件系统 mtime，不是 JSON 内 `updatedAt` |
 | terminal 标记 | 即时 | 收到 `isTerminal: true` 时立即删除 |
 | `Stop` 延迟删除 | 2s | `watcher.rs` 中 `tokio::time::sleep` + `remove_if_state("jumping")` —— 期间收到新事件改变 state 则取消删除 |
+| 手动 purge | 即时（`purge_all`） | **无视 mtime**：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除数；由前端三连击触发，是用户「给我干净状态」的逃生口 |
+
+> **手动 purge 的代价**：`purge_all` 会抹掉活跃 agent 在磁盘上的 session 状态。这些 agent 在下次触发事件前对渲染器表现为 idle，事件到达后其条目从新文件重建。
 
 判定过期使用统一的 helper：
 
@@ -229,7 +233,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 7. 初始对话                ← "准备好了～"
 8. listen('state-change')  ← 监听 Rust 状态推送
 9. 右键菜单构建            ← 从 config.menu_items 动态生成
-10. 鼠标交互绑定           ← 点击/拖动/右键
+10. 鼠标交互绑定           ← 点击/拖动/右键/三连击清空
 ```
 
 ### 窗口属性
@@ -264,7 +268,10 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | **单击** | 触发跳跃动画（一次性），播完后恢复之前状态 |
 | 单击 + 拖动 | 使用 `appWindow.startDragging()` 移动窗口，按方向播放 running-left/right |
 | 松开鼠标 | 停止拖动，恢复之前状态 |
+| **三连击** | 3s 窗口内连续 3 次左键 → 调用 `purge_all_sessions` 清空所有会话文件，气泡反馈清理数量（`清理了 N 个会话～` / `没有可清理的会话～`），2.5s 后自动隐藏（期间被新 state-change 覆盖则不隐藏）|
 | **右键** | 弹出自定义上下文菜单 |
+
+> 三连击窗口为 3s，刻意宽松以便从容点按；代价是正常交互中 3s 内的连续三次误触也会触发清理。前两次点击仍播放跳跃动画，第三次切换为清理。
 
 ### 拖动动画
 

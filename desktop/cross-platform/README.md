@@ -17,6 +17,7 @@ cp config.example.json config.json   # 按需修改配置
 | 操作                          | 效果                                  |
 | ----------------------------- | ------------------------------------- |
 | 点击宠物                      | 触发跳跃动画 🎉                       |
+| 三连击宠物（3s 内）           | 清空所有会话，气泡反馈清理数量 🧹     |
 | 拖动宠物                      | 移动位置，宠物会跑起来                |
 | 右键宠物                      | 菜单：打开 Codex / VS Code / 关闭宠物 |
 | 正常使用 Claude Code 或 Codex | 宠物自动反应工作状态                  |
@@ -81,7 +82,7 @@ desktop/cross-platform/
 │       ├── config.rs     #   配置加载 + 路径自动检测
 │       ├── aggregator.rs #   agent 活动聚合器 (单 Mutex) + 优先级聚合
 │       ├── watcher.rs    #   Unix Socket 服务端 + 文件监听 (防抖)
-│       └── commands.rs   #   Tauri 命令：获取配置 / AppleScript (安全过滤) / 退出
+│       └── commands.rs   #   Tauri 命令：获取配置 / AppleScript (安全过滤) / 清空会话 / 退出
 ├── hooks/                # Hook 脚本
 │   ├── pet-claude-hook.sh  # Claude Code hook 入口
 │   ├── pet-codex-hook.sh   # Codex hook 入口
