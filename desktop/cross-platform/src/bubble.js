@@ -19,10 +19,9 @@ export class DialogueBubble {
       return;
     }
 
-    // Pick style based on state
-    let style = "normal";
-    if (state === "waiting") style = "warning";
-    else if (state === "failed") style = "error";
+    // Style comes from config.dialogue.style_map (waiting → warning, failed → error).
+    // Default to "normal" for unmapped states.
+    const style = (this.config.style_map && this.config.style_map[state]) || "normal";
 
     this.applyStyle(style);
     this.textEl.textContent = text;

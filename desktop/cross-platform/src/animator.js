@@ -29,31 +29,74 @@ export class SpriteAnimator {
     this.onFrame = null; // callback(imageElement)
   }
 
-  /** Pre-load all sprite frames from disk via Tauri asset protocol */
+  /** Pre-load all sprite frames from disk via Tauri asset protocol.
+   *
+   * Uses `frames-manifest.json` (sibling of state directories) to know exactly
+   * how many frames each state has, avoiding the legacy "fetch-and-fail"
+   * probing that polluted the Tauri log with 9 ERROR lines per startup.
+   *
+   * Manifest paths are absolute on the generation machine, so we rewrite them
+   * to `${framesDir}/${state}/${basename}` — manifest acts as the source of
+   * truth for *what* to load; the runtime resolves *where*.
+   */
   async loadFrames(framesDir, fps) {
     this.fps = fps || 10;
     const { convertFileSrc } = window.__TAURI__.core;
 
-    for (const state of STATES) {
-      const frames = [];
-      let i = 0;
-      while (true) {
-        const padded = String(i).padStart(2, "0");
-        const filePath = `${framesDir}/${state}/${padded}.png`;
-        const url = convertFileSrc(filePath);
-        const img = new Image();
-        img.src = url;
-
-        const loaded = await new Promise((resolve) => {
-          img.onload = () => resolve(true);
-          img.onerror = () => resolve(false);
-        });
-
-        if (!loaded) break;
-        frames.push(img);
-        i++;
+    // 1. Try loading via manifest first
+    const manifestUrl = convertFileSrc(`${framesDir}/frames-manifest.json`);
+    let manifestRows = null;
+    try {
+      const res = await fetch(manifestUrl);
+      if (res.ok) {
+        const manifest = await res.json();
+        if (manifest && Array.isArray(manifest.rows)) {
+          manifestRows = manifest.rows;
+        }
       }
-      this.frames[state] = frames;
+    } catch (e) {
+      console.warn("[Animator] manifest load failed, falling back to probe:", e);
+    }
+
+    if (manifestRows) {
+      for (const row of manifestRows) {
+        const state = row.state;
+        if (!state || !Array.isArray(row.frames)) continue;
+        const frames = [];
+        for (const absPath of row.frames) {
+          // Extract just the filename — manifest paths are machine-specific.
+          const basename = String(absPath).split("/").pop();
+          const url = convertFileSrc(`${framesDir}/${state}/${basename}`);
+          const img = new Image();
+          img.src = url;
+          await new Promise((resolve) => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          });
+          frames.push(img);
+        }
+        this.frames[state] = frames;
+      }
+    } else {
+      // Fallback: legacy probe (kept so a missing manifest doesn't break the app)
+      for (const state of STATES) {
+        const frames = [];
+        let i = 0;
+        while (true) {
+          const padded = String(i).padStart(2, "0");
+          const url = convertFileSrc(`${framesDir}/${state}/${padded}.png`);
+          const img = new Image();
+          img.src = url;
+          const loaded = await new Promise((resolve) => {
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+          });
+          if (!loaded) break;
+          frames.push(img);
+          i++;
+        }
+        this.frames[state] = frames;
+      }
     }
 
     const total = Object.values(this.frames).reduce((sum, arr) => sum + arr.length, 0);

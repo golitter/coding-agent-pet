@@ -24,6 +24,10 @@ pub struct PetConfig {
     pub dialogue_max_width: u32,
     pub dialogue_corner_radius: u32,
     pub dialogue_fade_duration: f64,
+    /// pet state → bubble CSS style. Drives bubble coloring (e.g. waiting → warning).
+    /// Kept here so the mapping lives in one place alongside the state map,
+    /// not split between Rust and JS.
+    pub style_map: std::collections::HashMap<String, String>,
     pub menu_items: Vec<MenuItem>,
 }
 
@@ -63,6 +67,7 @@ struct RawDialogue {
     #[serde(rename = "cornerRadius")]
     corner_radius: Option<u32>,
     fade_duration_sec: Option<f64>,
+    style_map: Option<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -130,6 +135,8 @@ impl PetConfig {
         let mut dialogue_max_width = 160u32;
         let mut dialogue_corner_radius = 6u32;
         let mut dialogue_fade_duration = 0.3;
+        let mut style_map: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
         let mut frames_dir_override: Option<String> = None;
         let mut sessions_dir_override: Option<String> = None;
         let mut menu_items: Vec<MenuItem> = Vec::new();
@@ -164,6 +171,9 @@ impl PetConfig {
                     dialogue_max_width = d.max_width.unwrap_or(dialogue_max_width);
                     dialogue_corner_radius = d.corner_radius.unwrap_or(dialogue_corner_radius);
                     dialogue_fade_duration = d.fade_duration_sec.unwrap_or(dialogue_fade_duration);
+                    if let Some(sm) = d.style_map {
+                        style_map = sm;
+                    }
                 }
                 if let Some(menu) = raw.menu {
                     for item in menu.items {
@@ -212,6 +222,7 @@ impl PetConfig {
             dialogue_max_width,
             dialogue_corner_radius,
             dialogue_fade_duration,
+            style_map,
             menu_items,
         };
 

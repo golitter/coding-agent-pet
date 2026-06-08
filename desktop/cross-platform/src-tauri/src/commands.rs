@@ -1,5 +1,6 @@
 use crate::config::PetConfig;
 use serde::Serialize;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FrontendConfig {
@@ -11,6 +12,8 @@ pub struct FrontendConfig {
     pub dialogue_corner_radius: u32,
     pub dialogue_fade_duration: f64,
     pub corner_margin: i32,
+    /// pet state → bubble CSS style (e.g. waiting → warning).
+    pub style_map: HashMap<String, String>,
     pub menu_items: Vec<FrontendMenuItem>,
 }
 
@@ -32,6 +35,7 @@ pub fn get_config(config: tauri::State<'_, PetConfig>) -> FrontendConfig {
         dialogue_corner_radius: config.dialogue_corner_radius,
         dialogue_fade_duration: config.dialogue_fade_duration,
         corner_margin: config.corner_margin,
+        style_map: config.style_map.clone(),
         menu_items: config
             .menu_items
             .iter()

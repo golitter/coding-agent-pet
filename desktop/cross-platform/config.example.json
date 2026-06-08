@@ -17,7 +17,11 @@
     "font_size": 10,
     "max_width": 160,
     "cornerRadius": 6,
-    "fade_duration_sec": 0.3
+    "fade_duration_sec": 0.3,
+    "style_map": {
+      "waiting": "warning",
+      "failed": "error"
+    }
   },
   "hooks": {
     "claude_code_settings": "~/.claude/settings.json",

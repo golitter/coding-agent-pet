@@ -6,14 +6,33 @@
 import { SpriteAnimator } from "./animator.js";
 import { DialogueBubble } from "./bubble.js";
 
-const { invoke, convertFileSrc } = window.__TAURI__.core;
-const { getCurrentWindow } = window.__TAURI__.window;
+const { invoke } = window.__TAURI__.core;
+const { getCurrentWindow, LogicalSize, LogicalPosition } = window.__TAURI__.window;
 const { listen } = window.__TAURI__.event;
 
 async function main() {
-  // 1. Fetch config from Rust backend
-  const config = await invoke("get_config");
-  console.log("[Main] ✓ Config loaded", config);
+  // 1. Fetch config from Rust backend. Fall back to safe defaults so the
+  //    window stays usable even if config loading fails — better than a
+  //    blank screen with no diagnostic.
+  let config;
+  try {
+    config = await invoke("get_config");
+    console.log("[Main] ✓ Config loaded", config);
+  } catch (e) {
+    console.error("[Main] ✗ get_config failed, using fallback:", e);
+    config = {
+      frames_dir: "",
+      scale: 0.6,
+      fps: 10,
+      dialogue_font_size: 10,
+      dialogue_max_width: 160,
+      dialogue_corner_radius: 6,
+      dialogue_fade_duration: 0.3,
+      corner_margin: 20,
+      style_map: {},
+      menu_items: [],
+    };
+  }
 
   // 2. Create animator
   const animator = new SpriteAnimator();
@@ -83,7 +102,7 @@ async function setupWindow(config, scaledW, scaledH) {
     const windowH = scaledH + 60;
 
     // Resize window
-    await appWindow.setSize(new window.__TAURI__.window.LogicalSize(windowW, windowH));
+    await appWindow.setSize(new LogicalSize(windowW, windowH));
 
     // Position at bottom-right using available screen size
     const margin = config.corner_margin || 20;
@@ -93,7 +112,7 @@ async function setupWindow(config, scaledW, scaledH) {
     const x = screenWidth - windowW - margin;
     const y = screenHeight - windowH - margin;
 
-    await appWindow.setPosition(new window.__TAURI__.window.LogicalPosition(x, y));
+    await appWindow.setPosition(new LogicalPosition(x, y));
   } catch (e) {
     console.warn("[Main] ⚠️ Could not setup window:", e);
   }
@@ -198,22 +217,34 @@ function setupInteractions(animator, contextMenu) {
     isDragging = false;
   });
 
+  // mousemove can fire at 120Hz on ProMotion / high-precision trackpads.
+  // Coalesce via rAF so drag state updates happen at most once per frame.
+  let pendingMove = null;
   document.addEventListener("mousemove", (e) => {
     if (!dragStart || e.button !== 0) return;
-
-    const dx = e.screenX - dragStart.x;
-    const dy = e.screenY - dragStart.y;
-
-    if (!isDragging && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
-      isDragging = true;
-      appWindow.startDragging();
-    }
-
-    // Direction animation
-    if (isDragging && Math.abs(dx) > 0.5) {
-      animator.handleDrag(dx);
-    }
+    pendingMove = e;
   });
+
+  const processMove = () => {
+    if (pendingMove) {
+      const e = pendingMove;
+      pendingMove = null;
+      const dx = e.screenX - dragStart.x;
+      const dy = e.screenY - dragStart.y;
+
+      if (!isDragging && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+        isDragging = true;
+        appWindow.startDragging();
+      }
+
+      // Direction animation
+      if (isDragging && Math.abs(dx) > 0.5) {
+        animator.handleDrag(dx);
+      }
+    }
+    requestAnimationFrame(processMove);
+  };
+  requestAnimationFrame(processMove);
 
   document.addEventListener("mouseup", (e) => {
     if (e.button !== 0) return;
