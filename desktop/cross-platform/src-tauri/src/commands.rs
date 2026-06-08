@@ -54,7 +54,7 @@ pub fn run_applescript(script: String) -> Result<String, String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = script;
-        return Err("AppleScript is only available on macOS".into());
+        Err("AppleScript is only available on macOS".into())
     }
 
     #[cfg(target_os = "macos")]
