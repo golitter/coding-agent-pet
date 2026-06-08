@@ -32,7 +32,7 @@
 - **用户中断检测缺失**（两个平台都有）：用户提交 prompt 后**按 Ctrl+C / Esc / 关窗口中断**时，**Claude Code 和 Codex 都不会发任何 hook 事件**。结果：session 文件 mtime 停留在 `UserPromptSubmit` 那一刻，state 永远停在 `running`，宠物卡在"收到！开始工作～"直到 **`stale_timeout_sec`（默认 1h）**后才被 `cleanup_stale` 清理，期间 `active_count` 错误地 +1。
   - **根因**：两个平台都没有"用户中断"hook 事件——Claude Code 有 [Issue #9516](https://github.com/anthropics/claude-code/issues/9516) feature request 但未实现；Codex 0.133.0 也没有 cancel/interrupt/abort hook。
   - **当前缓解**：等 1h TTL / 重启宠物 app / 手动删 `sessions/<session_id>.json`。
-  - **未来修复方向**（**不在本次范围**）：在 Rust 后端做 state-aware stale timeout——`running` 状态用 ~180s，其它状态保持 1h。判断时 `is_session_file_stale` 需要读 JSON 的 `state` 字段决定 TTL。详见 [session.rs:34](../../cross-platform/src-tauri/src/session.rs#L34) 现有的 mtime-only 判断。
+  - **未来修复方向**（**不在本次范围**）：在 Rust 后端做 state-aware stale timeout——`running` 状态用 ~180s，其它状态保持 1h。判断时 `is_session_file_stale` 需要读 JSON 的 `state` 字段决定 TTL。详见 [aggregator.rs:34](../../cross-platform/src-tauri/src/aggregator.rs#L34) 现有的 mtime-only 判断。
 
 ---
 
@@ -78,7 +78,7 @@
 
 ## 三、Session 清理规则对照
 
-session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共同决定（实际执行由 Rust 后端 [session.rs](../../cross-platform/src-tauri/src/session.rs) 完成）：
+session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共同决定（实际执行由 Rust 后端 [aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) 完成）：
 
 | 触发 | 删除时机 | 取消条件 | 覆盖场景 |
 |---|---|---|---|
@@ -113,6 +113,6 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 | [codex.md](codex.md) | Codex hook 实现细节 |
 | [../../cross-platform/hooks/scripts/common.py](../../cross-platform/hooks/scripts/common.py) | 共享处理逻辑（state_map 查表、socket 推送） |
 | [../../cross-platform/config.example.json](../../cross-platform/config.example.json) | `state_map` + `terminal_events` 配置 |
-| [../../cross-platform/src-tauri/src/session.rs](../../cross-platform/src-tauri/src/session.rs) | Rust 后端：terminal 删除、Stop 延迟取消 |
+| [../../cross-platform/src-tauri/src/aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) | Rust 后端：terminal 删除、Stop 延迟取消 |
 | [../../cross-platform/src-tauri/src/watcher.rs](../../cross-platform/src-tauri/src/watcher.rs) | Socket 服务端 + Stop 2s 延迟调度 |
 | [../codex/v01330/pseudo-session-end.md](../codex/v01330/pseudo-session-end.md) | Codex 无 SessionEnd 的兜底方案 |

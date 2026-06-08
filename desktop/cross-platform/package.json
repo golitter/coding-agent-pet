@@ -6,6 +6,7 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
+    "build:app": "tauri build --bundles app",
     "lint": "eslint src && prettier --check .",
     "lint:fix": "eslint --fix src && prettier --write .",
     "format": "prettier --write .",

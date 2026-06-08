@@ -31,7 +31,7 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
               KotoriPet (Tauri)
               ┌──────────────────────────────┐
               │  Rust 后端                    │
-              │  ├── session.rs — 多会话聚合   │
+              │  ├── aggregator.rs — 多会话聚合   │
               │  ├── watcher.rs — 状态监听     │
               │  └── config.rs — 配置加载      │
               ├──────────────────────────────┤
@@ -86,7 +86,7 @@ desktop/
 │   │       ├── lib.rs                 #   应用初始化, 组件串联
 │   │       ├── config.rs              #   配置加载 + 路径自动检测
 │   │       ├── commands.rs            #   Tauri commands (前端调用)
-│   │       ├── session.rs             #   多会话聚合
+│   │       ├── aggregator.rs             #   多会话聚合
 │   │       └── watcher.rs             #   双通道状态监听
 │   └── runtime/
 │       └── sessions/                  # 运行时会话状态文件
@@ -150,4 +150,4 @@ cd ~/pet
 | **最小权限** | capabilities 仅声明实际需要的窗口操作和事件权限，不含 `shell:allow-execute` |
 | **Payload 限制** | socket 接收上限 64KB，防止恶意超大 payload |
 | **无 shell 拼接** | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除）由 Rust 后端经 Unix socket 管理，无注入面 |
-| **Mutex 安全** | SessionManager 所有可变状态合并为单个 `Mutex<Inner>`，消除死锁风险 |
+| **Mutex 安全** | ActivityAggregator 所有可变状态合并为单个 `Mutex<Inner>`，消除死锁风险 |

@@ -39,12 +39,12 @@ cp config.example.json config.json   # 按需修改配置
 
 ```
 Claude Code / Codex → JSON 事件 (hooks) → session 文件 → Unix Socket → Tauri 渲染器
-     │                                       │                              ├── Rust: 会话聚合 + 状态监听
+     │                                       │                              ├── Rust: agent 活动聚合 + 状态监听
      │                                       └── 文件系统监听 (notify crate)  └── JS: 精灵动画 + 对话气泡
      └── hook 脚本写入 session 文件并通过 Unix Socket 推送
 ```
 
-支持多会话同时运行，按优先级聚合状态（waiting > running > review > jumping > waving > idle > failed）。
+支持多个 agent 同时活动，按优先级聚合状态（waiting > running > review > jumping > waving > idle > failed）。
 
 ### 安全措施
 
@@ -79,7 +79,7 @@ desktop/cross-platform/
 │       ├── main.rs       #   入口
 │       ├── lib.rs        #   应用初始化：窗口透明 + 事件分发
 │       ├── config.rs     #   配置加载 + 路径自动检测
-│       ├── session.rs    #   多会话管理器 (单 Mutex) + 优先级聚合
+│       ├── aggregator.rs #   agent 活动聚合器 (单 Mutex) + 优先级聚合
 │       ├── watcher.rs    #   Unix Socket 服务端 + 文件监听 (防抖)
 │       └── commands.rs   #   Tauri 命令：获取配置 / AppleScript (安全过滤) / 退出
 ├── hooks/                # Hook 脚本

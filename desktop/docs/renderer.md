@@ -28,7 +28,7 @@ RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
 | `lib.rs` | 应用初始化，创建并串联所有组件 |
 | `config.rs` | 加载配置、自动检测路径 |
 | `commands.rs` | Tauri commands，向前端暴露配置和 AppleScript 执行 |
-| `session.rs` | 多会话聚合、优先级排序、清理 |
+| `aggregator.rs` | 多会话聚合、优先级排序、清理 |
 | `watcher.rs` | 双通道状态监听（socket + 文件）|
 
 ### 前端 (`src/`)
@@ -97,7 +97,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 2. NSWindow 透明化      ← macOS: objc 调用设置透明背景
 3. Dock 隐藏           ← macOS: ActivationPolicy::Accessory
 4. 创建 sessions 目录   ← std::fs::create_dir_all
-5. SessionManager      ← 多会话聚合器 (Rust)
+5. ActivityAggregator      ← 多会话聚合器 (Rust)
 6. 状态变化订阅         ← broadcast channel → emit "state-change" 到前端
 7. Unix Socket 服务端   ← 异步接收 hook 推送
 8. 文件系统监控         ← notify crate 监听 sessions 目录变化
@@ -112,7 +112,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 
 ---
 
-## session.rs — 多会话聚合
+## aggregator.rs — 多会话聚合
 
 ### 内部结构
 
@@ -190,7 +190,7 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。广�
 
 - AF_UNIX SOCK_STREAM (Tokio async)
 - Hook 连接 → 发送 JSON → 关闭
-- 渲染器 accept → 循环读取完整 payload → 解析 → 调用 SessionManager.update()
+- 渲染器 accept → 循环读取完整 payload → 解析 → 调用 ActivityAggregator.update()
 - **安全限制**: socket 文件权限设为 `0o600`（仅 owner 可读写），防止其他用户注入伪造事件
 - **缓冲区**: 动态增长，循环读取至 EOF，上限 64KB
 - Best-effort：socket 不存在时不报错

@@ -146,7 +146,7 @@ def process_event(platform_dir, source, hook_event, session_id, tool_name,
     session_file = os.path.join(sessions_dir, session_id + '.json')
 
     # Delayed cleanup after Stop/terminal events is handled by the Rust backend
-    # (SessionManager schedules the removal on receiving this payload), NOT here.
+    # (ActivityAggregator schedules the removal on receiving this payload), NOT here.
     # Hook scripts are short-lived processes — a threading.Timer here would be
     # killed when the process exits, before it could ever fire.
     write_session(session_file, payload)

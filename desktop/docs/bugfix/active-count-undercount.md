@@ -26,7 +26,7 @@
 
 ### 根因 1：`active_count` 把 `idle` 状态过滤掉了
 
-[session.rs:299-303](../../cross-platform/src-tauri/src/session.rs#L299-L303)：
+[aggregator.rs:299-303](../../cross-platform/src-tauri/src/aggregator.rs#L299-L303)：
 
 ```rust
 let new_count = inner
@@ -48,7 +48,7 @@ let new_count = inner
 
 ### 根因 2：`stale_timeout_sec = 60s` 太激进
 
-[config.json:11](../../cross-platform/config.json#L11) + [session.rs:213-216](../../cross-platform/src-tauri/src/session.rs#L213-L216)：
+[config.json:11](../../cross-platform/config.json#L11) + [aggregator.rs:213-216](../../cross-platform/src-tauri/src/aggregator.rs#L213-L216)：
 
 ```rust
 if now.saturating_sub(updated_at) > self.stale_timeout_sec {
@@ -56,7 +56,7 @@ if now.saturating_sub(updated_at) > self.stale_timeout_sec {
 }
 ```
 
-并且 [session.rs:230](../../cross-platform/src-tauri/src/session.rs#L230) 的 `replace_all_sessions(loaded)` 会**用磁盘读到的结果整体覆盖内存**——每次 file watcher 触发（任意会话文件一变就触发），所有 >60s 没动静的会话都会被从内存里踢掉，气泡数字立刻 -1。
+并且 [aggregator.rs:230](../../cross-platform/src-tauri/src/aggregator.rs#L230) 的 `replace_all_sessions(loaded)` 会**用磁盘读到的结果整体覆盖内存**——每次 file watcher 触发（任意会话文件一变就触发），所有 >60s 没动静的会话都会被从内存里踢掉，气泡数字立刻 -1。
 
 `stale_timeout_sec` 这个数字本质上是在选"宁可误判哪种"——它没法区分：
 
@@ -80,7 +80,7 @@ if now.saturating_sub(updated_at) > self.stale_timeout_sec {
 
 ### 改动 ① — `active_count` 不再过滤 `idle`
 
-**文件**：[session.rs:299-303](../../cross-platform/src-tauri/src/session.rs#L299-L303)
+**文件**：[aggregator.rs:299-303](../../cross-platform/src-tauri/src/aggregator.rs#L299-L303)
 
 **Before**：
 
@@ -138,7 +138,7 @@ let new_count = inner.sessions.len();
 
 ### 改动 ③ — `cleanup_stale` 加反向清理（删磁盘孤儿文件）
 
-**文件**：[session.rs:235](../../cross-platform/src-tauri/src/session.rs#L235) `cleanup_stale()`
+**文件**：[aggregator.rs:235](../../cross-platform/src-tauri/src/aggregator.rs#L235) `cleanup_stale()`
 
 **当前行为**：只清"内存有 / 磁盘无"的孤儿，不清磁盘上的陈旧文件。改动 ② 把 timeout 调到 1h 后，崩掉的会话文件会留 1h，磁盘和内存都会脏。
 
@@ -204,9 +204,9 @@ pub fn cleanup_stale(&self) {
 
 按这个顺序改，每步独立可验证：
 
-- [x] 改动 ①：[session.rs](../../cross-platform/src-tauri/src/session.rs) `active_count = inner.sessions.len()`
+- [x] 改动 ①：[aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) `active_count = inner.sessions.len()`
 - [x] 改动 ②：[config.json](../../cross-platform/config.json) + [config.example.json](../../cross-platform/config.example.json) `stale_timeout_sec: 3600`，[config.rs](../../cross-platform/src-tauri/src/config.rs) 字段加文档注释，JSON 文件加 `_stale_timeout_sec_comment` 说明
-- [x] 改动 ③：扩展 [session.rs `cleanup_stale`](../../cross-platform/src-tauri/src/session.rs)，抽 `is_session_file_stale` helper 让 `load_from_disk` 也共用
+- [x] 改动 ③：扩展 [aggregator.rs `cleanup_stale`](../../cross-platform/src-tauri/src/aggregator.rs)，抽 `is_session_file_stale` helper 让 `load_from_disk` 也共用
 - [x] 更新 [renderer.md](../renderer.md) "清理机制"表格
 - [x] 手动验证：
   - [x] 开 3 个会话，气泡稳定显示 ×3
