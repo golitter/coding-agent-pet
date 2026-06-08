@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from common import process_event  # noqa: E402
+from common import process_event  # noqa: E402, I001
 
 
 # Codex hook configs use snake_case event ids, while the shared pet config

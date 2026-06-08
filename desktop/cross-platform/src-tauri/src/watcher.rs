@@ -103,20 +103,15 @@ pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<SessionManager>) 
     let debounce = Duration::from_millis(100);
     let mut last_reload = Instant::now() - debounce; // allow first event immediately
 
-    loop {
-        match rx.recv() {
-            Ok(_event) => {
-                // Drain any queued events first
-                while rx.try_recv().is_ok() {}
+    while let Ok(_event) = rx.recv() {
+        // Drain any queued events first
+        while rx.try_recv().is_ok() {}
 
-                let now = Instant::now();
-                if now.duration_since(last_reload) >= debounce {
-                    session_mgr.load_from_disk();
-                    last_reload = now;
-                }
-                // else: within debounce window, skip — the next event will pick it up
-            }
-            Err(_) => break,
+        let now = Instant::now();
+        if now.duration_since(last_reload) >= debounce {
+            session_mgr.load_from_disk();
+            last_reload = now;
         }
+        // else: within debounce window, skip — the next event will pick it up
     }
 }
