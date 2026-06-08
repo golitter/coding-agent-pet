@@ -50,8 +50,6 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
 desktop/
 ├── docs/                              # 文档
 │   ├── overview.md                    #   本文件 — 概述
-│   ├── rendering-pipeline.md          #   渲染管线 — 从 Hook 事件到桌面像素的完整链路
-│   ├── hooks.md                       #   Hook 脚本详解
 │   ├── renderer.md                    #   Tauri 渲染器详解
 │   ├── spritesheet.md                 #   精灵图规格
 │   └── agent-hooks/                   #   各平台 Hook 机制详解
