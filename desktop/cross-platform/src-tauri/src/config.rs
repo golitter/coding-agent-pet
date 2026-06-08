@@ -13,6 +13,10 @@ pub struct PetConfig {
     pub socket_path: String,
     pub scale: f64,
     pub fps: f64,
+    /// How long a session file can stay unchanged before being considered dead.
+    /// During this window, a session is counted as alive even if no events fire
+    /// (covers reading/thinking/long-tool-calls). After it expires, the session
+    /// is dropped from memory and its file is removed by `cleanup_stale`.
     pub stale_timeout_sec: u64,
     pub cleanup_interval_sec: u64,
     pub corner_margin: i32,
@@ -119,7 +123,7 @@ impl PetConfig {
         let mut socket_path = "/tmp/kotori-pet.sock".to_string();
         let mut scale = 0.6;
         let mut fps = 10.0;
-        let mut stale_timeout_sec = 60u64;
+        let mut stale_timeout_sec = 3600u64;
         let mut cleanup_interval_sec = 5u64;
         let mut corner_margin = 20i32;
         let mut dialogue_font_size = 10u32;

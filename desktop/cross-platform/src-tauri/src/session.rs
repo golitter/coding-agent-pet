@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
@@ -26,6 +26,20 @@ fn get_priority(state: &str) -> i32 {
         .find(|(s, _)| *s == state)
         .map(|(_, p)| *p)
         .unwrap_or(0)
+}
+
+/// A session file is stale if its filesystem mtime is older than `timeout` seconds.
+/// Uses mtime (source of truth), not the JSON's `updatedAt` field — the filesystem
+/// is what reflects reality after `common.py` does an atomic `os.replace()` write.
+fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool {
+    let mtime = path
+        .metadata()
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    now.saturating_sub(mtime) > timeout
 }
 
 #[derive(Debug, Clone)]
@@ -203,15 +217,16 @@ impl SessionManager {
                 continue;
             }
 
-            // Parse date
+            // Parse date from JSON (kept for the in-memory struct; not used for staleness).
             let updated_at = json["updatedAt"]
                 .as_str()
                 .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
                 .map(|dt| dt.timestamp() as u64)
                 .unwrap_or(0);
 
-            // Skip stale sessions (> stale_timeout)
-            if now.saturating_sub(updated_at) > self.stale_timeout_sec {
+            // Skip stale files using filesystem mtime — single source of truth
+            // for staleness, shared with `cleanup_stale`.
+            if is_session_file_stale(&path, now, self.stale_timeout_sec) {
                 continue;
             }
 
@@ -231,29 +246,57 @@ impl SessionManager {
         self.aggregate_and_notify();
     }
 
-    /// Clean up sessions whose files have been deleted.
+    /// Clean up sessions whose files have been deleted (memory-orphans),
+    /// AND delete session files whose mtime exceeds `stale_timeout_sec` (disk-orphans).
+    /// The disk-side cleanup is the backstop for crashed sessions that never fire
+    /// SessionEnd/Stop — without it, files would accumulate until app restart.
     pub fn cleanup_stale(&self) {
         let read_dir = match std::fs::read_dir(&self.sessions_dir) {
             Ok(d) => d,
             Err(_) => return,
         };
 
-        let file_ids: std::collections::HashSet<String> = read_dir
-            .flatten()
-            .filter_map(|e| {
-                let path = e.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("json") {
-                    path.file_stem().map(|s| s.to_string_lossy().to_string())
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
 
+        let mut file_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut stale_on_disk: usize = 0;
+
+        for entry in read_dir.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let file_stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            if is_session_file_stale(&path, now, self.stale_timeout_sec) {
+                // Stale file on disk → delete the file. The corresponding memory
+                // entry (if any) becomes an orphan and is dropped below by
+                // remove_orphaned_sessions, since the file no longer exists.
+                let _ = std::fs::remove_file(&path);
+                stale_on_disk += 1;
+                continue;
+            }
+
+            file_ids.insert(file_stem);
+        }
+
+        // Sessions in memory with no surviving file → drop. This covers both
+        // legacy orphan-in-memory (file deleted externally) and the just-deleted
+        // stale-on-disk cases.
         let orphaned = self.remove_orphaned_sessions(&file_ids);
 
-        if !orphaned.is_empty() {
-            info!("Cleaned up {} orphaned sessions", orphaned.len());
+        if !orphaned.is_empty() || stale_on_disk > 0 {
+            info!(
+                "Cleaned up {} memory-orphans, {} disk-orphans",
+                orphaned.len(),
+                stale_on_disk
+            );
             self.aggregate_and_notify();
         }
     }
@@ -296,11 +339,10 @@ impl SessionManager {
             .map(|s| s.state.clone())
             .unwrap_or_else(|| "idle".to_string());
         let new_dialogue = best_session.map(|s| s.dialogue.clone()).unwrap_or_default();
-        let new_count = inner
-            .sessions
-            .values()
-            .filter(|s| s.state != "idle")
-            .count();
+        // Count every known session — "active_count" means "sessions currently
+        // known to be alive", not "sessions visibly producing output". A session
+        // in `idle` (e.g. after SubagentStop) is still alive and should count.
+        let new_count = inner.sessions.len();
 
         let changed = inner.aggregated.current_state != new_state
             || inner.aggregated.current_dialogue != new_dialogue

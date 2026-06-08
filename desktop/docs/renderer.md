@@ -167,9 +167,13 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。广�
 
 | 触发 | 间隔配置 | 行为 |
 |---|---|---|
-| 定时器 | `renderer.cleanup_interval_sec` (默认 5s) | 移除已被 hook 删除的 orphan 会话 |
-| 磁盘加载 | 事件驱动 | 跳过 >`stale_timeout_sec` 未更新的过期会话 |
+| 定时器 | `renderer.cleanup_interval_sec` (默认 5s) | **双向清理**：①移除已被 hook 删除的内存 orphan 会话；②删除 mtime >`stale_timeout_sec` 的磁盘孤儿文件（崩溃会话兜底）|
+| 磁盘加载 | 事件驱动 | 跳过 mtime >`stale_timeout_sec`（默认 3600s）的过期文件——判定基于文件系统 mtime，不是 JSON 内 `updatedAt` |
 | terminal 标记 | 即时 | 收到 `isTerminal: true` 时立即删除 |
+
+`stale_timeout_sec` 默认 1h 的取舍：覆盖阅读/思考/长工具调用等合法静默期；崩溃会话最多残留 1h 后被磁盘反向清理收尸。详见 [bugfix/active-count-undercount.md](bugfix/active-count-undercount.md)。
+
+`active_count`（气泡 `×N`）= HashMap 里所有 session 数。`idle` 状态（如 `SubagentStop` 触发）只影响状态仲裁优先级，不影响计数——"开着"就该算 1 个。
 
 ---
 
