@@ -33,7 +33,7 @@ Claude Code / Codex → JSON 事件 (hooks) → session 文件 → Unix Socket �
 | 文档 | 说明 |
 |---|---|
 | [desktop/docs/overview.md](desktop/docs/overview.md) | 跨平台实现概述 |
-| [desktop/docs/hooks.md](desktop/docs/hooks.md) | Hook 脚本详解 |
+| [desktop/docs/agent-hooks/README.md](desktop/docs/agent-hooks/README.md) | Hook 机制详解（各平台） |
 | [desktop/docs/renderer.md](desktop/docs/renderer.md) | Tauri 渲染器详解 |
 | [desktop/docs/spritesheet.md](desktop/docs/spritesheet.md) | 精灵图规格 |
 
@@ -47,7 +47,6 @@ desktop/
 │   ├── hooks/             #   Hook 脚本
 │   └── runtime/sessions/  #   运行时状态
 ├── docs/                  # 文档
-├── mac/                   # ⚠️ 已弃用 — 旧版 macOS Swift 实现
 └── kotori-minami/         # 宠物资源 (只读)
 ```
 

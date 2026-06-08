@@ -48,13 +48,13 @@ Claude Code / Codex → JSON 事件 (hooks) → session 文件 → Unix Socket �
 
 ### 安全措施
 
-| 措施                 | 说明                                               |
-| -------------------- | -------------------------------------------------- |
-| Socket 权限 `0o600`  | 仅 owner 可连接，防止本地注入                      |
-| AppleScript 内容过滤 | 拒绝 `do shell script` 和反引号                    |
-| 最小 capabilities    | 仅声明实际使用的权限                               |
-| Mutex 合并           | 所有可变状态在单个 Mutex 后，消除死锁风险          |
-| Shell 注入防护       | Python hook 使用 `threading.Timer` 而非 shell 拼接 |
+| 措施                 | 说明                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| Socket 权限 `0o600`  | 仅 owner 可连接，防止本地注入                                                                 |
+| AppleScript 内容过滤 | 拒绝 `do shell script` 和反引号                                                               |
+| 最小 capabilities    | 仅声明实际使用的权限                                                                          |
+| Mutex 合并           | 所有可变状态在单个 Mutex 后，消除死锁风险                                                     |
+| 无 shell 拼接        | hook 不构造任何 shell 命令；session 生命周期（含 Stop 2s 延迟删除）由 Rust 后端经 socket 管理 |
 
 ## 目录结构
 
@@ -145,9 +145,9 @@ RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
 
 ## 相关文档
 
-| 文档                                             | 说明             |
-| ------------------------------------------------ | ---------------- |
-| [../docs/overview.md](../docs/overview.md)       | 跨平台实现概述   |
-| [../docs/hooks.md](../docs/hooks.md)             | Hook 脚本详解    |
-| [../docs/renderer.md](../docs/renderer.md)       | Tauri 渲染器详解 |
-| [../docs/spritesheet.md](../docs/spritesheet.md) | 精灵图规格       |
+| 文档                                                           | 说明                    |
+| -------------------------------------------------------------- | ----------------------- |
+| [../docs/overview.md](../docs/overview.md)                     | 跨平台实现概述          |
+| [../docs/agent-hooks/README.md](../docs/agent-hooks/README.md) | Hook 机制详解（各平台） |
+| [../docs/renderer.md](../docs/renderer.md)                     | Tauri 渲染器详解        |
+| [../docs/spritesheet.md](../docs/spritesheet.md)               | 精灵图规格              |

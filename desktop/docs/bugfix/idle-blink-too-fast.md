@@ -19,7 +19,7 @@
 
 ### 根因 1：动画引擎只支持「等间隔轮播」，没有「某帧多停留」的能力
 
-[animator.js:142-158](../../cross-platform/src/animator.js#L142-L158) 的 `tick()`（Mac 原生版 [SpriteAnimator.swift:109-124](../../mac/renderer/Sources/KotoriPet/SpriteAnimator.swift#L109-L124) 完全等价）：
+[animator.js:142-158](../../cross-platform/src/animator.js#L142-L158) 的 `tick()`：
 
 ```js
 tick() {
@@ -51,7 +51,7 @@ tick() {
 
 ### 改动 ① — 引擎支持「每帧停留时长」(frame hold)
 
-**涉及文件**：[animator.js](../../cross-platform/src/animator.js) + [SpriteAnimator.swift](../../mac/renderer/Sources/KotoriPet/SpriteAnimator.swift)（两端都要改，保持对等）
+**涉及文件**：[animator.js](../../cross-platform/src/animator.js)
 
 **思路**：给当前 state 的每一帧一个「hold 倍数」，`tick()` 里维护一个「剩余停留 tick 数」计数器，只有计数归零才前进到下一帧。
 
@@ -122,8 +122,6 @@ tick() {
 
 注意：`transitionTo` / `triggerOneShot` / `handleDrag` 等切换状态的地方，切完后要把 `holdRemaining` 重置为新状态第 0 帧的 hold 值，否则切进来会多停一拍。
 
-**SpriteAnimator.swift** 对应改 `tick()` + 新增 `holdFor(state:idx:)` / `holdRemaining`，结构完全镜像，不赘述。
-
 ### 改动 ② — 给 idle 配上「长睁眼 + 快眨眼」的 holds 表
 
 **文件**：[config.json](../../cross-platform/config.json) + [config.example.json](../../cross-platform/config.example.json)
@@ -156,15 +154,13 @@ tick() {
 ## 实施清单
 
 - [ ] 改动 ①：[animator.js](../../cross-platform/src/animator.js) 加 `frameTiming` / `holdRemaining` / `holdFor`，改 `tick()`；`transitionTo`/`triggerOneShot`/`handleDrag` 切换后重置 `holdRemaining`
-- [ ] 改动 ①：[SpriteAnimator.swift](../../mac/renderer/Sources/KotoriPet/SpriteAnimator.swift) 镜像同样改动，两端对等
-- [ ] 改动 ①：[main.js](../../cross-platform/src/main.js) + [Config.swift](../../mac/renderer/Sources/KotoriPet/Config.swift) 从 config 灌入 `frame_timing`
+- [ ] 改动 ①：[main.js](../../cross-platform/src/main.js) 从 config 灌入 `frame_timing`
 - [ ] 改动 ②：肉眼确认 [idle/](../../../kotori-minami/frames/idle) 6 帧的睁眼/闭眼分布，把真实 `holds` 数组写实
 - [ ] 改动 ②：[config.json](../../cross-platform/config.json) + [config.example.json](../../cross-platform/config.example.json) 加 `frame_timing` 字段及注释
 - [ ] 手动验证：
   - [ ] idle 状态下眨眼间隔 ≥ 2~3s，睁眼帧明显停留
   - [ ] `running` / `jumping` 等动作状态帧率不变、仍流畅
   - [ ] 从 idle 切到 running 再切回 idle，hold 计数器正确重置（不卡帧、不多停一拍）
-  - [ ] 跨平台版和 Mac 原生版表现一致
 
 ---
 
@@ -187,5 +183,4 @@ tick() {
 |---|---|
 | `holds` 数组长度和实际帧数对不上（改了素材但没改 config） | `holdFor()` 里 `idx >= holds.length` 时回退到 1，宁可匀速也不崩；读取 config 时校验并 warn。|
 | 切换状态时 `holdRemaining` 没重置，导致进新状态多停一拍 / 卡帧 | 所有切状态入口（`transitionTo`/`triggerOneShot`/`handleDrag`）切完后统一调用一个 `resetToFrame0()`，集中收敛。|
-| 跨平台版和 Mac 版 hold 行为不一致 | 两端改动严格镜像，验证清单里加一条「两端表现一致」。|
 | `holds` 具体值靠肉眼定的，可能仍偏快/偏慢 | 全部走 config，不改代码即可调；交付时附一组推荐值并在 example 里注释说明。|

@@ -90,7 +90,6 @@ desktop/
 │   │       └── watcher.rs             #   双通道状态监听
 │   └── runtime/
 │       └── sessions/                  # 运行时会话状态文件
-├── mac/                               # ⚠️ 已弃用 — 旧版 macOS Swift 实现
 └── kotori-minami/                     # 宠物资源 (只读)
     ├── frames/                        #   55 帧 PNG 动画
     └── final/spritesheet.webp         #   精灵图
@@ -150,5 +149,5 @@ cd ~/pet
 | **AppleScript 沙箱** | `run_applescript` command 拒绝包含 `do shell script` 或反引号的脚本，防止任意命令执行 |
 | **最小权限** | capabilities 仅声明实际需要的窗口操作和事件权限，不含 `shell:allow-execute` |
 | **Payload 限制** | socket 接收上限 64KB，防止恶意超大 payload |
-| **Shell 注入防护** | Python hook 延迟删除使用 `threading.Timer`，不拼接到 shell 命令 |
+| **无 shell 拼接** | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除）由 Rust 后端经 Unix socket 管理，无注入面 |
 | **Mutex 安全** | SessionManager 所有可变状态合并为单个 `Mutex<Inner>`，消除死锁风险 |
