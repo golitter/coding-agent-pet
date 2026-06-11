@@ -43,6 +43,20 @@ export class SpriteAnimator {
     this.pendingOneShot = null; // queued one-shot to fire after current finishes
   }
 
+  async loadImage(nativePath) {
+    const { convertFileSrc } = window.__TAURI__.core;
+    const url = convertFileSrc(nativePath);
+    const img = new Image();
+
+    const loaded = await new Promise((resolve) => {
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = url;
+    });
+
+    return loaded ? img : null;
+  }
+
   setFrameTiming(timing) {
     this.frameTiming = timing || {};
     this.resetHold();
@@ -60,10 +74,9 @@ export class SpriteAnimator {
    */
   async loadFrames(framesDir, fps) {
     this.fps = fps || 10;
-    const { convertFileSrc } = window.__TAURI__.core;
 
     // 1. Try loading via manifest first
-    const manifestUrl = convertFileSrc(`${framesDir}/frames-manifest.json`);
+    const manifestUrl = window.__TAURI__.core.convertFileSrc(`${framesDir}/frames-manifest.json`);
     let manifestRows = null;
     try {
       const res = await fetch(manifestUrl);
@@ -86,18 +99,13 @@ export class SpriteAnimator {
           row.frames.map(async (absPath) => {
             const basename = String(absPath).split("/").pop();
             const nativePath = `${framesDir}/${state}/${basename}`;
-            const url = convertFileSrc(nativePath);
-            const img = new Image();
-            img.src = url;
-            await new Promise((resolve) => {
-              img.onload = () => resolve();
-              img.onerror = () => resolve();
-            });
-            return { img, nativePath };
+            const img = await this.loadImage(nativePath);
+            return img ? { img, nativePath } : null;
           }),
         );
-        this.frames[state] = loadResults.map((r) => r.img);
-        this.framePaths[state] = loadResults.map((r) => r.nativePath);
+        const validResults = loadResults.filter(Boolean);
+        this.frames[state] = validResults.map((result) => result.img);
+        this.framePaths[state] = validResults.map((result) => result.nativePath);
       }
     } else {
       // Fallback: legacy probe (kept so a missing manifest doesn't break the app)
@@ -108,14 +116,8 @@ export class SpriteAnimator {
         while (true) {
           const padded = String(i).padStart(2, "0");
           const nativePath = `${framesDir}/${state}/${padded}.png`;
-          const url = convertFileSrc(nativePath);
-          const img = new Image();
-          img.src = url;
-          const loaded = await new Promise((resolve) => {
-            img.onload = () => resolve(true);
-            img.onerror = () => resolve(false);
-          });
-          if (!loaded) break;
+          const img = await this.loadImage(nativePath);
+          if (!img) break;
           frames.push(img);
           paths.push(nativePath);
           i++;

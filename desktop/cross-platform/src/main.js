@@ -289,6 +289,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let pendingExit = false; // deferred exit flag for race conditions
   let pollTimerId = null;
   let recoveryPollTimerId = null; // recovery polling when normal exit fails
+  let normalPollTimerId = null; // normal-mode helper polling (non-overlapping)
   let solidHitCount = 0;
   let consecutivePollErrors = 0; // tracks consecutive IPC errors in pollCursor
   let dragTimerId = null; // drag safety timeout
@@ -507,7 +508,17 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     }
   }
 
-  setInterval(pollNormalHitTest, NORMAL_HIT_TEST_POLL_MS);
+  function startNormalHitTestPolling() {
+    if (normalPollTimerId !== null) return;
+    const tick = async () => {
+      normalPollTimerId = null;
+      await pollNormalHitTest();
+      normalPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
+    };
+    normalPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
+  }
+
+  startNormalHitTestPolling();
   pollNormalHitTest();
 
   // Triple-click detection: 3 left-clicks within TRIPLE_CLICK_WINDOW_MS
@@ -601,7 +612,19 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         isDragging = true;
         jsLog("info", "Drag", "startDragging called");
-        appWindow.startDragging();
+        appWindow.startDragging().catch((error) => {
+          console.warn("[Drag] startDragging failed:", error);
+          jsLog("error", "Drag", "startDragging failed");
+          animator.handleDrag(0);
+          if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
+          clearTimeout(dragTimerId);
+          dragStart = null;
+          isDragging = false;
+          hitTestEnabled = true;
+        });
         // Start on-demand rAF loop for direction animation
         rafId = requestAnimationFrame(processMove);
       }
