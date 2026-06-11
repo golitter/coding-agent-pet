@@ -45,7 +45,7 @@ OpenCode           → opencode-plugin.ts (TS 插件) ──┘     ├── Ru
                                                           └── JS: 精灵动画 + 对话气泡
 ```
 
-支持多个 agent 同时活动，按优先级聚合状态（waiting > running > review > jumping > waving > idle > failed）。
+支持多个 agent 同时活动，按优先级聚合状态（waiting > running > running-left/right > review > jumping > waving > idle > failed）。
 
 ### 安全措施
 
@@ -89,7 +89,8 @@ desktop/cross-platform/
 │   └── scripts/            # Python 实现
 │       ├── common.py       #   共享逻辑
 │       ├── claude_hook.py  #   Claude Code 事件处理
-│       └── codex_hook.py   #   Codex 事件处理
+│       ├── codex_hook.py   #   Codex 事件处理
+│       └── setup_hooks.py  #   Hook 注册逻辑
 └── runtime/sessions/     # 运行时状态（不入版本控制）
 ```
 

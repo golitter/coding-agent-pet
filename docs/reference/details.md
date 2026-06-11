@@ -85,6 +85,7 @@
 | [scripts/common.py](../../desktop/cross-platform/hooks/scripts/common.py) | 共享逻辑：写 session 文件 + 推 socket |
 | [scripts/claude_hook.py](../../desktop/cross-platform/hooks/scripts/claude_hook.py) | Claude Code 事件解析 |
 | [scripts/codex_hook.py](../../desktop/cross-platform/hooks/scripts/codex_hook.py) | Codex 事件解析（snake_case → PascalCase） |
+| [scripts/setup_hooks.py](../../desktop/cross-platform/hooks/scripts/setup_hooks.py) | Hook 注册逻辑（由 `setup-hooks.sh` 内联调用） |
 
 ---
 
@@ -111,6 +112,7 @@
 |---|---|---|
 | `pet_id` | `kotori-minami` | 宠物 ID（决定资源目录） |
 | `pet_base_dir` | `null` | 项目根，`null` 自动检测 |
+| `frames_dir` | `null` | 精灵帧目录，`null` 自动检测（`{pet_base_dir}/assets/{pet_id}/frames`） |
 | `socket_path` | `/tmp/kotori-pet.sock` | Unix socket 路径 |
 | `sessions_dir` | `null` | session 文件目录，`null` 自动检测 |
 | `stale_timeout_sec` | `3600` | session 文件过期阈值（秒），1h 覆盖长工具调用 |

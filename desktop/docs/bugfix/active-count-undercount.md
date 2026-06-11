@@ -26,17 +26,17 @@
 
 ### 根因 1：`active_count` 把 `idle` 状态过滤掉了
 
-[aggregator.rs:299-303](../../cross-platform/src-tauri/src/aggregator.rs#L299-L303)：
+[aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs)：
 
 ```rust
 let new_count = inner
-    .sessions
+    .activities
     .values()
     .filter(|s| s.state != "idle")
     .count();
 ```
 
-但 `idle` 不是"不存在"，而是**存在但低优先级**。在 [config.json:34](../../cross-platform/config.json#L34) 中 `SubagentStop` 被映射为 `idle`：
+但 `idle` 不是"不存在"，而是**存在但低优先级**。在 [config.example.json](../../cross-platform/config.example.json) 中 `SubagentStop` 被映射为 `idle`：
 
 ```json
 "SubagentStop": {"state": "idle", "dialogue": ""},
@@ -48,15 +48,15 @@ let new_count = inner
 
 ### 根因 2：`stale_timeout_sec = 60s` 太激进
 
-[config.json:11](../../cross-platform/config.json#L11) + [aggregator.rs:213-216](../../cross-platform/src-tauri/src/aggregator.rs#L213-L216)：
+[config.example.json](../../cross-platform/config.example.json) `stale_timeout_sec` + [aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) `is_session_file_stale()`：
 
 ```rust
-if now.saturating_sub(updated_at) > self.stale_timeout_sec {
-    continue;  // 60s 没更新直接丢弃
+fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool {
+    now.saturating_sub(file_mtime_secs(path)) > timeout
 }
 ```
 
-并且 [aggregator.rs:230](../../cross-platform/src-tauri/src/aggregator.rs#L230) 的 `replace_all_sessions(loaded)` 会**用磁盘读到的结果整体覆盖内存**——每次 file watcher 触发（任意会话文件一变就触发），所有 >60s 没动静的会话都会被从内存里踢掉，气泡数字立刻 -1。
+并且 `load_from_disk()` 的 `replace_all_sessions(loaded)` 会**用磁盘读到的结果整体覆盖内存**——跳过 `is_terminal` 和 mtime 过期的文件。所有 >`stale_timeout_sec` 没动静的会话文件不会被加载到内存。
 
 `stale_timeout_sec` 这个数字本质上是在选"宁可误判哪种"——它没法区分：
 
@@ -80,13 +80,13 @@ if now.saturating_sub(updated_at) > self.stale_timeout_sec {
 
 ### 改动 ① — `active_count` 不再过滤 `idle`
 
-**文件**：[aggregator.rs:299-303](../../cross-platform/src-tauri/src/aggregator.rs#L299-L303)
+**文件**：[aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs)
 
 **Before**：
 
 ```rust
 let new_count = inner
-    .sessions
+    .activities
     .values()
     .filter(|s| s.state != "idle")
     .count();
@@ -95,14 +95,14 @@ let new_count = inner
 **After**：
 
 ```rust
-let new_count = inner.sessions.len();
+let new_count = inner.activities.len();
 ```
 
 **语义**：气泡计数表示"当前存在的会话数"，不是"正在输出的会话数"。只要 session 在 HashMap 里（最近有证据它活着），就算 1 个。state 仲裁另算。
 
 ### 改动 ② — `stale_timeout_sec` 默认值改为 3600（1h）
 
-**文件**：[config.json:11](../../cross-platform/config.json#L11) + [config.example.json](../../cross-platform/config.example.json)
+**文件**：[config.example.json](../../cross-platform/config.example.json)
 
 **Before**：
 
@@ -138,7 +138,7 @@ let new_count = inner.sessions.len();
 
 ### 改动 ③ — `cleanup_stale` 加反向清理（删磁盘孤儿文件）
 
-**文件**：[aggregator.rs:235](../../cross-platform/src-tauri/src/aggregator.rs#L235) `cleanup_stale()`
+**文件**：[aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) `cleanup_stale()`
 
 **当前行为**：只清"内存有 / 磁盘无"的孤儿，不清磁盘上的陈旧文件。改动 ② 把 timeout 调到 1h 后，崩掉的会话文件会留 1h，磁盘和内存都会脏。
 
@@ -166,30 +166,33 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool {
 
 ```rust
 pub fn cleanup_stale(&self) {
+    let read_dir = match std::fs::read_dir(&self.sessions_dir) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-    // 1. 现有逻辑：清"内存有 / 磁盘无"
-    let on_disk_ids: HashSet<String> = read_dir.flatten()
-        .filter_map(|e| /* 提取 *.json 的 file_stem */)
-        .collect();
-    let orphaned_in_memory = self.remove_orphaned_sessions(&on_disk_ids);
+    let mut file_ids: HashSet<String> = HashSet::new();
+    let mut stale_on_disk: usize = 0;
 
-    // 2. 新增：清"磁盘有但 mtime 超时"
-    let mut orphaned_on_disk = Vec::new();
     for entry in read_dir.flatten() {
         let path = entry.path();
+        if /* not *.json */ { continue; }
         if is_session_file_stale(&path, now, self.stale_timeout_sec) {
-            let file_stem = /* ... */;
             let _ = std::fs::remove_file(&path);
-            self.remove_session(&file_stem);
-            orphaned_on_disk.push(file_stem);
+            stale_on_disk += 1;
+            continue;
         }
+        file_ids.insert(/* file_stem */);
     }
 
-    if !orphaned_in_memory.is_empty() || !orphaned_on_disk.is_empty() {
+    // 内存中有但磁盘已无 → 清除孤儿
+    let orphaned = self.remove_orphaned_sessions(&file_ids);
+
+    if !orphaned.is_empty() || stale_on_disk > 0 {
         info!(
             "Cleaned up {} memory-orphans, {} disk-orphans",
-            orphaned_in_memory.len(), orphaned_on_disk.len()
+            orphaned.len(), stale_on_disk
         );
         self.aggregate_and_notify();
     }
@@ -204,7 +207,7 @@ pub fn cleanup_stale(&self) {
 
 按这个顺序改，每步独立可验证：
 
-- [x] 改动 ①：[aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) `active_count = inner.sessions.len()`
+- [x] 改动 ①：[aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) `active_count = inner.activities.len()`
 - [x] 改动 ②：[config.json](../../cross-platform/config.json) + [config.example.json](../../cross-platform/config.example.json) `stale_timeout_sec: 3600`，[config.rs](../../cross-platform/src-tauri/src/config.rs) 字段加文档注释，JSON 文件加 `_stale_timeout_sec_comment` 说明
 - [x] 改动 ③：扩展 [aggregator.rs `cleanup_stale`](../../cross-platform/src-tauri/src/aggregator.rs)，抽 `is_session_file_stale` helper 让 `load_from_disk` 也共用
 - [x] 更新 [renderer.md](../renderer.md) "清理机制"表格

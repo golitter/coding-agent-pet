@@ -85,7 +85,8 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
         │   └── scripts/               #     Python 实现
         │       ├── common.py          #       共享逻辑
         │       ├── claude_hook.py     #       Claude Code 事件处理
-        │       └── codex_hook.py      #       Codex 事件处理
+        │       ├── codex_hook.py      #       Codex 事件处理
+        │       └── setup_hooks.py     #       Hook 注册逻辑
         ├── src/                       #   前端源码 (HTML/CSS/JS)
         │   ├── index.html             #     主页面
         │   ├── main.js                #     入口, 窗口设置, 交互绑定
@@ -133,7 +134,6 @@ cd ~/pet
 | `socket_path` | Unix socket 路径 | `/tmp/kotori-pet.sock` |
 | `renderer.scale` | 缩放因子 | `0.6` |
 | `renderer.fps` | 帧率 | `10` |
-| `state_map` | 事件→动画+台词映射 | 见配置文件 |
 | `state_map` | 事件→动画+台词映射 | 见配置文件 |
 | `menu.items` | 右键菜单项 | Codex, VS Code, 关闭宠物 |
 
