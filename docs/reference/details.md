@@ -23,6 +23,12 @@
 | [renderer.md](../../desktop/docs/renderer.md) | Tauri 渲染器详解（编译/运行/组件） |
 | [spritesheet.md](../../desktop/docs/spritesheet.md) | 精灵图规格（1536×1872 · 8×9 网格 · 55 帧） |
 
+### 设计文档 (`desktop/docs/design/`)
+
+| 文档 | 内容 |
+|---|---|
+| [hit-test.md](../../desktop/docs/design/hit-test.md) | 透明像素点击穿透设计（alpha 蒙版 + CGEvent 轮询） |
+
 ### Hook 协议 (`desktop/docs/agent-hooks/`)
 
 | 文档 | 内容 |
@@ -51,7 +57,7 @@
 | [main.rs](../../desktop/cross-platform/src-tauri/src/main.rs) | 入口，调用 `lib::run()` |
 | [lib.rs](../../desktop/cross-platform/src-tauri/src/lib.rs) | 应用初始化 + 组件串联 |
 | [config.rs](../../desktop/cross-platform/src-tauri/src/config.rs) | 配置加载 + 路径自动检测 |
-| [commands.rs](../../desktop/cross-platform/src-tauri/src/commands.rs) | Tauri commands（前端 → Rust 入口） |
+| [commands.rs](../../desktop/cross-platform/src-tauri/src/commands.rs) | Tauri commands（前端 → Rust 入口，含 hit-test 支持） |
 | [aggregator.rs](../../desktop/cross-platform/src-tauri/src/aggregator.rs) | 多会话聚合 + 优先级仲裁 + 磁盘对账 |
 | [watcher.rs](../../desktop/cross-platform/src-tauri/src/watcher.rs) | 双通道状态监听（Unix socket 主 + 文件对账） |
 
@@ -85,6 +91,8 @@
 | `quit_app` | 退出宠物进程 |
 | `purge_all_sessions` | 清空所有 session 文件（三连击触发） |
 | `run_applescript` | 执行 AppleScript（过滤 `do shell script` 和反引号） |
+| `read_file_bytes` | 读 PNG 原始字节 → JS 构建未污染 blob URL（hit-test alpha 蒙版） |
+| `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
 
 事件通道：Rust → JS 通过 `emit("agent-state", payload)` 推送聚合状态。
 
@@ -97,7 +105,7 @@
 | `pet_id` | `kotori-minami` | 宠物 ID（决定资源目录） |
 | `pet_base_dir` | `null` | 项目根，`null` 自动检测 |
 | `socket_path` | `/tmp/kotori-pet.sock` | Unix socket 路径 |
-| `stale_timeout_sec` | `60` | session 文件过期阈值（秒） |
+| `stale_timeout_sec` | `3600` | session 文件过期阈值（秒），1h 覆盖长工具调用 |
 | `renderer.scale` | `0.6` | 精灵缩放因子 |
 | `renderer.fps` | `10` | 动画帧率 |
 | `renderer.corner_margin` | `20` | 屏幕右下角边距 (px) |
@@ -179,7 +187,7 @@ assets/kotori-minami/
 
 ## 9. 状态优先级仲裁
 
-`waiting > running > review > jumping > waving > idle > failed`
+`waiting > running > running-left/right > review > jumping > waving > idle > failed`
 
 多会话同时活动时，按上表选出最高优先级状态作为宠物显示态。详见
 [aggregator.rs](../../desktop/cross-platform/src-tauri/src/aggregator.rs) 与

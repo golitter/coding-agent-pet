@@ -35,7 +35,7 @@ Claude Code / Codex → hook 脚本 → session 文件 + Unix Socket → Tauri �
                                                                 └── JS: 精灵动画 + 对话气泡
 ```
 
-状态优先级：`waiting > running > review > jumping > waving > idle > failed`
+状态优先级：`waiting > running > running-left/right > review > jumping > waving > idle > failed`
 
 ## 在 Codex 中生成宠物素材
 

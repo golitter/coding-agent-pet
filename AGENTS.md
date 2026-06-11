@@ -39,7 +39,7 @@ cp config.example.json config.json   # 按需修改
 
 ## 状态优先级
 
-`waiting > running > review > jumping > waving > idle > failed`
+`waiting > running > running-left/right > review > jumping > waving > idle > failed`
 
 多会话同时活动时，按此顺序仲裁显示态。
 
