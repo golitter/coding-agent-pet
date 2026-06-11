@@ -11,6 +11,7 @@
 ├── assets/kotori-minami/   # 资料包：frames/ 运行时 + imagegen/ 生成工件
 ├── desktop/
 │   ├── cross-platform/     # Tauri 主实现（src/ + src-tauri/ + hooks/）
+│   │   └── hooks/          #   pet-hook.sh (Claude/Codex) + opencode-plugin.ts (OpenCode)
 │   └── docs/               # 跨平台 / Hook / 精灵图 / Bugfix 文档
 ├── docs/                   # 顶层文档（教程 + reference/details.md）
 ├── AGENTS.md               # 本文件
@@ -35,7 +36,7 @@ cp config.example.json config.json   # 按需修改
 | 单击宠物 | 跳跃 🎉 |
 | 三连击（800ms 内） | 清空所有会话 🧹 |
 | 拖动 | 移动位置（方向奔跑动画） |
-| 右键 | 菜单：Codex / OpenCode / VS Code / 关闭 |
+| 右键 | 菜单：Codex / VS Code / 关闭 |
 
 ## 状态优先级
 

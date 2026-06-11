@@ -2,28 +2,28 @@
 
 ## 是什么
 
-Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上，根据 Claude Code 和 OpenAI Codex 的生命周期事件切换动画和对话气泡，支持多会话并行。
+Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上，根据 Claude Code、OpenAI Codex 和 OpenCode 的生命周期事件切换动画和对话气泡，支持多会话并行。
 
 基于 [Tauri v2](https://v2.tauri.app/) 构建，后端使用 Rust，前端使用 HTML/CSS/JS，具备跨平台潜力（macOS / Windows / Linux）。
 
 ## 系统架构
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│                        AI 编码工具                              │
-│  ┌─────────────────┐              ┌─────────────────┐         │
-│  │   Claude Code    │              │     Codex        │         │
-│  └────────┬────────┘              └────────┬────────┘         │
-└───────────┼─────────────────────────────────┼─────────────────┘
-            │ stdin JSON                      │ stdin JSON
-            ▼                                 ▼
-   pet-hook.sh claude-code           pet-hook.sh codex
-            │                                 │
-            └────────────┬────────────────────┘
-                         ▼
-              config.json (统一配置)
-                         │
-              runtime/sessions/{session_id}.json
+┌───────────────────────────────────────────────────────────────────┐
+│                          AI 编码工具                                │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
+│  │   Claude Code    │  │     Codex        │  │    OpenCode      │   │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘   │
+└───────────┼───────────────────────┼───────────────────┼───────────┘
+            │ stdin JSON            │ stdin JSON        │ 进程内 TS
+            ▼                       ▼                   ▼
+   pet-hook.sh claude-code   pet-hook.sh codex   opencode-plugin.ts
+            │                       │                   │
+            └───────────┬───────────┘───────────────────┘
+                        ▼
+             config.json (统一配置)
+                        │
+             runtime/sessions/{session_id}.json
                          │
             ┌────────────┼────────────┐
             │  Unix Socket │  文件监控   │
@@ -57,19 +57,31 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
     │   ├── overview.md                #   本文件 — 概述
     │   ├── renderer.md                #   Tauri 渲染器详解
     │   ├── spritesheet.md             #   精灵图规格
-    │   └── agent-hooks/               #   各平台 Hook 机制详解
-    │       ├── README.md              #     索引 + 两平台对比
-    │       ├── claude-code.md         #     Claude Code Hooks → 宠物渲染
-    │       └── codex.md               #     Codex Hooks → 宠物渲染
+    │   ├── design/                    #   设计文档
+    │   │   ├── hooks-refactor.md      #     Hook 重构设计
+    │   │   ├── hit-test.md            #     透明像素点击穿透
+    │   │   ├── opencode-plugin.md     #     OpenCode 插件设计
+    │   │   └── opencode-integration-plan.md  # OpenCode 集成计划
+    │   ├── agent-hooks/               #   各平台 Hook 机制详解
+    │   │   ├── README.md              #     索引 + 三平台对比
+    │   │   ├── events.md              #     事件类型对照表
+    │   │   ├── claude-code.md         #     Claude Code Hooks → 宠物渲染
+    │   │   ├── codex.md               #     Codex Hooks → 宠物渲染
+    │   │   └── opencode.md            #     OpenCode 插件系统参考
+    │   └── bugfix/                    #   Bugfix 计划
+    │       ├── idle-blink-too-fast.md #     idle 眨眼太快
+    │       ├── active-count-undercount.md  # 多会话计数 N-1
+    │       └── pet-unresponsive-stuck-state.md  # 宠物无响应/卡死
     └── cross-platform/                # 主实现 (Tauri)
         ├── config.example.json        #   配置模板（提交到 git）
         ├── config.json                #   用户配置（自动生成，.gitignore）
         ├── setup.sh                   #   一键安装/更新脚本
-        ├── setup-hooks.sh             #   Hook 配置脚本
+        ├── setup-hooks.sh             #   Hook 配置脚本（三平台）
         ├── build-and-run.sh           #   编译并启动脚本
         ├── package.json               #   Node.js 前端依赖
         ├── hooks/                     #   Hook 脚本
-        │   ├── pet-hook.sh             #     Shell 入口 (claude-code / codex)
+        │   ├── pet-hook.sh            #     Shell 入口 (claude-code / codex)
+        │   ├── opencode-plugin.ts     #     OpenCode 插件（TS，进程内运行）
         │   └── scripts/               #     Python 实现
         │       ├── common.py          #       共享逻辑
         │       ├── claude_hook.py     #       Claude Code 事件处理
@@ -122,6 +134,7 @@ cd ~/pet
 | `renderer.scale` | 缩放因子 | `0.6` |
 | `renderer.fps` | 帧率 | `10` |
 | `state_map` | 事件→动画+台词映射 | 见配置文件 |
+| `state_map` | 事件→动画+台词映射 | 见配置文件 |
 | `menu.items` | 右键菜单项 | Codex, VS Code, 关闭宠物 |
 
 ## 脚本说明
@@ -129,7 +142,7 @@ cd ~/pet
 | 脚本 | 用途 |
 |---|---|
 | `setup.sh` | 全流程：安装依赖 → 生成配置 → 配置 hooks → 编译 → 启动 |
-| `setup-hooks.sh` | 单独配置 hooks（Claude Code + Codex）|
+| `setup-hooks.sh` | 单独配置 hooks（Claude Code + Codex + OpenCode）|
 | `build-and-run.sh` | 单独编译并重启渲染器 |
 
 ## 技术栈

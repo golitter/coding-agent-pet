@@ -1,6 +1,6 @@
 # 🐦 Kotori 虚拟桌面宠物 (跨平台)
 
-基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）的跨平台桌面宠物实现。一只像素风的南琴梨（Kotori Minami）住在你的桌面上，根据 AI 编程工具（Claude Code / Codex）的状态变化做出反应。
+基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）的跨平台桌面宠物实现。一只像素风的南琴梨（Kotori Minami）住在你的桌面上，根据 AI 编程工具（Claude Code / Codex / OpenCode）的状态变化做出反应。
 
 ## 快速开始
 
@@ -14,13 +14,13 @@ cp config.example.json config.json   # 按需修改配置
 
 ## 使用
 
-| 操作                          | 效果                                  |
-| ----------------------------- | ------------------------------------- |
-| 点击宠物                      | 触发跳跃动画 🎉                       |
-| 三连击宠物（3s 内）           | 清空所有会话，气泡反馈清理数量 🧹     |
-| 拖动宠物                      | 移动位置，宠物会跑起来                |
-| 右键宠物                      | 菜单：打开 Codex / VS Code / 关闭宠物 |
-| 正常使用 Claude Code 或 Codex | 宠物自动反应工作状态                  |
+| 操作                                    | 效果                                  |
+| --------------------------------------- | ------------------------------------- |
+| 点击宠物                                | 触发跳跃动画 🎉                       |
+| 三连击宠物（800ms 内）                  | 清空所有会话，气泡反馈清理数量 🧹     |
+| 拖动宠物                                | 移动位置，宠物会跑起来                |
+| 右键宠物                                | 菜单：打开 Codex / VS Code / 关闭宠物 |
+| 正常使用 Claude Code、Codex 或 OpenCode | 宠物自动反应工作状态                  |
 
 ## 动画状态
 
@@ -39,10 +39,10 @@ cp config.example.json config.json   # 按需修改配置
 ## 架构
 
 ```
-Claude Code / Codex → JSON 事件 (hooks) → session 文件 → Unix Socket → Tauri 渲染器
-     │                                       │                              ├── Rust: agent 活动聚合 + 状态监听
-     │                                       └── 文件系统监听 (notify crate)  └── JS: 精灵动画 + 对话气泡
-     └── hook 脚本写入 session 文件并通过 Unix Socket 推送
+Claude Code / Codex → pet-hook.sh (shell+Python) ──┐
+                                                    ├→ session 文件 + Unix Socket → Tauri 渲染器
+OpenCode           → opencode-plugin.ts (TS 插件) ──┘     ├── Rust: agent 活动聚合 + 状态监听
+                                                          └── JS: 精灵动画 + 对话气泡
 ```
 
 支持多个 agent 同时活动，按优先级聚合状态（waiting > running > review > jumping > waving > idle > failed）。
@@ -65,7 +65,7 @@ desktop/cross-platform/
 ├── config.json           # 你的配置（自动生成，不入版本控制）
 ├── setup.sh              # 一键安装（安装依赖 + hooks + 编译 + 启动）
 ├── build-and-run.sh      # 编译并重启
-├── setup-hooks.sh        # 配置 hooks（Claude Code + Codex）
+├── setup-hooks.sh        # 配置 hooks（Claude Code + Codex + OpenCode）
 ├── package.json          # 前端依赖（Tauri CLI + API）
 ├── src/                  # 前端
 │   ├── index.html        #   入口 HTML
@@ -85,6 +85,7 @@ desktop/cross-platform/
 │       └── commands.rs   #   Tauri 命令：获取配置 / AppleScript (安全过滤) / 清空会话 / 退出
 ├── hooks/                # Hook 脚本
 │   ├── pet-hook.sh           # Shell 入口 (claude-code / codex 参数分派)
+│   ├── opencode-plugin.ts    # OpenCode 插件（TS，进程内运行，setup-hooks.sh 自动部署）
 │   └── scripts/            # Python 实现
 │       ├── common.py       #   共享逻辑
 │       ├── claude_hook.py  #   Claude Code 事件处理
@@ -109,8 +110,10 @@ desktop/cross-platform/
     "max_width": 160
   },
   "state_map": {
-    "Stop": { "state": "jumping", "dialogue": "搞定啦！✨" }
+    "Stop": { "state": "jumping", "dialogue": "搞定啦！✨" },
+    "StopFailure": { "state": "failed", "dialogue": "呜...出了点问题" }
   },
+  "terminal_events": ["StopFailure", "SessionEnd"],
   "menu": {
     "items": [
       {
@@ -148,6 +151,6 @@ RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
 | 文档                                                           | 说明                    |
 | -------------------------------------------------------------- | ----------------------- |
 | [../docs/overview.md](../docs/overview.md)                     | 跨平台实现概述          |
-| [../docs/agent-hooks/README.md](../docs/agent-hooks/README.md) | Hook 机制详解（各平台） |
+| [../docs/agent-hooks/README.md](../docs/agent-hooks/README.md) | Hook 机制详解（三平台） |
 | [../docs/renderer.md](../docs/renderer.md)                     | Tauri 渲染器详解        |
 | [../docs/spritesheet.md](../docs/spritesheet.md)               | 精灵图规格              |

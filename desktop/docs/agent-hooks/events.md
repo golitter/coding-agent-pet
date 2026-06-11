@@ -2,35 +2,37 @@
 
 所有 Hook 事件的统一参考：哪个平台支持、宠物如何响应、是否触发 session 清理。
 
-> 平台专属实现细节（输入字段、信任机制、调试输出等）见 [claude-code.md](claude-code.md) 和 [codex.md](codex.md)。
+> 平台专属实现细节（输入字段、信任机制、调试输出等）见 [claude-code.md](claude-code.md)、[codex.md](codex.md) 和 [opencode.md](opencode.md)。
 
 ---
 
 ## 一、事件总表
 
-宠物状态来自 `config.json` 的 `state_map`（两个平台共用），Codex 的 snake_case 事件名通过 `codex_hook.py` 的 `EVENT_ALIASES` 归一化为 PascalCase 后再查表。
+宠物状态来自 `config.json` 的 `state_map`（三平台共用），Codex 的 snake_case 事件名通过 `codex_hook.py` 的 `EVENT_ALIASES` 归一化为 PascalCase 后再查表，OpenCode 的 dot.case 事件名通过 `opencode-plugin.ts` 的 `OPENCODE_TO_PET` 映射同理。
 
-| 事件 (PascalCase) | Codex snake_case | Claude Code | Codex | 宠物 state | 对话 | 备注 |
-|---|---|:-:|:-:|---|---|---|
-| `SessionStart` | `session_start` | ✓ | ✓ | `waving` | 嗨！小鸟来啦～ | 一次性动画，播完回 idle |
-| `UserPromptSubmit` | `user_prompt_submit` | ✓ | ✓ | `running` | 收到！开始工作～ | 循环动画 |
-| `PreToolUse` | `pre_tool_use` | ✓ | ✓ | `running` | 执行中... | 循环动画 |
-| `PostToolUse` | `post_tool_use` | ✓ | ✓ | `running` * | 处理中... * | *硬编码，不查 state_map |
-| `Stop` | `stop` | ✓ | ✓ | `jumping` | 搞定啦！✨ | 一次性动画，**2s 延迟删除** |
-| `StopFailure` | `stop_failure` | ✓ | ✓ | `failed` | 呜...出了点问题 | **terminal，立即删除** |
-| `Notification` | `notification` | ✓ | ✓ | `waving` | 注意哦～ | 一次性动画 |
-| `PermissionRequest` | `permission_request` | ✓ | ✓ | `waiting` | 需要你的授权～ | 黄色警告气泡 |
-| `SubagentStop` | `subagent_stop` | ✓ | ✓ | `idle` | (空) | 回到静息，仍计入 active_count |
-| `PreCompact` | — | ✓ | ✗ | `waiting` | 整理一下记忆... | **Claude 独有** |
-| `SessionEnd` | — | ✓ | ✗ | `waving` | 下次见！♪ | **Claude 独有**，terminal，立即删除 |
+| 事件 (PascalCase) | Codex snake_case | OpenCode dot.case | Claude Code | Codex | OpenCode | 宠物 state | 对话 | 备注 |
+|---|---|---|:-:|:-:|:-:|---|---|---|
+| `SessionStart` | `session_start` | `session.created` | ✓ | ✓ | ✓ | `waving` | 嗨！小鸟来啦～ | 一次性动画，播完回 idle |
+| `UserPromptSubmit` | `user_prompt_submit` | — | ✓ | ✓ | ✗ | `running` | 收到！开始工作～ | 循环动画 |
+| `PreToolUse` | `pre_tool_use` | `tool.execute.before` | ✓ | ✓ | ✓ | `running` | 执行中... | 循环动画 |
+| `PostToolUse` | `post_tool_use` | `tool.execute.after` | ✓ | ✓ | ✓ | `running` * | 处理中... * | *硬编码，不查 state_map |
+| `Stop` | `stop` | `session.idle` | ✓ | ✓ | ✓ | `jumping` | 搞定啦！✨ | 一次性动画，**2s 延迟删除** |
+| `StopFailure` | `stop_failure` | `session.error` | ✓ | ✓ | ✓ | `failed` | 呜...出了点问题 | **terminal，立即删除** |
+| `Notification` | `notification` | — | ✓ | ✓ | ✗ | `waving` | 注意哦～ | 一次性动画 |
+| `PermissionRequest` | `permission_request` | `permission.asked` | ✓ | ✓ | ✓ | `waiting` | 需要你的授权～ | 黄色警告气泡 |
+| `SubagentStop` | `subagent_stop` | — | ✓ | ✓ | ✗ | `idle` | (空) | 回到静息，仍计入 active_count |
+| `PreCompact` | — | `session.compacted` | ✓ | ✗ | ✓ | `waiting` | 整理一下记忆... | **Codex 无此事件** |
+| `SessionEnd` | — | `session.deleted` | ✓ | ✗ | ✓ | `waving` | 下次见！♪ | **Codex 无此事件**，terminal，立即删除 |
+| `QuestionAsked` | — | `question` 工具 (before) | ✓ | ✗ | ✓ | `waiting` | 需要你的选择～ | OpenCode `question` 工具拦截；Claude Code 在 config 中注册 |
 
-**注册数**：Claude Code 11 个，Codex 9 个。
+**注册数**：Claude Code 11 个，Codex 9 个，OpenCode 通过 `opencode-plugin.ts` 订阅 6 个 `event` 型 + 2 个 `tool.execute.*` 拦截型 = 8 个事件（其中 `question` 工具触发 `QuestionAsked` 为附加映射）。
 
 **注意**：
 - **SessionStart 触发时机不同**：Claude Code 在 CLI/IDE **启动瞬间**就触发 `SessionStart`，与首次 `UserPromptSubmit` 之间隔用户思考时间（秒～分钟级）；Codex 0.133.0 的 `session_start` 是**懒触发**——只在用户**首次提交 prompt** 时与 `user_prompt_submit` 一起补发（间隔仅 30~50ms）。若用户启动 codex 后不发消息直接退出，两个事件都不会发。结果：Codex 的挥手动画会被紧随的奔跑动画瞬时覆盖，肉眼几乎不可见。
-- **`SessionEnd` Claude 独有**：Codex 当前不提供此事件，会话死亡检测只能依赖后端兜底——`stale_timeout_sec`（默认 1h）超时后由 `cleanup_stale` 删除磁盘孤儿文件。
-- **用户中断检测缺失**（两个平台都有）：用户提交 prompt 后**按 Ctrl+C / Esc / 关窗口中断**时，**Claude Code 和 Codex 都不会发任何 hook 事件**。结果：session 文件 mtime 停留在 `UserPromptSubmit` 那一刻，state 永远停在 `running`，宠物卡在"收到！开始工作～"直到 **`stale_timeout_sec`（默认 1h）**后才被 `cleanup_stale` 清理，期间 `active_count` 错误地 +1。
-  - **根因**：两个平台都没有"用户中断"hook 事件——Claude Code 有 [Issue #9516](https://github.com/anthropics/claude-code/issues/9516) feature request 但未实现；Codex 0.133.0 也没有 cancel/interrupt/abort hook。
+- **OpenCode 无 UserPromptSubmit**：OpenCode 插件 API 不提供"用户发送消息"事件，用户发消息后宠物保持之前状态直到首次 `PreToolUse`（`tool.execute.before`）。
+- **`SessionEnd` Codex 缺失**：Codex 当前不提供此事件，会话死亡检测只能依赖后端兜底——`stale_timeout_sec`（默认 1h）超时后由 `cleanup_stale` 删除磁盘孤儿文件。OpenCode 通过 `session.deleted` 事件支持此映射。
+- **用户中断检测缺失**（三平台都有）：用户提交 prompt 后**按 Ctrl+C / Esc / 关窗口中断**时，**Claude Code、Codex 和 OpenCode 都不会发任何 hook 事件**。结果：session 文件 mtime 停留在最后一次事件那一刻，state 永远停在 `running`，宠物卡在"收到！开始工作～"直到 **`stale_timeout_sec`（默认 1h）**后才被 `cleanup_stale` 清理，期间 `active_count` 错误地 +1。
+  - **根因**：三个平台都没有"用户中断"hook 事件——Claude Code 有 [Issue #9516](https://github.com/anthropics/claude-code/issues/9516) feature request 但未实现；Codex 0.133.0 也没有 cancel/interrupt/abort hook。
   - **当前缓解**：等 1h TTL / 重启宠物 app / 手动删 `sessions/<session_id>.json`。
   - **未来修复方向**（**不在本次范围**）：在 Rust 后端做 state-aware stale timeout——`running` 状态用 ~180s，其它状态保持 1h。判断时 `is_session_file_stale` 需要读 JSON 的 `state` 字段决定 TTL。详见 [aggregator.rs:44](../../cross-platform/src-tauri/src/aggregator.rs#L44) 现有的 mtime-only 判断。
 
@@ -94,14 +96,14 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 
 ## 四、平台差异速查
 
-| 维度 | Claude Code | Codex |
-|---|---|---|
-| 独有事件 | `PreCompact`, `SessionEnd` | — |
-| 缺失事件 | — | `PreCompact`, `SessionEnd` |
-| 事件名格式 | PascalCase 直接读 | snake_case → `EVENT_ALIASES` 归一化 |
-| 字段名 | 固定 `hook_event_name` | 多种（`hook_event_name` / `event` / `codex_event_type`） |
-| Session ID 字段 | `session_id` | `session_id` / `sessionId` / `conversation_id` / `thread_id` |
-| 崩溃兜底 | 1h TTL（`stale_timeout_sec`） | 同左，Codex 无额外轮询机制 |
+| 维度 | Claude Code | Codex | OpenCode |
+|---|---|---|---|
+| 独有事件 | `PreCompact`, `SessionEnd` | — | `QuestionAsked`（via `question` 工具） |
+| 缺失事件 | — | `PreCompact`, `SessionEnd`, `Notification`, `SubagentStop` | `UserPromptSubmit`, `Notification`, `SubagentStop` |
+| 事件名格式 | PascalCase 直接读 | snake_case → `EVENT_ALIASES` 归一化 | dot.case → `OPENCODE_TO_PET` 映射 |
+| 字段名 | 固定 `hook_event_name` | 多种（`hook_event_name` / `event` / `codex_event_type`） | 事件名即对象键名 |
+| Session ID 字段 | `session_id` | `session_id` / `sessionId` / `conversation_id` / `thread_id` | `sessionID`（大写 D） |
+| 崩溃兜底 | 1h TTL（`stale_timeout_sec`） | 同左 | 同左 |
 
 ---
 
@@ -111,7 +113,9 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 |---|---|
 | [claude-code.md](claude-code.md) | Claude Code hook 实现细节 |
 | [codex.md](codex.md) | Codex hook 实现细节 |
+| [opencode.md](opencode.md) | OpenCode 插件系统参考 |
 | [../../cross-platform/hooks/scripts/common.py](../../cross-platform/hooks/scripts/common.py) | 共享处理逻辑（state_map 查表、socket 推送） |
+| [../../cross-platform/hooks/opencode-plugin.ts](../../cross-platform/hooks/opencode-plugin.ts) | OpenCode 插件实现 |
 | [../../cross-platform/config.example.json](../../cross-platform/config.example.json) | `state_map` + `terminal_events` 配置 |
 | [../../cross-platform/src-tauri/src/aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) | Rust 后端：terminal 删除、cleanup_stale、Stop 延迟取消 |
 | [../../cross-platform/src-tauri/src/watcher.rs](../../cross-platform/src-tauri/src/watcher.rs) | Socket 服务端 + Stop 2s 延迟调度 |

@@ -28,15 +28,19 @@
 | 文档 | 内容 |
 |---|---|
 | [hit-test.md](../../desktop/docs/design/hit-test.md) | 透明像素点击穿透设计（alpha 蒙版 + CGEvent 轮询） |
+| [hooks-refactor.md](../../desktop/docs/design/hooks-refactor.md) | Hook 重构设计（合并冗余 wrapper → 统一 pet-hook.sh） |
+| [opencode-plugin.md](../../desktop/docs/design/opencode-plugin.md) | OpenCode 插件设计（事件映射 + 独立调试） |
+| [opencode-integration-plan.md](../../desktop/docs/design/opencode-integration-plan.md) | OpenCode 集成计划 |
 
 ### Hook 协议 (`desktop/docs/agent-hooks/`)
 
 | 文档 | 内容 |
 |---|---|
-| [README.md](../../desktop/docs/agent-hooks/README.md) | Hook 索引 + 两平台对比 |
-| [events.md](../../desktop/docs/agent-hooks/events.md) | 11 个 Claude 事件 + 9 个 Codex 事件对照表 + 清理规则 |
+| [README.md](../../desktop/docs/agent-hooks/README.md) | Hook 索引 + 三平台对比 |
+| [events.md](../../desktop/docs/agent-hooks/events.md) | 11 个 Claude 事件 + 9 个 Codex 事件 + 8 个 OpenCode 事件对照表 + 清理规则 |
 | [claude-code.md](../../desktop/docs/agent-hooks/claude-code.md) | Claude Code Hook 实现详解 |
 | [codex.md](../../desktop/docs/agent-hooks/codex.md) | Codex Hook 实现详解 |
+| [opencode.md](../../desktop/docs/agent-hooks/opencode.md) | OpenCode 插件系统参考（事件、Hook API、宠物集成） |
 
 ### Bugfix 计划 (`desktop/docs/bugfix/`)
 
@@ -45,6 +49,7 @@
 | [README.md](../../desktop/docs/bugfix/README.md) | Bugfix 计划索引 | — |
 | [active-count-undercount.md](../../desktop/docs/bugfix/active-count-undercount.md) | 多会话计数 N-1 问题 | 已实施 |
 | [idle-blink-too-fast.md](../../desktop/docs/bugfix/idle-blink-too-fast.md) | idle 状态眨眼太快 | 待实施 |
+| [pet-unresponsive-stuck-state.md](../../desktop/docs/bugfix/pet-unresponsive-stuck-state.md) | 宠物无响应/拖动卡死 | 已实施 |
 
 ---
 
@@ -76,6 +81,7 @@
 | 文件 | 职责 |
 |---|---|
 | [pet-hook.sh](../../desktop/cross-platform/hooks/pet-hook.sh) | Shell 入口（claude-code / codex 参数分派） |
+| [opencode-plugin.ts](../../desktop/cross-platform/hooks/opencode-plugin.ts) | OpenCode 插件（TS，进程内运行，`setup-hooks.sh` 部署到 `~/.config/opencode/plugins/`） |
 | [scripts/common.py](../../desktop/cross-platform/hooks/scripts/common.py) | 共享逻辑：写 session 文件 + 推 socket |
 | [scripts/claude_hook.py](../../desktop/cross-platform/hooks/scripts/claude_hook.py) | Claude Code 事件解析 |
 | [scripts/codex_hook.py](../../desktop/cross-platform/hooks/scripts/codex_hook.py) | Codex 事件解析（snake_case → PascalCase） |
@@ -93,6 +99,7 @@
 | `read_file_bytes` | 读 PNG 原始字节，路径校验限制在 `frames_dir` 内（hit-test alpha 蒙版） |
 | `read_frames_batch` | 批量读取多帧 PNG，单次 IPC 替代 55+ 次 `read_file_bytes`（两级路径校验：lexicle 快路径 + canonicalize 慢路径） |
 | `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
+| `js_log` | JS → Rust 日志桥接，前端诊断信息输出到 `RUST_LOG` 流（`info`/`warn`/`error` 级别） |
 
 事件通道：Rust → JS 通过 `emit("agent-state", payload)` 推送聚合状态。
 
@@ -105,6 +112,7 @@
 | `pet_id` | `kotori-minami` | 宠物 ID（决定资源目录） |
 | `pet_base_dir` | `null` | 项目根，`null` 自动检测 |
 | `socket_path` | `/tmp/kotori-pet.sock` | Unix socket 路径 |
+| `sessions_dir` | `null` | session 文件目录，`null` 自动检测 |
 | `stale_timeout_sec` | `3600` | session 文件过期阈值（秒），1h 覆盖长工具调用 |
 | `renderer.cleanup_interval_sec` | `30` | 定时清理间隔（秒），扫描过期文件和孤儿内存会话 |
 | `renderer.scale` | `0.6` | 精灵缩放因子 |
@@ -112,6 +120,13 @@
 | `renderer.corner_margin` | `20` | 屏幕右下角边距 (px) |
 | `dialogue.font_size` | `10` | 气泡字号 |
 | `dialogue.max_width` | `160` | 气泡最大宽度 (px) |
+| `dialogue.cornerRadius` | `6` | 气泡圆角 (px) |
+| `dialogue.fade_duration_sec` | `0.3` | 气泡淡入/淡出过渡时长 (秒) |
+| `dialogue.style_map` | `{waiting: warning, failed: error}` | 宠物状态 → 气泡 CSS 样式映射 |
+| `hooks.claude_code_settings` | `~/.claude/settings.json` | Claude Code settings 路径 |
+| `hooks.codex_hooks` | `~/.codex/hooks.json` | Codex hooks 配置路径 |
+| `hooks.opencode_plugins_dir` | `~/.config/opencode/plugins` | OpenCode 插件部署目录 |
+| `terminal_events` | `["StopFailure", "SessionEnd"]` | terminal 事件列表（触发立即删除 session 文件） |
 | `state_map` | (见文件) | 事件 → `{state, dialogue}` 映射 |
 | `menu.items` | (见文件) | 右键菜单项（Codex / VS Code / 关闭） |
 
@@ -123,7 +138,7 @@
 
 ```bash
 ./setup.sh             # 全流程：依赖 → 配置 → hooks → 编译 → 启动
-./setup-hooks.sh       # 单独配置 Claude Code + Codex hooks
+./setup-hooks.sh       # 单独配置 Claude Code + Codex + OpenCode hooks
 ./build-and-run.sh     # 单独编译并重启渲染器
 npx tauri dev          # 开发热重载
 npx tauri build        # 生产构建
@@ -174,6 +189,9 @@ assets/kotori-minami/
 | `/tmp/kotori-pet.sock` | Unix socket — hook → 后端推送通道（权限 `0o600`） |
 | `/tmp/kotori-pet-tauri.log` | Tauri 渲染器日志（`build-and-run.sh` 输出） |
 | `/tmp/kotori-pet-codex-hook.log` | Codex hook 调试日志 |
+| `/tmp/kotori-pet-opencode-debug.log` | OpenCode 插件调试日志 |
+| `~/.config/opencode/plugins/pet-plugin.ts` | OpenCode 插件部署路径（由 `setup-hooks.sh` 自动复制） |
+| `~/.config/opencode/plugins/.kotori-pet-config-dir` | OpenCode 插件同伴文件（指向 `desktop/cross-platform/` 路径） |
 
 ---
 

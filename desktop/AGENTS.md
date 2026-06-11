@@ -18,7 +18,7 @@ desktop/
 │   │   └── src/                #     main/lib/config/commands/aggregator/watcher
 │   ├── hooks/                  #   Hook 脚本
 │   │   ├── pet-hook.sh                 # shell wrapper (claude-code / codex)
-│   │   ├── opencode-plugin.ts          # OpenCode 插件（TS，进程内运行）
+│   │   ├── opencode-plugin.ts          # OpenCode 插件（TS，进程内运行，由 setup-hooks.sh 部署到 ~/.config/opencode/plugins/）
 │   │   └── scripts/            #   Python 实现 (common + claude_hook + codex_hook)
 │   ├── runtime/sessions/       #   运行时会话状态（不入 git）
 │   ├── config.example.json     #   配置模板

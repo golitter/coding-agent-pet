@@ -80,6 +80,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 | `read_file_bytes` | 读 PNG 原始字节（hit-test alpha 蒙版），**路径校验限制在 `frames_dir` 内** |
 | `read_frames_batch` | 批量读取多帧 PNG（单次 IPC 替代 55+ 次 `read_file_bytes`），**两级路径校验**：lexicle 快路径（无 syscall）+ canonicalize 慢路径（含符号链接时降级） |
 | `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
+| `js_log` | JS → Rust 日志桥接，前端诊断信息输出到 `RUST_LOG` 流 |
 
 前端通过 `window.__TAURI__.core.invoke('get_config')` 调用。
 
