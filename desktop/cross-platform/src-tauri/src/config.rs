@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{info, warn};
 
 /// Resolved configuration used throughout the application.
 #[derive(Debug, Clone)]
@@ -98,41 +98,19 @@ impl PetConfig {
     /// Load configuration from config.json or config.example.json,
     /// with auto-detection of paths relative to the repo root.
     pub fn load() -> Self {
-        // Auto-detect repo root:
-        // src-tauri/ → cross-platform/ → desktop/ → repo root
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
             .unwrap_or_else(|| PathBuf::from("."));
 
-        // Walk up from executable to find repo root
-        let detected_base = detect_repo_root(&exe_dir);
-
-        // Find config file: try config.json, then config.example.json
-        // Look in the cross-platform directory (3 levels up from exe_dir):
-        //   target/debug/ → target/ → src-tauri/ → cross-platform/
-        let config_dir = exe_dir
-            .parent() // target/
-            .and_then(|p| p.parent()) // src-tauri/
-            .and_then(|p| p.parent()) // cross-platform/
-            .map(|p| p.to_path_buf())
+        let config_path = find_config_path(&exe_dir);
+        let config_dir = config_path
+            .as_ref()
+            .and_then(|path| path.parent().map(Path::to_path_buf))
             .unwrap_or_else(|| PathBuf::from("."));
+        let detected_base = detect_repo_root(&config_dir);
+        let actual_path = config_path.unwrap_or_else(|| config_dir.join("config.json"));
 
-        let config_path = config_dir.join("config.json");
-        let example_path = config_dir.join("config.example.json");
-
-        let actual_path = if config_path.exists() {
-            config_path
-        } else if example_path.exists() {
-            example_path
-        } else {
-            config_path.clone()
-        };
-
-        // Parse config file; fall back to an all-default RawConfig on any failure
-        // (missing file, malformed JSON). Each field below carries its own default
-        // inline in the unwrap_or — no separate `let mut x = default` declaration,
-        // so every default lives in exactly one place.
         let raw: RawConfig = std::fs::read_to_string(&actual_path)
             .ok()
             .and_then(|data| serde_json::from_str(&data).ok())
@@ -224,6 +202,39 @@ impl PetConfig {
     }
 }
 
+fn find_cross_platform_dir(start: &Path) -> Option<PathBuf> {
+    let mut dir = start.to_path_buf();
+    for _ in 0..12 {
+        if dir.join("config.example.json").exists() && dir.join("src-tauri").exists() {
+            return Some(dir);
+        }
+
+        if dir.ends_with(Path::new("desktop/cross-platform")) {
+            return Some(dir);
+        }
+
+        if !dir.pop() {
+            break;
+        }
+    }
+    None
+}
+
+fn find_config_path(start: &Path) -> Option<PathBuf> {
+    let cross_platform_dir = find_cross_platform_dir(start)?;
+    let config_path = cross_platform_dir.join("config.json");
+    if config_path.exists() {
+        return Some(config_path);
+    }
+
+    let example_path = cross_platform_dir.join("config.example.json");
+    if example_path.exists() {
+        return Some(example_path);
+    }
+
+    None
+}
+
 /// Resolve a path: expand ~, resolve relative paths against a base.
 fn resolve_path(path: &str, base: &str) -> String {
     let expanded = if path.starts_with('~') {
@@ -245,7 +256,7 @@ fn resolve_path(path: &str, base: &str) -> String {
 /// resource reorganization, unlike pet-specific asset directories).
 fn detect_repo_root(start: &Path) -> String {
     let mut dir = start.to_path_buf();
-    for _ in 0..10 {
+    for _ in 0..12 {
         if dir.join("desktop").join("cross-platform").exists() {
             return dir.to_string_lossy().to_string();
         }
@@ -253,12 +264,80 @@ fn detect_repo_root(start: &Path) -> String {
             break;
         }
     }
-    // Fallback: 4 levels up from exe (release/ → .build/ → src-tauri/ → cross-platform/ → desktop/ → repo root)
-    start
-        .parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| ".".to_string())
+    warn!(
+        "Unable to detect repo root from {}, falling back to {}",
+        start.display(),
+        start.display()
+    );
+    start.to_string_lossy().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_repo_root, find_config_path, find_cross_platform_dir, resolve_path};
+    use std::fs;
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(label: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("kotori-pet-{label}-{unique}"))
+    }
+
+    #[test]
+    fn resolve_path_handles_relative_and_absolute_inputs() {
+        assert_eq!(resolve_path("frames", "/repo"), "/repo/frames");
+        assert_eq!(resolve_path("/tmp/frames", "/repo"), "/tmp/frames");
+    }
+
+    #[test]
+    fn find_cross_platform_dir_walks_up_to_project_root() {
+        let root = temp_dir("config-search");
+        let nested = root.join("desktop/cross-platform/src-tauri/target/debug");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(
+            root.join("desktop/cross-platform/config.example.json"),
+            "{}",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("desktop/cross-platform/src-tauri")).unwrap();
+
+        let found = find_cross_platform_dir(&nested).unwrap();
+        assert_eq!(found, root.join("desktop/cross-platform"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn find_config_path_prefers_config_json_over_example() {
+        let root = temp_dir("config-file");
+        let cross_platform = root.join("desktop/cross-platform");
+        fs::create_dir_all(cross_platform.join("src-tauri")).unwrap();
+        fs::write(cross_platform.join("config.example.json"), "{}").unwrap();
+
+        let start = cross_platform.join("src-tauri");
+        let example = find_config_path(&start).unwrap();
+        assert_eq!(example, cross_platform.join("config.example.json"));
+
+        fs::write(cross_platform.join("config.json"), "{\"pet_id\":\"real\"}").unwrap();
+        let config = find_config_path(&start).unwrap();
+        assert_eq!(config, cross_platform.join("config.json"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn detect_repo_root_returns_workspace_root_when_landmark_exists() {
+        let root = temp_dir("repo-root");
+        let start = root.join("desktop/cross-platform/src-tauri");
+        fs::create_dir_all(&start).unwrap();
+
+        let detected = detect_repo_root(Path::new(&start));
+        assert_eq!(detected, root.to_string_lossy());
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

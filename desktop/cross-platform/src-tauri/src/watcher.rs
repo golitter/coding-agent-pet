@@ -1,22 +1,68 @@
 use crate::aggregator::ActivityAggregator;
 use notify::Watcher;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
 
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
+
+#[cfg(unix)]
+fn is_replaceable_socket_path(path: &Path) -> Result<bool, std::io::Error> {
+    if !path.exists() {
+        return Ok(false);
+    }
+
+    Ok(std::fs::symlink_metadata(path)?.file_type().is_socket())
+}
+
+fn ensure_socket_parent_dir(path: &Path) -> Result<(), std::io::Error> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+    Ok(())
+}
+
 /// Start a Unix socket server that receives JSON payloads from hook scripts.
 /// Runs as a Tokio async task.
 pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAggregator>) {
-    let path = socket_path.to_string();
+    let path = PathBuf::from(socket_path);
+
+    if let Err(err) = ensure_socket_parent_dir(&path) {
+        warn!(
+            "Cannot create socket parent directory for {}: {}",
+            path.display(),
+            err
+        );
+        return;
+    }
 
     // Clean up stale socket — connect first to avoid TOCTOU symlink attacks.
     // If the socket is live (another instance running), exit instead of clobbering it.
     // Only remove the file when we confirm it's a dead socket (connect fails).
-    if std::path::Path::new(&path).exists() {
+    if path.exists() {
+        #[cfg(unix)]
+        match is_replaceable_socket_path(&path) {
+            Ok(true) => {}
+            Ok(false) => {
+                warn!(
+                    "Socket path {} already exists and is not a Unix socket; refusing to replace it",
+                    path.display()
+                );
+                return;
+            }
+            Err(err) => {
+                warn!("Cannot inspect socket path {}: {}", path.display(), err);
+                return;
+            }
+        }
+
         match tokio::net::UnixStream::connect(&path).await {
             Ok(_) => {
-                warn!("Socket {} is in use by another instance", path);
+                warn!("Socket {} is in use by another instance", path.display());
                 return;
             }
             Err(_) => {
@@ -29,7 +75,7 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAgg
     let listener = match tokio::net::UnixListener::bind(&path) {
         Ok(l) => l,
         Err(e) => {
-            warn!("Cannot bind socket {}: {}", path, e);
+            warn!("Cannot bind socket {}: {}", path.display(), e);
             return;
         }
     };
@@ -43,7 +89,7 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAgg
         }
     }
 
-    info!("Socket listening: {}", path);
+    info!("Socket listening: {}", path.display());
 
     loop {
         match listener.accept().await {

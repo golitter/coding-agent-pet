@@ -20,10 +20,15 @@ fn make_window_transparent(window: &tauri::WebviewWindow) {
     use objc::runtime::{Class, Object, NO};
     use objc::{msg_send, sel, sel_impl};
 
+    let Some(ns_color) = Class::get("NSColor") else {
+        warn!("NSColor class not available; skipping transparency setup");
+        return;
+    };
+
     if let Ok(ptr) = window.ns_window() {
         unsafe {
             let ns_window: *mut Object = ptr as *mut Object;
-            let clear: *mut Object = msg_send![Class::get("NSColor").unwrap(), clearColor];
+            let clear: *mut Object = msg_send![ns_color, clearColor];
 
             // NSWindow transparency
             let _: () = msg_send![ns_window, setOpaque: NO];
@@ -36,7 +41,7 @@ fn make_window_transparent(window: &tauri::WebviewWindow) {
     let _ = window.with_webview(|webview| unsafe {
         let wk: *mut Object = webview.inner() as *mut Object;
         if !wk.is_null() {
-            let clear: *mut Object = msg_send![Class::get("NSColor").unwrap(), clearColor];
+            let clear: *mut Object = msg_send![ns_color, clearColor];
             let _: () = msg_send![wk, setOpaque: NO];
             let _: () = msg_send![wk, setBackgroundColor: clear];
         }
@@ -80,7 +85,9 @@ pub fn run() {
             }
 
             // 3. Ensure sessions directory exists
-            std::fs::create_dir_all(&config.sessions_dir).ok();
+            if let Err(err) = std::fs::create_dir_all(&config.sessions_dir) {
+                return Err(Box::new(err));
+            }
 
             // 4. Create activity aggregator (tracks per-agent activity, rolls up to display state)
             let session_mgr = Arc::new(ActivityAggregator::new(
