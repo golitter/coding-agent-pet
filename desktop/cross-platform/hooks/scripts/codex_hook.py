@@ -44,8 +44,10 @@ def main():
     # Codex accepts several event field names
     raw_event = (
         input_data.get('hook_event_name')
+        or input_data.get('hookEventName')
         or input_data.get('event')
         or input_data.get('codex_event_type')
+        or input_data.get('codexEventType')
         or ''
     )
     hook_event = EVENT_ALIASES.get(raw_event, raw_event) or ''
@@ -60,6 +62,7 @@ def main():
     )
 
     tool_name = input_data.get('tool_name') or input_data.get('tool') or ''
+    tool_name = tool_name or input_data.get('toolName') or ''
     cwd       = input_data.get('cwd', '') or ''
 
     process_event(
