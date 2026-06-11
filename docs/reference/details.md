@@ -90,8 +90,9 @@
 | `get_config` | 返回前端使用的配置子集（`FrontendConfig`） |
 | `quit_app` | 退出宠物进程 |
 | `purge_all_sessions` | 清空所有 session 文件（三连击触发） |
-| `run_applescript` | 执行 AppleScript（过滤 `do shell script` 和反引号） |
-| `read_file_bytes` | 读 PNG 原始字节 → JS 构建未污染 blob URL（hit-test alpha 蒙版） |
+| `run_applescript` | 执行 AppleScript（过滤 `do shell script`、`do script` 和反引号） |
+| `read_file_bytes` | 读 PNG 原始字节，路径校验限制在 `frames_dir` 内（hit-test alpha 蒙版） |
+| `read_frames_batch` | 批量读取多帧 PNG，单次 IPC 替代 55+ 次 `read_file_bytes`（路径校验同上） |
 | `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
 
 事件通道：Rust → JS 通过 `emit("agent-state", payload)` 推送聚合状态。

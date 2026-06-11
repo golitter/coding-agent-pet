@@ -148,7 +148,10 @@ cd ~/pet
 | 方面 | 措施 |
 |---|---|
 | **Socket 权限** | Unix socket 文件权限 `0o600`，仅 owner 可连接，防止本地其他用户注入伪造状态 |
-| **AppleScript 沙箱** | `run_applescript` command 拒绝包含 `do shell script` 或反引号的脚本，防止任意命令执行 |
+| **Socket 启动安全** | 先 connect 探活再 remove + bind，避免 `/tmp` 下 TOCTOU symlink 攻击 |
+| **路径校验** | `read_file_bytes` / `read_frames_batch` 校验请求路径在 `frames_dir` 内，防止 webview 任意文件读取 |
+| **AppleScript 沙箱** | `run_applescript` command 拒绝包含 `do shell script`、`do script` 或反引号的脚本，防止任意命令执行 |
+| **RAII 清理** | `SocketGuard` 在应用退出（Drop）时自动移除 socket 文件 |
 | **最小权限** | capabilities 仅声明实际需要的窗口操作和事件权限，不含 `shell:allow-execute` |
 | **Payload 限制** | socket 接收上限 64KB，防止恶意超大 payload |
 | **无 shell 拼接** | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除）由 Rust 后端经 Unix socket 管理，无注入面 |

@@ -77,13 +77,16 @@ src-tauri/    → cross-platform/    (config 所在目录)
 | `run_applescript` | 执行 AppleScript 命令（**仅 macOS**，含安全检查） |
 | `quit_app` | 退出应用（`app.exit(0)`） |
 | `purge_all_sessions` | 手动清空：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除文件数 |
+| `read_file_bytes` | 读 PNG 原始字节（hit-test alpha 蒙版），**路径校验限制在 `frames_dir` 内** |
+| `read_frames_batch` | 批量读取多帧 PNG（单次 IPC 替代 55+ 次 `read_file_bytes`），路径校验同上 |
+| `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
 
 前端通过 `window.__TAURI__.core.invoke('get_config')` 调用。
 
 ### `run_applescript` 安全机制
 
 - **平台守卫**: 非 macOS 平台直接返回错误 `"AppleScript is only available on macOS"`
-- **内容过滤**: 拒绝包含 `do shell script` 或反引号的脚本，防止通过 AppleScript 执行任意 shell 命令
+- **内容过滤**: 拒绝包含 `do shell script`、`do script` 或反引号的脚本，防止通过 AppleScript 执行任意 shell 命令
 - **错误处理**: 前端 `invoke` 调用均带有 `.catch()` 处理
 
 ---
@@ -104,7 +107,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
  8. 文件系统监控          ← notify crate 监听 sessions 目录变化 (独立阻塞线程)
  9. 加载磁盘会话          ← load_from_disk()
 10. 定时清理              ← tokio interval, 间隔从配置读取
-11. 注入配置到 Tauri      ← app.manage(config)
+11. 注入配置到 Tauri      ← app.manage(config) + SocketGuard（RAII，Drop 时清理 socket 文件）
 ```
 
 **macOS 透明窗口**: 通过 `objc` crate 直接操作 NSWindow 和 WKWebView，设置 `opaque=NO`、`backgroundColor=clearColor`、`hasShadow=NO`。
@@ -208,6 +211,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 - Hook 连接 → 发送 JSON → 关闭
 - 渲染器 accept → 循环读取完整 payload → 解析 → 调用 ActivityAggregator.update()
 - **安全限制**: socket 文件权限设为 `0o600`（仅 owner 可读写），防止其他用户注入伪造事件
+- **启动安全**: 先 connect 探活（防止 TOCTOU symlink 攻击），仅当连接失败（死 socket）时才 remove + bind
 - **缓冲区**: 动态增长，循环读取至 EOF，上限 64KB
 - Best-effort：socket 不存在时不报错
 
@@ -228,7 +232,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 ```
 1. invoke('get_config')    ← 从 Rust 获取配置
 2. SpriteAnimator          ← 创建动画器，加载精灵帧
-3. 窗口设置                ← 尺寸 + 定位（右下角）
+3. 窗口设置                ← 尺寸 + 定位（右下角，`primaryMonitor()` API 支持多显示器）
 4. onFrame 回调            ← 动画器 → 更新 <img> src
 5. DialogueBubble          ← 创建对话气泡
 6. animator.start()        ← 启动动画循环
@@ -268,8 +272,8 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | 操作 | 行为 |
 |---|---|
 | **单击** | 触发跳跃动画（一次性），播完后恢复之前状态 |
-| 单击 + 拖动 | 使用 `appWindow.startDragging()` 移动窗口，按方向播放 running-left/right |
-| 松开鼠标 | 停止拖动，恢复之前状态 |
+| 单击 + 拖动 | 使用 `appWindow.startDragging()` 移动窗口，按方向播放 running-left/right（按需 rAF 仅在拖动时运行） |
+| 松开鼠标 | 停止拖动，取消 rAF，恢复之前状态 |
 | **三连击** | 800ms 窗口内连续 3 次左键 → 调用 `purge_all_sessions` 清空所有会话文件，气泡反馈清理数量（`清理了 N 个会话～` / `没有可清理的会话～`），3s 后自动淡出（成功 `waving`、失败 `failed` 均传 `forceAutoHide`，机制见下文「对话气泡 → 显示逻辑」）|
 | **右键** | 弹出自定义上下文菜单 |
 
@@ -327,6 +331,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | 参数 | 配置项 | 默认值 |
 |---|---|---|
 | 帧率 | `renderer.fps` | 10 FPS (100ms/帧) |
+| 精灵尺寸 | — | 192×208px（`SPRITE_W`/`SPRITE_H` 常量，导出给 main.js） |
 | 定时器 | — | setInterval |
 
 ### 动画类型
@@ -334,7 +339,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | 类型 | 状态 | 行为 |
 |---|---|---|
 | **循环** | idle, running, running-right, running-left, waiting, review, failed | 播完一轮后从头循环 |
-| **一次性** | jumping, waving | 播完一轮后自动回到触发前的状态 |
+| **一次性** | jumping, waving | 播完一轮后自动回到触发前的状态；若播放期间又触发 one-shot，排队等当前播完后立即播放 |
 
 ### 状态切换
 

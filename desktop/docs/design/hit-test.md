@@ -74,7 +74,9 @@ WKWebView 里 `fetch("asset://localhost/...")` 抛 `TypeError: Load failed`。�
 
 ### 3. `src-tauri/src/commands.rs` — 两个 Rust 命令
 
-**`read_file_bytes(path)`** — 读 PNG 原始字节（坑 1+2）。
+**`read_file_bytes(path)`** — 读 PNG 原始字节（坑 1+2）。路径校验：只允许 `frames_dir` 内的文件，防止 webview 任意文件读取。
+
+**`read_frames_batch(paths)`** — 批量读取多帧 PNG 字节，单次 IPC 返回 `Map<path, bytes>`。替代 55+ 次 `read_file_bytes` 调用，启动速度显著提升。路径校验同上。
 
 **`cursor_in_window(window)`** — 用 CGEvent 读实时光标，返回窗口内逻辑坐标（Y 从顶部）。坐标转换：
 
@@ -97,8 +99,8 @@ extern "C" {
 - 构造函数加 `alphaMasks: Map`、`framePaths`、`baseWidth/Height`、`hitTestReady`
 - `loadFrames()` 同时记录每帧原生路径到 `framePaths`
 - `computeAlphaMasks()`（async，loadFrames 末尾 await）：
-  - 每帧 `invoke("read_file_bytes")` → Blob → objectURL → 新 Image
-  - 离屏 canvas（`willReadFrequently`）每帧 `clearRect` → drawImage → 提取 alpha 通道为 Uint8Array
+  - **单次批量 IPC** `invoke("read_frames_batch")` 读取所有帧字节，替代逐帧 `read_file_bytes`
+  - 每帧 Blob → objectURL → 新 Image → 离屏 canvas（`willReadFrequently`）`clearRect` → drawImage → 提取 alpha 通道为 Uint8Array
   - try-catch 包裹，失败时 `hitTestReady = false`
 - `getAlphaAt(state, frame, x, y)` — **mask 缺失/unready 返回 255**（fail-safe，宠物不会失联）
 
@@ -111,9 +113,10 @@ extern "C" {
 **关键函数：**
 - `enterPassThrough()` — 幂等 + 防抖锁 + 重入冷却；`setIgnoreCursorEvents(true)` + startPolling
 - `exitPassThrough()` — 幂等 + 防抖锁；stopPolling + `setIgnoreCursorEvents(false)` + 记录 lastExitTime
-- `pollCursor()` — `invoke("cursor_in_window")` → 算精灵坐标 → 查 alpha → 双阈值+连续确认决定退出
+- `pollCursor()` — `invoke("cursor_in_window")` → 用实时 `getBoundingClientRect()` 算精灵坐标 → 查 alpha → 双阈值+连续确认决定退出
+- `startPolling()` / `stopPolling()` — 链式 `setTimeout`（非 `setInterval`），await 完才调度下一轮，防止 async 重叠
 
-**mousemove 命中检测：** 正常模式下用 `e.clientX/Y` 查 alpha，透明则 enterPassThrough
+**mousemove 命中检测：** 正常模式下用 `e.clientX/Y` + 实时 `getBoundingClientRect()` 查 alpha（不缓存 rect，正确处理 DPI 变化），透明则 enterPassThrough
 
 **与现有交互集成：**
 | 交互 | 处理 |
@@ -142,5 +145,5 @@ extern "C" {
 ## 局限
 
 - **仅 macOS**：`cursor_in_window` 的 CGEvent/objc 实现是 macOS 专属。其他平台需另写（Windows 用 `GetCursorPos`，Linux 用 X11/Wayland API）。
-- **单屏假设**：CG↔NS 坐标转换用主屏高度 H，多屏场景下窗口若在副屏可能偏移。
+- **多屏定位**：初始定位使用 `primaryMonitor()` API（支持多显示器），但 CG↔NS 坐标转换仍用主屏高度 H，窗口在副屏时 hit-test 坐标可能偏移。
 - **内存**：~57 帧 × 192×208 ≈ 2.2 MB alpha 蒙版常驻。
