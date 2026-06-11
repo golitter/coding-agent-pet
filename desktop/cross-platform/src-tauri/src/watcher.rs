@@ -10,8 +10,21 @@ use tracing::{info, warn};
 pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAggregator>) {
     let path = socket_path.to_string();
 
-    // Clean up stale socket
-    let _ = std::fs::remove_file(&path);
+    // Clean up stale socket — connect first to avoid TOCTOU symlink attacks.
+    // If the socket is live (another instance running), exit instead of clobbering it.
+    // Only remove the file when we confirm it's a dead socket (connect fails).
+    if std::path::Path::new(&path).exists() {
+        match tokio::net::UnixStream::connect(&path).await {
+            Ok(_) => {
+                warn!("Socket {} is in use by another instance", path);
+                return;
+            }
+            Err(_) => {
+                // Stale socket file — safe to remove
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
 
     let listener = match tokio::net::UnixListener::bind(&path) {
         Ok(l) => l,

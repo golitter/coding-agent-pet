@@ -16,7 +16,7 @@ if [[ "$(uname)" == "Darwin" ]]; then
 fi
 
 echo "🛑 停止旧进程..."
-pkill -f "kotori-pet" 2>/dev/null || true
+pkill -x "kotori-pet" 2>/dev/null || true
 sleep 1
 
 # 确保 sessions 目录存在

@@ -3,6 +3,10 @@
  * Loads PNG frames, drives animation loop, handles state transitions.
  */
 
+// Sprite base dimensions — exported for use in main.js layout calculations.
+export const SPRITE_W = 192;
+export const SPRITE_H = 208;
+
 const STATES = [
   "idle",
   "running-right",
@@ -31,9 +35,10 @@ export class SpriteAnimator {
     // Alpha mask system for per-pixel hit testing
     this.alphaMasks = new Map(); // key: "state:idx" → Uint8Array (baseWidth×baseHeight)
     this.framePaths = {}; // { stateName: [nativePath, ...] } — raw FS paths for byte reads
-    this.baseWidth = 192;
-    this.baseHeight = 208;
+    this.baseWidth = SPRITE_W;
+    this.baseHeight = SPRITE_H;
     this.hitTestReady = false;
+    this.pendingOneShot = null; // queued one-shot to fire after current finishes
   }
 
   /** Pre-load all sprite frames from disk via Tauri asset protocol.
@@ -155,12 +160,18 @@ export class SpriteAnimator {
     this.showCurrentFrame();
   }
 
-  /** Trigger a one-shot animation (jumping, waving) */
+  /** Trigger a one-shot animation (jumping, waving).
+   *  If a one-shot is already playing, the new one is queued and fires
+   *  when the current animation finishes — preventing double-Stop events
+   *  from being silently swallowed. */
   triggerOneShot(state) {
     if (!ONE_SHOT_STATES.has(state)) return;
     if (!this.frames[state]) return;
-    // Don't interrupt an ongoing one-shot
-    if (ONE_SHOT_STATES.has(this.currentState)) return;
+    // Queue if a one-shot is already playing
+    if (ONE_SHOT_STATES.has(this.currentState)) {
+      this.pendingOneShot = state;
+      return;
+    }
     this.preOneShotState = this.currentState;
     this.currentState = state;
     this.currentFrameIndex = 0;
@@ -199,10 +210,9 @@ export class SpriteAnimator {
   }
 
   /** Pre-compute alpha masks for all loaded frames.
-   *  Called once at the end of loadFrames(). Fetches each frame as a blob and
-   *  loads it via an object URL so the canvas is NOT tainted (asset:// images
-   *  taint the canvas and block getImageData with a SecurityError).
-   *  Memory: ~57 frames × 192×208 ≈ 2.2 MB. */
+   *  Uses batch IPC (read_frames_batch) to read all frame bytes in a single
+   *  call, then processes them locally — much faster than 55+ individual IPC
+   *  round trips. Memory: ~57 frames × 192×208 ≈ 2.2 MB. */
   async computeAlphaMasks() {
     const canvas = document.createElement("canvas");
     canvas.width = this.baseWidth;
@@ -211,55 +221,72 @@ export class SpriteAnimator {
 
     let maskCount = 0;
     let failCount = 0;
+
     try {
-      for (const [state, frames] of Object.entries(this.frames)) {
-        const paths = this.framePaths[state] || [];
-        for (let i = 0; i < frames.length; i++) {
-          const nativePath = paths[i];
-          if (!nativePath) continue;
-          // Read raw bytes via Rust (fetch() can't read asset:// in WKWebView),
-          // build a blob URL that does NOT taint the canvas.
-          let cleanUrl;
-          try {
-            const bytes = await window.__TAURI__.core.invoke("read_file_bytes", {
-              path: nativePath,
-            });
-            // Vec<u8> arrives as a number array; normalize to Uint8Array.
-            const u8 = new Uint8Array(bytes);
-            const blob = new Blob([u8], { type: "image/png" });
-            cleanUrl = URL.createObjectURL(blob);
-          } catch {
-            failCount++;
-            continue;
+      // Collect all frame paths for a single batch IPC call
+      const allPaths = [];
+      const pathIndex = []; // [state, frameIdx] for each path
+      for (const [state, paths] of Object.entries(this.framePaths)) {
+        for (let i = 0; i < paths.length; i++) {
+          if (paths[i]) {
+            allPaths.push(paths[i]);
+            pathIndex.push([state, i]);
           }
-
-          // Load the blob into a fresh Image (untainted)
-          const cleanImg = await new Promise((resolve) => {
-            const im = new Image();
-            im.onload = () => resolve(im);
-            im.onerror = () => resolve(null);
-            im.src = cleanUrl;
-          });
-          if (!cleanImg) {
-            failCount++;
-            URL.revokeObjectURL(cleanUrl);
-            continue;
-          }
-
-          // clearRect prevents residual pixels from polluting transparent frames
-          ctx.clearRect(0, 0, this.baseWidth, this.baseHeight);
-          ctx.drawImage(cleanImg, 0, 0, this.baseWidth, this.baseHeight);
-          URL.revokeObjectURL(cleanUrl);
-
-          const imageData = ctx.getImageData(0, 0, this.baseWidth, this.baseHeight);
-          const data = imageData.data;
-          const alpha = new Uint8Array(this.baseWidth * this.baseHeight);
-          for (let j = 0, k = 3; j < alpha.length; j++, k += 4) {
-            alpha[j] = data[k];
-          }
-          this.alphaMasks.set(`${state}:${i}`, alpha);
-          maskCount++;
         }
+      }
+
+      // Batch read all frames in one IPC call (reduces 55+ IPC round trips to 1)
+      let bytesMap;
+      try {
+        bytesMap = await window.__TAURI__.core.invoke("read_frames_batch", {
+          paths: allPaths,
+        });
+      } catch (e) {
+        console.warn("[Animator] Batch read failed, hit-test disabled:", e);
+        this.hitTestReady = false;
+        return;
+      }
+
+      // Process each frame's bytes
+      for (let idx = 0; idx < pathIndex.length; idx++) {
+        const [state, i] = pathIndex[idx];
+        const nativePath = allPaths[idx];
+        const bytes = bytesMap[nativePath];
+        if (!bytes) {
+          failCount++;
+          continue;
+        }
+
+        const u8 = new Uint8Array(bytes);
+        const blob = new Blob([u8], { type: "image/png" });
+        const cleanUrl = URL.createObjectURL(blob);
+
+        // Load the blob into a fresh Image (untainted)
+        const cleanImg = await new Promise((resolve) => {
+          const im = new Image();
+          im.onload = () => resolve(im);
+          im.onerror = () => resolve(null);
+          im.src = cleanUrl;
+        });
+        if (!cleanImg) {
+          failCount++;
+          URL.revokeObjectURL(cleanUrl);
+          continue;
+        }
+
+        // clearRect prevents residual pixels from polluting transparent frames
+        ctx.clearRect(0, 0, this.baseWidth, this.baseHeight);
+        ctx.drawImage(cleanImg, 0, 0, this.baseWidth, this.baseHeight);
+        URL.revokeObjectURL(cleanUrl);
+
+        const imageData = ctx.getImageData(0, 0, this.baseWidth, this.baseHeight);
+        const data = imageData.data;
+        const alpha = new Uint8Array(this.baseWidth * this.baseHeight);
+        for (let j = 0, k = 3; j < alpha.length; j++, k += 4) {
+          alpha[j] = data[k];
+        }
+        this.alphaMasks.set(`${state}:${i}`, alpha);
+        maskCount++;
       }
 
       this.hitTestReady = maskCount > 0;
@@ -292,11 +319,18 @@ export class SpriteAnimator {
 
     this.currentFrameIndex++;
 
-    // One-shot: play full cycle then return to previous state
+    // One-shot: play full cycle then return to previous state (or fire queued one-shot)
     if (ONE_SHOT_STATES.has(this.currentState) && this.currentFrameIndex >= frames.length) {
-      this.currentState = this.preOneShotState;
-      this.preOneShotState = "idle";
-      this.currentFrameIndex = 0;
+      if (this.pendingOneShot) {
+        const next = this.pendingOneShot;
+        this.pendingOneShot = null;
+        this.currentState = next;
+        this.currentFrameIndex = 0;
+      } else {
+        this.currentState = this.preOneShotState;
+        this.preOneShotState = "idle";
+        this.currentFrameIndex = 0;
+      }
     } else {
       this.currentFrameIndex = this.currentFrameIndex % frames.length;
     }

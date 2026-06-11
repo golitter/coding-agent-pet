@@ -3,12 +3,18 @@
  * Wires up all components and handles mouse events.
  */
 
-import { SpriteAnimator } from "./animator.js";
+import { SpriteAnimator, SPRITE_W, SPRITE_H } from "./animator.js";
 import { DialogueBubble } from "./bubble.js";
 
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow, LogicalSize, LogicalPosition } = window.__TAURI__.window;
 const { listen } = window.__TAURI__.event;
+
+// ---------------------------------------------------------------------------
+// Layout constants (window padding; sprite dimensions imported from animator.js)
+// ---------------------------------------------------------------------------
+const WINDOW_PAD_W = 24;
+const WINDOW_PAD_H = 60;
 
 // ---------------------------------------------------------------------------
 // Hit-test: per-pixel click-through on transparent sprite areas
@@ -55,9 +61,9 @@ async function main() {
   const bubbleEl = document.getElementById("bubble");
   const contextMenu = document.getElementById("context-menu");
 
-  // 4. Set sprite scale — same as mac: scaledWidth = 192 * scale, scaledHeight = 208 * scale
-  const scaledWidth = 192 * config.scale;
-  const scaledHeight = 208 * config.scale;
+  // 4. Set sprite scale
+  const scaledWidth = SPRITE_W * config.scale;
+  const scaledHeight = SPRITE_H * config.scale;
   petSprite.style.width = `${scaledWidth}px`;
   petSprite.style.height = `${scaledHeight}px`;
 
@@ -109,17 +115,27 @@ async function setupWindow(config, scaledW, scaledH) {
   try {
     const appWindow = getCurrentWindow();
 
-    // Match mac PetWindow frame: w = scale*192 + 24, h = scale*208 + 60
-    const windowW = scaledW + 24;
-    const windowH = scaledH + 60;
+    const windowW = scaledW + WINDOW_PAD_W;
+    const windowH = scaledH + WINDOW_PAD_H;
 
     // Resize window
     await appWindow.setSize(new LogicalSize(windowW, windowH));
 
-    // Position at bottom-right using available screen size
+    // Position at bottom-right — use Tauri monitor API for multi-display support.
+    // Falls back to window.screen (primary display only) if unavailable.
     const margin = config.corner_margin || 20;
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
+    let screenWidth, screenHeight;
+    try {
+      const monitor = await window.__TAURI__.window.primaryMonitor();
+      if (monitor) {
+        screenWidth = monitor.size.width / monitor.scaleFactor;
+        screenHeight = monitor.size.height / monitor.scaleFactor;
+      }
+    } catch {
+      /* primaryMonitor not available — fallback below */
+    }
+    screenWidth ??= window.screen.width;
+    screenHeight ??= window.screen.height;
 
     const x = screenWidth - windowW - margin;
     const y = screenHeight - windowH - margin;
@@ -251,27 +267,14 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let pollTimerId = null;
   let solidHitCount = 0;
 
-  // Cache coordinates that don't change per frame
-  const cachedSpriteRect = petSprite.getBoundingClientRect();
-  let cachedScaleFactor = null;
-
-  async function ensureScaleFactor() {
-    if (cachedScaleFactor === null) {
-      cachedScaleFactor = await appWindow.scaleFactor();
-    }
-    return cachedScaleFactor;
-  }
-
-  // Kick off scale factor fetch (non-blocking)
-  ensureScaleFactor();
-
   // --- Coordinate helpers ---
 
-  /** Check alpha at CSS-relative coords (for normal-mode mousemove). */
+  /** Check alpha at CSS-relative coords (for normal-mode mousemove).
+   *  Uses live getBoundingClientRect() to stay correct across DPI changes. */
   function checkAlphaAtCss(cssX, cssY) {
-    const rect = cachedSpriteRect;
-    const spriteX = (cssX - rect.left) * (192 / rect.width);
-    const spriteY = (cssY - rect.top) * (208 / rect.height);
+    const rect = petSprite.getBoundingClientRect();
+    const spriteX = (cssX - rect.left) * (SPRITE_W / rect.width);
+    const spriteY = (cssY - rect.top) * (SPRITE_H / rect.height);
     return animator.getAlphaAt(animator.currentState, animator.currentFrameIndex, spriteX, spriteY);
   }
 
@@ -308,14 +311,23 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     }
   }
 
+  /** Start polling via chained setTimeout — prevents overlapping async calls
+   *  that could occur with setInterval if the IPC call takes >50ms. */
   function startPolling() {
     if (pollTimerId !== null) return;
-    pollTimerId = setInterval(pollCursor, POLL_INTERVAL_MS);
+    const tick = async () => {
+      if (!isPassThrough) return; // stopped while waiting
+      await pollCursor();
+      if (isPassThrough) {
+        pollTimerId = setTimeout(tick, POLL_INTERVAL_MS);
+      }
+    };
+    pollTimerId = setTimeout(tick, POLL_INTERVAL_MS);
   }
 
   function stopPolling() {
     if (pollTimerId !== null) {
-      clearInterval(pollTimerId);
+      clearTimeout(pollTimerId);
       pollTimerId = null;
     }
   }
@@ -333,12 +345,12 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     try {
       const [winX, winY] = await invoke("cursor_in_window");
 
-      const rect = cachedSpriteRect;
-      const spriteX = (winX - rect.left) * (192 / rect.width);
-      const spriteY = (winY - rect.top) * (208 / rect.height);
+      const rect = petSprite.getBoundingClientRect();
+      const spriteX = (winX - rect.left) * (SPRITE_W / rect.width);
+      const spriteY = (winY - rect.top) * (SPRITE_H / rect.height);
 
       // Cursor outside sprite bounds → restore
-      if (spriteX < 0 || spriteY < 0 || spriteX >= 192 || spriteY >= 208) {
+      if (spriteX < 0 || spriteY < 0 || spriteX >= SPRITE_W || spriteY >= SPRITE_H) {
         exitPassThrough();
         return;
       }
@@ -400,7 +412,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let pendingMove = null;
   document.addEventListener("mousemove", (e) => {
     // --- Hit-test: check alpha on every move (normal mode only) ---
-    if (!dragStart && !isPassThrough && hitTestEnabled && cachedScaleFactor) {
+    if (!dragStart && !isPassThrough && hitTestEnabled) {
       const alpha = checkAlphaAtCss(e.clientX, e.clientY);
       if (alpha < ENTER_THRESHOLD) {
         enterPassThrough(); // async, non-blocking
@@ -416,11 +428,15 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         isDragging = true;
         appWindow.startDragging();
+        // Start on-demand rAF loop for direction animation
+        rafId = requestAnimationFrame(processMove);
       }
     }
     pendingMove = e;
   });
 
+  // On-demand rAF loop — only runs while dragging, not permanently.
+  let rafId = null;
   const processMove = () => {
     if (pendingMove && isDragging) {
       const e = pendingMove;
@@ -433,15 +449,22 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
         animator.handleDrag(dx);
       }
     }
-    requestAnimationFrame(processMove);
+    if (isDragging) {
+      rafId = requestAnimationFrame(processMove);
+    } else {
+      rafId = null;
+    }
   };
-  requestAnimationFrame(processMove);
 
   document.addEventListener("mouseup", (e) => {
     if (e.button !== 0) return;
 
     if (isDragging) {
       animator.handleDrag(0); // signal: drag ended
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     } else if (dragStart) {
       // Click counter — increments while within the triple-click window.
       const now = performance.now();

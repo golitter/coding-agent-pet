@@ -43,6 +43,17 @@ fn make_window_transparent(window: &tauri::WebviewWindow) {
     });
 }
 
+/// RAII guard that removes the Unix socket file on Drop.
+/// Ensures cleanup on both graceful shutdown and panic.
+struct SocketGuard {
+    path: String,
+}
+impl Drop for SocketGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize tracing subscriber
@@ -123,8 +134,11 @@ pub fn run() {
             });
 
             // 10. Store config + aggregator for frontend / command access
+            let socket_path_for_guard = config.socket_path.clone();
             app.manage(session_mgr.clone());
             app.manage(config);
+            // RAII guard — removes socket file when managed state is dropped on exit
+            app.manage(SocketGuard { path: socket_path_for_guard });
 
             info!("KotoriPet ✓ Running. Press Ctrl+C to exit.");
 
@@ -136,6 +150,7 @@ pub fn run() {
             commands::quit_app,
             commands::purge_all_sessions,
             commands::read_file_bytes,
+            commands::read_frames_batch,
             commands::cursor_in_window
         ])
         .run(tauri::generate_context!())

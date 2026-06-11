@@ -2,6 +2,7 @@ use crate::aggregator::ActivityAggregator;
 use crate::config::PetConfig;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize)]
@@ -24,6 +25,19 @@ pub struct FrontendMenuItem {
     pub title: String,
     pub action: String,
     pub script: Option<String>,
+}
+
+/// Validate that a file path falls within the configured frames directory.
+/// Prevents the webview from reading arbitrary system files via IPC.
+fn validate_path_in_frames(path: &str, frames_dir: &str) -> Result<PathBuf, String> {
+    let canonical = std::fs::canonicalize(path)
+        .map_err(|e| format!("Cannot resolve path {}: {}", path, e))?;
+    let frames_canonical = std::fs::canonicalize(frames_dir)
+        .map_err(|e| format!("Cannot resolve frames_dir {}: {}", frames_dir, e))?;
+    if !canonical.starts_with(&frames_canonical) {
+        return Err("Path outside allowed frames directory".into());
+    }
+    Ok(canonical)
 }
 
 #[tauri::command]
@@ -79,8 +93,10 @@ pub fn run_applescript(script: String) -> Result<String, String> {
         // Case-insensitive: AppleScript is case-insensitive, so a literal
         // `Do Shell Script` would otherwise bypass a naive `contains("do shell script")`.
         // Backticks (`do shell script "..."` shorthand) are blocked regardless of case.
+        // Also block `do script` (Terminal.app command execution).
         let lower = script.to_lowercase();
-        if lower.contains("do shell script") || script.contains('`') {
+        if lower.contains("do shell script") || lower.contains("do script") || script.contains('`')
+        {
             return Err("Script contains disallowed patterns".into());
         }
 
@@ -102,9 +118,40 @@ pub fn run_applescript(script: String) -> Result<String, String> {
 /// computation: JS fetch() cannot read asset:// URLs in WKWebView, and <img>
 /// elements loaded from asset:// taint the canvas (blocking getImageData).
 /// Returning raw bytes lets JS build an untainted blob URL instead.
+///
+/// Path is validated to be within the configured frames_dir to prevent
+/// arbitrary file reads from the webview context.
 #[tauri::command]
-pub fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
-    std::fs::read(&path).map_err(|e| format!("Failed to read {}: {}", path, e))
+pub fn read_file_bytes(path: String, config: tauri::State<'_, PetConfig>) -> Result<Vec<u8>, String> {
+    let validated = validate_path_in_frames(&path, &config.frames_dir)?;
+    std::fs::read(&validated).map_err(|e| format!("Failed to read {}: {}", path, e))
+}
+
+/// Batch-read multiple frame PNGs in a single IPC call. Returns a map of
+/// original_path → bytes for each file successfully read and validated.
+/// Used by computeAlphaMasks to avoid 55+ individual IPC round trips.
+#[tauri::command]
+pub fn read_frames_batch(
+    paths: Vec<String>,
+    config: tauri::State<'_, PetConfig>,
+) -> Result<HashMap<String, Vec<u8>>, String> {
+    let frames_canonical = std::fs::canonicalize(&config.frames_dir)
+        .map_err(|e| format!("Cannot resolve frames_dir: {}", e))?;
+
+    let mut results = HashMap::with_capacity(paths.len());
+    for path in paths {
+        let canonical = match std::fs::canonicalize(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        if !canonical.starts_with(&frames_canonical) {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(&canonical) {
+            results.insert(path, bytes);
+        }
+    }
+    Ok(results)
 }
 
 /// Get cursor position relative to the main window's content, in logical

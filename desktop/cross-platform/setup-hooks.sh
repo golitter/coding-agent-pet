@@ -7,7 +7,7 @@ PLATFORM_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # 用 python3 从 config 读取所有配置，避免硬编码
 /usr/bin/python3 -c "
-import json, os
+import json, os, sys
 from pathlib import Path
 
 platform_dir = Path('$PLATFORM_DIR')
@@ -28,15 +28,11 @@ with open(p) as f:
 # ── Resolve paths ──
 repo_root = platform_dir.parent.parent  # desktop/cross-platform → repo
 
-def resolve(val, *parts):
-    if val is not None and isinstance(val, str) and val.strip():
-        p = os.path.expanduser(val)
-        if os.path.isabs(p):
-            return p
-        return str(repo_root / p)
-    return str(repo_root.joinpath(*parts))
+# Import shared resolve from common.py (avoids duplicating path logic)
+sys.path.insert(0, str(platform_dir / 'hooks' / 'scripts'))
+from common import resolve  # noqa: E402
 
-pet_base_dir = resolve(config.get('pet_base_dir'))
+pet_base_dir = resolve(config.get('pet_base_dir'), str(repo_root))
 hook_dir     = str(platform_dir / 'hooks')
 claude_hook  = os.path.join(hook_dir, 'pet-claude-hook.sh')
 codex_hook   = os.path.join(hook_dir, 'pet-codex-hook.sh')
