@@ -28,8 +28,6 @@ def main():
         config = json.load(f)
 
     # ── Resolve paths ──
-    repo_root = platform_dir.parent.parent  # desktop/cross-platform → repo
-
     hook_dir    = str(platform_dir / 'hooks')
     hook_script = os.path.join(hook_dir, 'pet-hook.sh')
     claude_hook = f'{hook_script} claude-code'

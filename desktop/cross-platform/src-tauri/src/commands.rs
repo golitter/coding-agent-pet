@@ -31,8 +31,8 @@ pub struct FrontendMenuItem {
 /// Validate that a file path falls within the configured frames directory.
 /// Prevents the webview from reading arbitrary system files via IPC.
 fn validate_path_in_frames(path: &str, frames_dir: &str) -> Result<PathBuf, String> {
-    let canonical = std::fs::canonicalize(path)
-        .map_err(|e| format!("Cannot resolve path {}: {}", path, e))?;
+    let canonical =
+        std::fs::canonicalize(path).map_err(|e| format!("Cannot resolve path {}: {}", path, e))?;
     let frames_canonical = std::fs::canonicalize(frames_dir)
         .map_err(|e| format!("Cannot resolve frames_dir {}: {}", frames_dir, e))?;
     if !canonical.starts_with(&frames_canonical) {
@@ -140,7 +140,10 @@ pub fn run_applescript(script: String) -> Result<String, String> {
 /// Path is validated to be within the configured frames_dir to prevent
 /// arbitrary file reads from the webview context.
 #[tauri::command]
-pub fn read_file_bytes(path: String, config: tauri::State<'_, PetConfig>) -> Result<Vec<u8>, String> {
+pub fn read_file_bytes(
+    path: String,
+    config: tauri::State<'_, PetConfig>,
+) -> Result<Vec<u8>, String> {
     let validated = validate_path_in_frames(&path, &config.frames_dir)?;
     std::fs::read(&validated).map_err(|e| format!("Failed to read {}: {}", path, e))
 }

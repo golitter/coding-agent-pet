@@ -138,7 +138,9 @@ pub fn run() {
             app.manage(session_mgr.clone());
             app.manage(config);
             // RAII guard — removes socket file when managed state is dropped on exit
-            app.manage(SocketGuard { path: socket_path_for_guard });
+            app.manage(SocketGuard {
+                path: socket_path_for_guard,
+            });
 
             info!("KotoriPet ✓ Running. Press Ctrl+C to exit.");
 

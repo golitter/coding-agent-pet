@@ -91,10 +91,7 @@ function getConfig(): PetConfig | null {
 // 路径解析（与 common.py resolve() 保持一致）
 // ────────────────────────────────────────────
 
-function resolvePath(
-  configVal: string | null | undefined,
-  autoParts: string[],
-): string {
+function resolvePath(configVal: string | null | undefined, autoParts: string[]): string {
   if (configVal && typeof configVal === "string" && configVal.trim()) {
     const expanded = configVal.startsWith("~")
       ? path.join(process.env.HOME || "/", configVal.slice(1))
