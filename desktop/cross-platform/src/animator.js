@@ -27,6 +27,13 @@ export class SpriteAnimator {
     this.timer = null;
     this.fps = 10;
     this.onFrame = null; // callback(imageElement)
+
+    // Alpha mask system for per-pixel hit testing
+    this.alphaMasks = new Map(); // key: "state:idx" → Uint8Array (baseWidth×baseHeight)
+    this.framePaths = {}; // { stateName: [nativePath, ...] } — raw FS paths for byte reads
+    this.baseWidth = 192;
+    this.baseHeight = 208;
+    this.hitTestReady = false;
   }
 
   /** Pre-load all sprite frames from disk via Tauri asset protocol.
@@ -63,10 +70,12 @@ export class SpriteAnimator {
         const state = row.state;
         if (!state || !Array.isArray(row.frames)) continue;
         const frames = [];
+        const paths = [];
         for (const absPath of row.frames) {
           // Extract just the filename — manifest paths are machine-specific.
           const basename = String(absPath).split("/").pop();
-          const url = convertFileSrc(`${framesDir}/${state}/${basename}`);
+          const nativePath = `${framesDir}/${state}/${basename}`;
+          const url = convertFileSrc(nativePath);
           const img = new Image();
           img.src = url;
           await new Promise((resolve) => {
@@ -74,17 +83,21 @@ export class SpriteAnimator {
             img.onerror = () => resolve();
           });
           frames.push(img);
+          paths.push(nativePath);
         }
         this.frames[state] = frames;
+        this.framePaths[state] = paths;
       }
     } else {
       // Fallback: legacy probe (kept so a missing manifest doesn't break the app)
       for (const state of STATES) {
         const frames = [];
+        const paths = [];
         let i = 0;
         while (true) {
           const padded = String(i).padStart(2, "0");
-          const url = convertFileSrc(`${framesDir}/${state}/${padded}.png`);
+          const nativePath = `${framesDir}/${state}/${padded}.png`;
+          const url = convertFileSrc(nativePath);
           const img = new Image();
           img.src = url;
           const loaded = await new Promise((resolve) => {
@@ -93,9 +106,11 @@ export class SpriteAnimator {
           });
           if (!loaded) break;
           frames.push(img);
+          paths.push(nativePath);
           i++;
         }
         this.frames[state] = frames;
+        this.framePaths[state] = paths;
       }
     }
 
@@ -103,6 +118,9 @@ export class SpriteAnimator {
     console.log(
       `[Animator] ✓ Loaded ${total} frames across ${Object.keys(this.frames).length} states`,
     );
+
+    // Pre-compute alpha masks for per-pixel hit testing
+    await this.computeAlphaMasks();
   }
 
   /** Start the animation loop */
@@ -178,6 +196,92 @@ export class SpriteAnimator {
         this.showCurrentFrame();
       }
     }
+  }
+
+  /** Pre-compute alpha masks for all loaded frames.
+   *  Called once at the end of loadFrames(). Fetches each frame as a blob and
+   *  loads it via an object URL so the canvas is NOT tainted (asset:// images
+   *  taint the canvas and block getImageData with a SecurityError).
+   *  Memory: ~57 frames × 192×208 ≈ 2.2 MB. */
+  async computeAlphaMasks() {
+    const canvas = document.createElement("canvas");
+    canvas.width = this.baseWidth;
+    canvas.height = this.baseHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    let maskCount = 0;
+    let failCount = 0;
+    try {
+      for (const [state, frames] of Object.entries(this.frames)) {
+        const paths = this.framePaths[state] || [];
+        for (let i = 0; i < frames.length; i++) {
+          const nativePath = paths[i];
+          if (!nativePath) continue;
+          // Read raw bytes via Rust (fetch() can't read asset:// in WKWebView),
+          // build a blob URL that does NOT taint the canvas.
+          let cleanUrl;
+          try {
+            const bytes = await window.__TAURI__.core.invoke("read_file_bytes", {
+              path: nativePath,
+            });
+            // Vec<u8> arrives as a number array; normalize to Uint8Array.
+            const u8 = new Uint8Array(bytes);
+            const blob = new Blob([u8], { type: "image/png" });
+            cleanUrl = URL.createObjectURL(blob);
+          } catch {
+            failCount++;
+            continue;
+          }
+
+          // Load the blob into a fresh Image (untainted)
+          const cleanImg = await new Promise((resolve) => {
+            const im = new Image();
+            im.onload = () => resolve(im);
+            im.onerror = () => resolve(null);
+            im.src = cleanUrl;
+          });
+          if (!cleanImg) {
+            failCount++;
+            URL.revokeObjectURL(cleanUrl);
+            continue;
+          }
+
+          // clearRect prevents residual pixels from polluting transparent frames
+          ctx.clearRect(0, 0, this.baseWidth, this.baseHeight);
+          ctx.drawImage(cleanImg, 0, 0, this.baseWidth, this.baseHeight);
+          URL.revokeObjectURL(cleanUrl);
+
+          const imageData = ctx.getImageData(0, 0, this.baseWidth, this.baseHeight);
+          const data = imageData.data;
+          const alpha = new Uint8Array(this.baseWidth * this.baseHeight);
+          for (let j = 0, k = 3; j < alpha.length; j++, k += 4) {
+            alpha[j] = data[k];
+          }
+          this.alphaMasks.set(`${state}:${i}`, alpha);
+          maskCount++;
+        }
+      }
+
+      this.hitTestReady = maskCount > 0;
+      console.log(
+        `[Animator] ✓ Computed ${maskCount} alpha masks (${failCount} failed, hitTestReady=${this.hitTestReady})`,
+      );
+    } catch (e) {
+      console.warn("[Animator] ⚠️ computeAlphaMasks failed, hit-test disabled:", e);
+      this.hitTestReady = false;
+    }
+  }
+
+  /** Look up the alpha value at a given sprite pixel coordinate.
+   *  Returns 255 (opaque) as a fail-safe when the system is not ready or
+   *  the mask is missing — this prevents the pet from becoming unclickable. */
+  getAlphaAt(state, frameIndex, x, y) {
+    if (!this.hitTestReady) return 255;
+    const mask = this.alphaMasks.get(`${state}:${frameIndex}`);
+    if (!mask) return 255;
+    const cx = Math.max(0, Math.min(this.baseWidth - 1, Math.round(x)));
+    const cy = Math.max(0, Math.min(this.baseHeight - 1, Math.round(y)));
+    return mask[cy * this.baseWidth + cx];
   }
 
   // --- Private ---

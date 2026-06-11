@@ -134,7 +134,9 @@ pub fn run() {
             commands::get_config,
             commands::run_applescript,
             commands::quit_app,
-            commands::purge_all_sessions
+            commands::purge_all_sessions,
+            commands::read_file_bytes,
+            commands::cursor_in_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running KotoriPet");

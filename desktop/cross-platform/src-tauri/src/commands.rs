@@ -97,3 +97,101 @@ pub fn run_applescript(script: String) -> Result<String, String> {
         }
     }
 }
+
+/// Read raw file bytes for a frame PNG. Used by the hit-test alpha-mask
+/// computation: JS fetch() cannot read asset:// URLs in WKWebView, and <img>
+/// elements loaded from asset:// taint the canvas (blocking getImageData).
+/// Returning raw bytes lets JS build an untainted blob URL instead.
+#[tauri::command]
+pub fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| format!("Failed to read {}: {}", path, e))
+}
+
+/// Get cursor position relative to the main window's content, in logical
+/// pixels with Y measured from the TOP of the window.
+///
+/// Uses CGEvent (Core Graphics) to read the *hardware* mouse position, NOT
+/// NSEvent.mouseLocation. Rationale: when `setIgnoreCursorEvents(true)` is
+/// active (pass-through mode), the window stops processing mouse events, so
+/// NSEvent.mouseLocation returns a STALE position (it reflects the last
+/// processed event). CGEvent polls the live hardware position regardless.
+///
+/// CG coords use top-left origin with Y down; NS coords use bottom-left with
+/// Y up. We convert using the primary screen height (H): cgY = H - nsY holds
+/// globally. Final result is window-relative, Y from top.
+#[tauri::command]
+pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        Err("cursor_in_window is macOS-only".into())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use objc::runtime::{Class, Object};
+        use objc::{msg_send, sel, sel_impl};
+
+        #[repr(C)]
+        struct CGPoint {
+            x: f64,
+            y: f64,
+        }
+        #[repr(C)]
+        struct NSSize {
+            w: f64,
+            h: f64,
+        }
+        #[repr(C)]
+        struct NSPoint {
+            x: f64,
+            y: f64,
+        }
+        #[repr(C)]
+        struct NSRect {
+            origin: NSPoint,
+            size: NSSize,
+        }
+
+        // Core Graphics C API: poll live hardware mouse position.
+        #[link(name = "CoreGraphics", kind = "framework")]
+        extern "C" {
+            fn CGEventCreate(source: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+            fn CGEventGetLocation(event: *mut std::ffi::c_void) -> CGPoint;
+            fn CFRelease(cf: *mut std::ffi::c_void);
+        }
+
+        let ns_window_ptr = window
+            .ns_window()
+            .map_err(|e| format!("ns_window: {}", e))?;
+        let ns_window: *mut Object = ns_window_ptr as *mut Object;
+
+        unsafe {
+            // Live cursor in CG global coords (origin = primary display top-left, Y down).
+            let event = CGEventCreate(std::ptr::null_mut());
+            if event.is_null() {
+                return Err("CGEventCreate returned null".into());
+            }
+            let cursor_cg: CGPoint = CGEventGetLocation(event);
+            CFRelease(event);
+
+            // Window frame in NS coords (origin = primary display bottom-left, Y up).
+            let frame: NSRect = msg_send![ns_window, frame];
+
+            // Primary screen height (NS points) for coordinate-space conversion.
+            let screen_class = Class::get("NSScreen").ok_or("NSScreen class not found")?;
+            let main_screen: *mut Object = msg_send![screen_class, mainScreen];
+            let screen_frame: NSRect = msg_send![main_screen, frame];
+            let screen_h = screen_frame.size.h;
+
+            // relX: same X origin in both spaces.
+            let rel_x = cursor_cg.x - frame.origin.x;
+            // relY from window top: cgY is Y-down from primary top; window's top
+            // edge in CG coords is (screen_h - (origin.y + size.h)). Subtract.
+            let window_top_cg = screen_h - (frame.origin.y + frame.size.h);
+            let rel_y = cursor_cg.y - window_top_cg;
+
+            Ok((rel_x, rel_y))
+        }
+    }
+}

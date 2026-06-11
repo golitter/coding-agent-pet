@@ -10,6 +10,18 @@ const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow, LogicalSize, LogicalPosition } = window.__TAURI__.window;
 const { listen } = window.__TAURI__.event;
 
+// ---------------------------------------------------------------------------
+// Hit-test: per-pixel click-through on transparent sprite areas
+// ---------------------------------------------------------------------------
+const ENTER_THRESHOLD = 10; // alpha < 10 → enter pass-through
+const EXIT_THRESHOLD = 20; // alpha >= 20 → exit pass-through (hysteresis)
+const SOLID_CONFIRM_COUNT = 2; // consecutive solid frames before exiting
+const POLL_INTERVAL_MS = 50; // polling rate while in pass-through mode
+
+// Module-level hit-test flag — shared between setupInteractions and hideAllMenus.
+// Disabled during drag / right-click menu to prevent pass-through interference.
+let hitTestEnabled = true;
+
 async function main() {
   // 1. Fetch config from Rust backend. Fall back to safe defaults so the
   //    window stays usable even if config loading fails — better than a
@@ -87,7 +99,7 @@ async function main() {
   buildContextMenu(contextMenu, config.menu_items);
 
   // 12. Setup mouse interaction handlers
-  setupInteractions(animator, contextMenu, bubble);
+  setupInteractions(animator, contextMenu, bubble, petSprite);
 
   console.log("[Main] ✓ Pet initialized");
 }
@@ -189,6 +201,10 @@ function createMenuItem(title, onClick, shortcut = "") {
 function hideAllMenus() {
   const menus = document.querySelectorAll(".context-menu");
   menus.forEach((m) => m.classList.add("hidden"));
+  // Re-enable hit-test when menu closes. Menu items use click (not mouseup),
+  // so this can't rely on the mouseup handler alone. The guard in enterPassThrough
+  // prevents re-entering pass-through before the current click completes.
+  hitTestEnabled = true;
 }
 
 function isMacPlatform() {
@@ -222,12 +238,131 @@ async function triggerRedundantCleanup(bubble) {
   }
 }
 
-/** Setup click, drag, and right-click handlers */
-function setupInteractions(animator, contextMenu, bubble) {
+/** Setup click, drag, right-click handlers, and per-pixel hit-test */
+function setupInteractions(animator, contextMenu, bubble, petSprite) {
   const appWindow = getCurrentWindow();
   let dragStart = null;
   let isDragging = false;
   const DRAG_THRESHOLD = 3;
+
+  // --- Pass-through (hit-test) state ---
+  let isPassThrough = false;
+  let applyingPassThrough = false; // async guard against rapid toggling
+  let pollTimerId = null;
+  let solidHitCount = 0;
+
+  // Cache coordinates that don't change per frame
+  const cachedSpriteRect = petSprite.getBoundingClientRect();
+  let cachedScaleFactor = null;
+
+  async function ensureScaleFactor() {
+    if (cachedScaleFactor === null) {
+      cachedScaleFactor = await appWindow.scaleFactor();
+    }
+    return cachedScaleFactor;
+  }
+
+  // Kick off scale factor fetch (non-blocking)
+  ensureScaleFactor();
+
+  // --- Coordinate helpers ---
+
+  /** Check alpha at CSS-relative coords (for normal-mode mousemove). */
+  function checkAlphaAtCss(cssX, cssY) {
+    const rect = cachedSpriteRect;
+    const spriteX = (cssX - rect.left) * (192 / rect.width);
+    const spriteY = (cssY - rect.top) * (208 / rect.height);
+    return animator.getAlphaAt(animator.currentState, animator.currentFrameIndex, spriteX, spriteY);
+  }
+
+  // --- Pass-through control ---
+  let lastExitTime = 0; // re-entry cooldown timestamp
+  const REENTRY_COOLDOWN_MS = 200;
+
+  async function enterPassThrough() {
+    if (isPassThrough || applyingPassThrough || !hitTestEnabled) return;
+    // Re-entry cooldown: prevent rapid enter/exit flicker at sprite edges
+    if (performance.now() - lastExitTime < REENTRY_COOLDOWN_MS) return;
+    applyingPassThrough = true;
+    try {
+      await appWindow.setIgnoreCursorEvents(true);
+      isPassThrough = true;
+      solidHitCount = 0;
+      startPolling();
+    } finally {
+      applyingPassThrough = false;
+    }
+  }
+
+  async function exitPassThrough() {
+    if (!isPassThrough || applyingPassThrough) return;
+    applyingPassThrough = true;
+    try {
+      stopPolling();
+      await appWindow.setIgnoreCursorEvents(false);
+      isPassThrough = false;
+      solidHitCount = 0;
+      lastExitTime = performance.now();
+    } finally {
+      applyingPassThrough = false;
+    }
+  }
+
+  function startPolling() {
+    if (pollTimerId !== null) return;
+    pollTimerId = setInterval(pollCursor, POLL_INTERVAL_MS);
+  }
+
+  function stopPolling() {
+    if (pollTimerId !== null) {
+      clearInterval(pollTimerId);
+      pollTimerId = null;
+    }
+  }
+
+  /** Poll cursor position via the Rust CGEvent command while in pass-through
+   *  mode. Restores normal mode when the cursor moves onto an opaque pixel or
+   *  leaves the window.
+   *
+   *  Why a custom Rust command: tao's `cursorPosition()` IPC hangs while
+   *  `setIgnoreCursorEvents(true)` is active, and NSEvent.mouseLocation goes
+   *  stale (the window stops processing events). CGEvent polls the live
+   *  hardware position regardless. `cursor_in_window` returns the position
+   *  relative to the window content in logical pixels, Y from top. */
+  async function pollCursor() {
+    try {
+      const [winX, winY] = await invoke("cursor_in_window");
+
+      const rect = cachedSpriteRect;
+      const spriteX = (winX - rect.left) * (192 / rect.width);
+      const spriteY = (winY - rect.top) * (208 / rect.height);
+
+      // Cursor outside sprite bounds → restore
+      if (spriteX < 0 || spriteY < 0 || spriteX >= 192 || spriteY >= 208) {
+        exitPassThrough();
+        return;
+      }
+
+      const alpha = animator.getAlphaAt(
+        animator.currentState,
+        animator.currentFrameIndex,
+        spriteX,
+        spriteY,
+      );
+
+      // Hysteresis: require EXIT_THRESHOLD + consecutive solid frames
+      if (alpha >= EXIT_THRESHOLD) {
+        solidHitCount++;
+        if (solidHitCount >= SOLID_CONFIRM_COUNT) {
+          exitPassThrough();
+        }
+      } else {
+        solidHitCount = 0;
+      }
+    } catch (e) {
+      console.warn("[HitTest] Poll error:", e);
+    }
+  }
 
   // Triple-click detection: 3 left-clicks within TRIPLE_CLICK_WINDOW_MS
   // triggers a full purge of the sessions directory (see `purge_all` in
@@ -245,6 +380,11 @@ function setupInteractions(animator, contextMenu, bubble) {
   // Drag: mousedown → mousemove with threshold → drag window + directional anim
   document.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // left button only
+    // Disable hit-test during drag to prevent pass-through interference
+    hitTestEnabled = false;
+    if (isPassThrough) {
+      exitPassThrough(); // async, fire-and-forget
+    }
     dragStart = { x: e.screenX, y: e.screenY };
     isDragging = false;
   });
@@ -259,6 +399,15 @@ function setupInteractions(animator, contextMenu, bubble) {
   // now only throttles the directional *animation*, not the drag itself.
   let pendingMove = null;
   document.addEventListener("mousemove", (e) => {
+    // --- Hit-test: check alpha on every move (normal mode only) ---
+    if (!dragStart && !isPassThrough && hitTestEnabled && cachedScaleFactor) {
+      const alpha = checkAlphaAtCss(e.clientX, e.clientY);
+      if (alpha < ENTER_THRESHOLD) {
+        enterPassThrough(); // async, non-blocking
+        return;
+      }
+    }
+
     if (!dragStart || e.button !== 0) return;
 
     if (!isDragging) {
@@ -316,11 +465,17 @@ function setupInteractions(animator, contextMenu, bubble) {
 
     dragStart = null;
     isDragging = false;
+    hitTestEnabled = true; // re-enable hit-test after drag/click
   });
 
   // Right-click → context menu
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
+    // Disable hit-test while menu is visible
+    hitTestEnabled = false;
+    if (isPassThrough) {
+      exitPassThrough();
+    }
     contextMenu.classList.remove("hidden");
     contextMenu.style.left = `${e.clientX}px`;
     contextMenu.style.top = `${e.clientY}px`;
