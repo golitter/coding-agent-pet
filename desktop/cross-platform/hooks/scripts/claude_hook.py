@@ -1,38 +1,30 @@
-"""Claude Code pet hook entry.
-
-Reads event JSON from stdin (provided by Claude Code's hook system),
-extracts fields using Claude Code's schema, and delegates to common.process_event.
-"""
+"""Claude Code pet hook entry."""
 
 import os
 import sys
-from pathlib import Path
 
 # Allow `import common` whether invoked as a script or module
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from common import process_event, read_stdin_json  # noqa: E402, I001
+from common import (  # noqa: E402, I001
+    first_present,
+    platform_dir_from_script,
+    process_event,
+    read_stdin_json,
+)
 
 
 def main():
-    # desktop/cross-platform/hooks/scripts/ → desktop/cross-platform/
-    platform_dir = str(Path(__file__).resolve().parent.parent.parent)
-
+    platform_dir = platform_dir_from_script(__file__)
     input_data = read_stdin_json()
-
-    # Claude Code uses 'hook_event_name'
-    hook_event = input_data.get('hook_event_name', '') or ''
-    session_id = input_data.get('session_id', 'unknown') or 'unknown'
-    tool_name  = input_data.get('tool_name', '') or ''
-    cwd        = input_data.get('cwd', '') or ''
 
     process_event(
         platform_dir=platform_dir,
         source='claude-code',
-        hook_event=hook_event,
-        session_id=session_id,
-        tool_name=tool_name,
-        cwd=cwd,
+        hook_event=first_present(input_data, 'hook_event_name'),
+        session_id=first_present(input_data, 'session_id', default='unknown'),
+        tool_name=first_present(input_data, 'tool_name'),
+        cwd=first_present(input_data, 'cwd'),
     )
 
 

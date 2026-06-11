@@ -18,6 +18,9 @@ cp config.example.json config.json   # 按需修改
 ./setup.sh                           # 一键：依赖 → 配置 → hooks → 编译 → 启动
 ```
 
+`setup.sh` 会自动安装 Claude Code / Codex / OpenCode 三套 hooks 集成；重复执行不会重复追加。
+其中 Codex 会自动写入 hook，并尽量启用已有 trust 记录的条目，但首次使用通常仍需要在 `/hooks` 里手动 `Trust/Enable` 一次。
+
 ## 交互
 
 | 操作 | 效果 |

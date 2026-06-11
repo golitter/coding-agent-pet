@@ -12,6 +12,17 @@ cp config.example.json config.json   # 按需修改配置
 
 `setup.sh` 自动完成：安装前端依赖 → 生成配置 → 注册 hooks → 编译 → 启动。
 
+### `setup.sh` / `setup-hooks.sh` 会做什么
+
+- 自动写入或更新三套集成：
+  - Claude Code → `~/.claude/settings.json`
+  - Codex → `~/.codex/hooks.json`
+  - OpenCode → `~/.config/opencode/plugins/pet-plugin.ts`
+- 重新执行是幂等的：脚本会先清掉自己管理的 pet hook，再写回一份标准配置，不会越跑越多
+- 对 Codex，脚本会尽量把已有 trust 记录的 pet hook 自动设成 `enabled = true`
+- 但首次使用时，Codex 往往仍需要你在 `/hooks` 里手动 `Trust/Enable` 一次，因为脚本不会凭空生成 `trusted_hash`
+- hooks 配置通常要在新会话或重启对应 CLI 后才会稳定生效
+
 ## 使用
 
 | 操作                                    | 效果                                  |
@@ -86,11 +97,14 @@ desktop/cross-platform/
 ├── hooks/                # Hook 脚本
 │   ├── pet-hook.sh           # Shell 入口 (claude-code / codex 参数分派)
 │   ├── opencode-plugin.ts    # OpenCode 插件（TS，进程内运行，setup-hooks.sh 自动部署）
+│   ├── opencode-shared.mjs   # OpenCode 共享逻辑（事件映射 / payload / IO）
 │   └── scripts/            # Python 实现
 │       ├── common.py       #   共享逻辑
 │       ├── claude_hook.py  #   Claude Code 事件处理
 │       ├── codex_hook.py   #   Codex 事件处理
-│       └── setup_hooks.py  #   Hook 注册逻辑
+│       ├── setup_hooks.py  #   Hook 注册逻辑
+│       └── test_hooks.py   #   轻量测试（事件映射 / 配置写入）
+├── hooks/tests/          # OpenCode 轻量测试（Node --test）
 └── runtime/sessions/     # 运行时状态（不入版本控制）
 ```
 
@@ -138,6 +152,12 @@ Rust 后端使用 `tracing` 框架，通过 `RUST_LOG` 环境变量控制日志�
 ```bash
 RUST_LOG=debug ./src-tauri/target/debug/kotori-pet   # 详细日志
 RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
+```
+
+### 开发测试
+
+```bash
+npm run test:hooks   # hooks 轻量测试（Python unittest + Node --test）
 ```
 
 ## 要求

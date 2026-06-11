@@ -1,18 +1,17 @@
-"""Codex pet hook entry.
+"""Codex pet hook entry."""
 
-Reads event JSON from stdin (provided by Codex's hook system),
-extracts fields using Codex's schema (with snake_case aliases),
-and delegates to common.process_event.
-"""
-
-import json
 import os
 import sys
-from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from common import process_event  # noqa: E402, I001
+from common import (  # noqa: E402, I001
+    exit_quietly,
+    first_present,
+    platform_dir_from_script,
+    process_event,
+    read_stdin_json,
+)
 
 
 # Codex hook configs use snake_case event ids, while the shared pet config
@@ -31,53 +30,38 @@ EVENT_ALIASES = {
 
 
 def main():
-    platform_dir = str(Path(__file__).resolve().parent.parent.parent)
+    platform_dir = platform_dir_from_script(__file__)
+    input_data = read_stdin_json(fallback_output='{}')
 
-    # ── Read stdin ──
-    try:
-        input_data = json.load(sys.stdin)
-    except Exception:
-        # Codex command hooks expect JSON-ish stdout even on failure
-        print('{}')
-        sys.exit(0)
-
-    # Codex accepts several event field names
-    raw_event = (
-        input_data.get('hook_event_name')
-        or input_data.get('hookEventName')
-        or input_data.get('event')
-        or input_data.get('codex_event_type')
-        or input_data.get('codexEventType')
-        or ''
+    raw_event = first_present(
+        input_data,
+        'hook_event_name',
+        'hookEventName',
+        'event',
+        'codex_event_type',
+        'codexEventType',
     )
     hook_event = EVENT_ALIASES.get(raw_event, raw_event) or ''
-
-    # Session ID: try multiple field shapes
-    session_id = (
-        input_data.get('session_id')
-        or input_data.get('sessionId')
-        or input_data.get('conversation_id')
-        or input_data.get('thread_id')
-        or 'unknown'
-    )
-
-    tool_name = input_data.get('tool_name') or input_data.get('tool') or ''
-    tool_name = tool_name or input_data.get('toolName') or ''
-    cwd       = input_data.get('cwd', '') or ''
 
     process_event(
         platform_dir=platform_dir,
         source='codex',
         hook_event=hook_event,
-        session_id=session_id,
-        tool_name=tool_name,
-        cwd=cwd,
+        session_id=first_present(
+            input_data,
+            'session_id',
+            'sessionId',
+            'conversation_id',
+            'thread_id',
+            default='unknown',
+        ),
+        tool_name=first_present(input_data, 'tool_name', 'tool', 'toolName'),
+        cwd=first_present(input_data, 'cwd'),
         extra_context={'raw_event': raw_event},
         log_path='/tmp/kotori-pet-codex-hook.log',
     )
 
-    # Codex command hooks expect JSON-ish stdout for some events
-    print('{}')
+    exit_quietly('{}')
 
 
 if __name__ == '__main__':

@@ -82,10 +82,13 @@
 |---|---|
 | [pet-hook.sh](../../desktop/cross-platform/hooks/pet-hook.sh) | Shell 入口（claude-code / codex 参数分派） |
 | [opencode-plugin.ts](../../desktop/cross-platform/hooks/opencode-plugin.ts) | OpenCode 插件（TS，进程内运行，`setup-hooks.sh` 部署到 `~/.config/opencode/plugins/`） |
+| [opencode-shared.mjs](../../desktop/cross-platform/hooks/opencode-shared.mjs) | OpenCode 共享逻辑：配置加载、事件映射、payload 构建、session/socket IO |
 | [scripts/common.py](../../desktop/cross-platform/hooks/scripts/common.py) | 共享逻辑：写 session 文件 + 推 socket |
 | [scripts/claude_hook.py](../../desktop/cross-platform/hooks/scripts/claude_hook.py) | Claude Code 事件解析 |
 | [scripts/codex_hook.py](../../desktop/cross-platform/hooks/scripts/codex_hook.py) | Codex 事件解析（snake_case → PascalCase） |
 | [scripts/setup_hooks.py](../../desktop/cross-platform/hooks/scripts/setup_hooks.py) | Hook 注册逻辑（由 `setup-hooks.sh` 内联调用） |
+| [scripts/test_hooks.py](../../desktop/cross-platform/hooks/scripts/test_hooks.py) | Python 轻量测试：Codex 事件别名、hook 配置写入、Codex enable 行为 |
+| [tests/opencode-shared.test.mjs](../../desktop/cross-platform/hooks/tests/opencode-shared.test.mjs) | Node 轻量测试：OpenCode 事件映射、payload、配置回退逻辑 |
 
 ---
 
@@ -142,11 +145,15 @@
 ./setup.sh             # 全流程：依赖 → 配置 → hooks → 编译 → 启动
 ./setup-hooks.sh       # 单独配置 Claude Code + Codex + OpenCode hooks
 ./build-and-run.sh     # 单独编译并重启渲染器
+npm run test:hooks     # hooks 轻量测试（Python unittest + Node --test）
 npx tauri dev          # 开发热重载
 npx tauri build        # 生产构建
 npm run lint           # eslint + prettier 检查
 npm run lint:fix       # 自动修复
 ```
+
+`setup-hooks.sh` 是幂等的：每次会先清掉它自己管理的 pet hook，再写回一份标准配置，因此不会重复追加。
+对于 Codex，它会自动写入 `~/.codex/hooks.json`，并尝试把已有 `trusted_hash` 的 pet hook 状态补成 `enabled = true`；首次使用通常仍需在 `/hooks` 中手动 `Trust/Enable` 一次。
 
 日志级别：`RUST_LOG={error,warn,info,debug,trace}`，默认 `info`。
 

@@ -1,134 +1,60 @@
-"""KotoriPet Hook 配置脚本。
-
-配置 Claude Code / Codex 的 hook 条目，部署 OpenCode 插件。
-由 setup-hooks.sh 调用。
-"""
+"""Configure pet hooks for Claude Code, Codex, and OpenCode."""
 
 import json
 import os
 import re
 import shutil
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 
-def main():
-    platform_dir = Path(sys.argv[1])
-    config_path = str(platform_dir / 'config.json')
-    example_path = str(platform_dir / 'config.example.json')
+CLAUDE_EVENTS = [
+    'Notification', 'PermissionRequest', 'PostToolUse', 'PreCompact',
+    'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'StopFailure',
+    'SubagentStop', 'UserPromptSubmit',
+]
 
-    if os.path.exists(config_path):
-        p = config_path
-    elif os.path.exists(example_path):
-        p = example_path
-    else:
-        print('[setup-hooks] No config found', flush=True)
-        sys.exit(1)
+CODEX_EVENTS = [
+    'Notification', 'PermissionRequest', 'PostToolUse', 'PreToolUse',
+    'SessionStart', 'Stop', 'StopFailure', 'SubagentStop', 'UserPromptSubmit',
+]
 
-    with open(p) as f:
-        config = json.load(f)
-
-    # ── Resolve paths ──
-    hook_dir    = str(platform_dir / 'hooks')
-    hook_script = os.path.join(hook_dir, 'pet-hook.sh')
-    claude_hook = f'{hook_script} claude-code'
-    codex_hook  = f'{hook_script} codex'
-
-    hooks_config   = config.get('hooks', {})
-    claude_settings = os.path.expanduser(hooks_config.get('claude_code_settings', '~/.claude/settings.json'))
-    codex_settings  = os.path.expanduser(hooks_config.get('codex_hooks', '~/.codex/hooks.json'))
-
-    # ── Event lists ──
-    CLAUDE_EVENTS = [
-        'Notification', 'PermissionRequest', 'PostToolUse', 'PreCompact',
-        'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'StopFailure',
-        'SubagentStop', 'UserPromptSubmit',
-    ]
-
-    CODEX_EVENTS = [
-        'Notification', 'PermissionRequest', 'PostToolUse', 'PreToolUse',
-        'SessionStart', 'Stop', 'StopFailure', 'SubagentStop', 'UserPromptSubmit',
-    ]
-
-    # Old paths to clean up (from previous versions)
-    OLD_PATHS = [
-        'kotori-desktop-pet/hooks/pet-claude-hook.sh',
-        'kotori-desktop-pet/hooks/pet-codex-hook.sh',
-        'desktop/mac/hooks/pet-claude-hook.sh',
-        'desktop/mac/hooks/pet-codex-hook.sh',
-        'hooks/pet-claude-hook.sh',
-        'hooks/pet-codex-hook.sh',
-        'pet-hook.sh claude-code',
-        'pet-hook.sh codex',
-        'pet-codex-hook.sh',
-    ]
-
-    # ── Claude Code & Codex ──
-    setup_platform(claude_settings, claude_hook, CLAUDE_EVENTS, 'Claude Code', OLD_PATHS)
-    setup_platform(codex_settings, codex_hook, CODEX_EVENTS, 'Codex', OLD_PATHS)
-    enable_codex_pet_hooks(codex_settings, codex_hook, CODEX_EVENTS)
-    warn_untrusted_codex_hooks(codex_settings, codex_hook, CODEX_EVENTS)
-
-    # ── OpenCode ──
-    setup_opencode(platform_dir, hooks_config)
-
-    print()
-    print('✅ Hook 配置完成！')
-    print(f'   Claude Code: {claude_settings}')
-    print(f'   Codex:       {codex_settings}')
-    print('   Codex 提醒: 如宠物仍无反应，请在 Codex 中运行 /hooks 并 Trust/Enable pet hook。')
-    print('   Codex 提醒: hooks 配置通常在新会话/重启后加载；当前已打开的会话可能不会立即生效。')
+LEGACY_HOOK_FRAGMENTS = [
+    'kotori-desktop-pet/hooks/pet-claude-hook.sh',
+    'kotori-desktop-pet/hooks/pet-codex-hook.sh',
+    'desktop/mac/hooks/pet-claude-hook.sh',
+    'desktop/mac/hooks/pet-codex-hook.sh',
+    'hooks/pet-claude-hook.sh',
+    'hooks/pet-codex-hook.sh',
+    'pet-hook.sh claude-code',
+    'pet-hook.sh codex',
+    'pet-codex-hook.sh',
+]
 
 
-def setup_platform(settings_path, hook_cmd, events, platform_name, old_paths):
-    """Register pet hook entries in Claude Code / Codex settings."""
-    print(f'📋 配置 {platform_name} hooks...')
+@dataclass(frozen=True)
+class HookTarget:
+    name: str
+    settings_path: str
+    command: str
+    events: list[str]
 
+
+def load_json(path, default=None):
     try:
-        with open(settings_path, 'r') as f:
-            settings = json.load(f)
+        with open(path, 'r') as file_obj:
+            return json.load(file_obj)
     except FileNotFoundError:
-        settings = {}
+        return {} if default is None else default
 
-    if 'hooks' not in settings:
-        settings['hooks'] = {}
 
-    # Remove old pet hook entries
-    for event_name in list(settings['hooks'].keys()):
-        filtered = []
-        for entry in settings['hooks'][event_name]:
-            keep = True
-            if 'hooks' in entry:
-                for h in entry['hooks']:
-                    cmd = h.get('command', '')
-                    for old in old_paths:
-                        if old in cmd:
-                            keep = False
-                            break
-                    # Also remove current path to avoid duplicates
-                    if hook_cmd in cmd:
-                        keep = False
-            if keep:
-                filtered.append(entry)
-        settings['hooks'][event_name] = filtered
-
-    # Add new pet hook
-    for event_name in events:
-        if event_name not in settings['hooks']:
-            settings['hooks'][event_name] = []
-        settings['hooks'][event_name].append({
-            'hooks': [{
-                'command': hook_cmd,
-                'type': 'command'
-            }]
-        })
-
-    # Atomic write: write to tmp file first, then rename
-    tmp_path = settings_path + '.tmp'
+def atomic_write(path, content):
+    tmp_path = f'{path}.tmp'
     try:
-        with open(tmp_path, 'w') as f:
-            json.dump(settings, f, indent=2, ensure_ascii=False)
-        os.replace(tmp_path, settings_path)
+        with open(tmp_path, 'w') as file_obj:
+            file_obj.write(content)
+        os.replace(tmp_path, path)
     except Exception:
         try:
             os.remove(tmp_path)
@@ -136,7 +62,99 @@ def setup_platform(settings_path, hook_cmd, events, platform_name, old_paths):
             pass
         raise
 
-    print(f'  ✓ 已配置 {len(events)} 个 {platform_name} hook 事件')
+
+def atomic_write_json(path, payload):
+    atomic_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def load_app_config(platform_dir):
+    config_path = platform_dir / 'config.json'
+    example_path = platform_dir / 'config.example.json'
+
+    if config_path.exists():
+        return load_json(config_path), config_path
+    if example_path.exists():
+        return load_json(example_path), example_path
+
+    print('[setup-hooks] No config found', flush=True)
+    sys.exit(1)
+
+
+def is_managed_pet_command(command, expected_command):
+    fragments = LEGACY_HOOK_FRAGMENTS + [expected_command]
+    return any(fragment in command for fragment in fragments)
+
+
+def filter_out_pet_hooks(entries, expected_command):
+    cleaned_entries = []
+    for entry in entries:
+        hooks = entry.get('hooks', [])
+        managed_hook_found = any(
+            is_managed_pet_command(hook.get('command', ''), expected_command)
+            for hook in hooks
+        )
+        if not managed_hook_found:
+            cleaned_entries.append(entry)
+    return cleaned_entries
+
+
+def install_event_hooks(settings, target):
+    hooks_section = settings.setdefault('hooks', {})
+
+    for event_name, entries in list(hooks_section.items()):
+        hooks_section[event_name] = filter_out_pet_hooks(entries, target.command)
+
+    for event_name in target.events:
+        hooks_section.setdefault(event_name, []).append({
+            'hooks': [{
+                'command': target.command,
+                'type': 'command',
+            }]
+        })
+
+
+def setup_platform(target):
+    """Register the pet hook in Claude Code or Codex settings."""
+    print(f'更新 {target.name} hooks...')
+    settings = load_json(target.settings_path, default={})
+    install_event_hooks(settings, target)
+    atomic_write_json(target.settings_path, settings)
+    print(f'  已写入 {len(target.events)} 个事件到 {target.settings_path}')
+
+
+def main():
+    platform_dir = Path(sys.argv[1])
+    config, config_source = load_app_config(platform_dir)
+
+    hook_dir = str(platform_dir / 'hooks')
+    hook_script = os.path.join(hook_dir, 'pet-hook.sh')
+    claude_hook = f'{hook_script} claude-code'
+    codex_hook = f'{hook_script} codex'
+
+    hooks_config = config.get('hooks', {})
+    claude_settings = os.path.expanduser(hooks_config.get('claude_code_settings', '~/.claude/settings.json'))
+    codex_settings = os.path.expanduser(hooks_config.get('codex_hooks', '~/.codex/hooks.json'))
+
+    print(f'使用配置文件: {config_source}')
+
+    targets = [
+        HookTarget('Claude Code', claude_settings, claude_hook, CLAUDE_EVENTS),
+        HookTarget('Codex', codex_settings, codex_hook, CODEX_EVENTS),
+    ]
+
+    for target in targets:
+        setup_platform(target)
+
+    enable_codex_pet_hooks(codex_settings, codex_hook, CODEX_EVENTS)
+    warn_untrusted_codex_hooks(codex_settings, codex_hook, CODEX_EVENTS)
+    setup_opencode(platform_dir, hooks_config)
+
+    print()
+    print('Hook 配置完成。')
+    print(f'  Claude Code 配置: {claude_settings}')
+    print(f'  Codex 配置:       {codex_settings}')
+    print('  如果 Codex 里的宠物还没反应，请在 Codex 中运行 /hooks，把 pet hook Trust/Enable 一次。')
+    print('  新写入的 hooks 往往要在新会话或重启后才会稳定生效。')
 
 
 def normalize_codex_event(event_name):
@@ -152,8 +170,8 @@ def codex_hooks_state_path(settings_path):
 def load_codex_pet_hook_positions(settings_path, hook_cmd, events):
     """Find matcher/hook indexes for this exact pet hook command."""
     try:
-        settings = json.loads(Path(settings_path).read_text())
-    except (OSError, json.JSONDecodeError):
+        settings = load_json(settings_path, default={})
+    except json.JSONDecodeError:
         settings = {}
 
     positions = {}
@@ -228,19 +246,8 @@ def enable_codex_pet_hooks(settings_path, hook_cmd, events):
     if enabled_count == 0:
         return
 
-    tmp_path = str(config_toml) + '.tmp'
-    try:
-        with open(tmp_path, 'w') as f:
-            f.write(text)
-        os.replace(tmp_path, config_toml)
-    except Exception:
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        raise
-
-    print(f'  ✓ 已自动启用 {enabled_count} 个 Codex pet hook 状态')
+    atomic_write(config_toml, text)
+    print(f'  已自动启用 {enabled_count} 个 Codex hook 状态')
 
 
 def warn_untrusted_codex_hooks(settings_path, hook_cmd, events):
@@ -249,7 +256,7 @@ def warn_untrusted_codex_hooks(settings_path, hook_cmd, events):
     try:
         text = Path(config_toml).read_text()
     except OSError:
-        print('  ⚠ Codex config.toml 不存在；首次启动 Codex 后请运行 /hooks 信任宠物 hook')
+        print('  Codex 的 config.toml 还不存在；先启动一次 Codex，再到 /hooks 里信任 pet hook 即可。')
         return
 
     positions = load_codex_pet_hook_positions(settings_path, hook_cmd, events)
@@ -272,9 +279,9 @@ def warn_untrusted_codex_hooks(settings_path, hook_cmd, events):
             missing.append(event_name)
 
     if missing:
-        print('  ⚠ Codex hook 已写入，但以下事件尚未在 /hooks 中启用/信任:')
+        print('  Codex hook 已写入，但下面这些事件还没有在 /hooks 中启用或信任:')
         print('    ' + ', '.join(missing))
-        print('    请在 Codex 输入 /hooks，逐项 Trust/Enable 这个命令:')
+        print('    请在 Codex 输入 /hooks，逐项 Trust/Enable 这条命令:')
         print(f'    {hook_cmd}')
 
 
@@ -288,10 +295,10 @@ def setup_opencode(platform_dir, hooks_config):
     companion  = os.path.join(opencode_plugins_dir, '.kotori-pet-config-dir')
 
     if not os.path.exists(src_plugin):
-        print('  ⚠ OpenCode 插件源码不存在，跳过:', src_plugin)
+        print(f'OpenCode 插件源码不存在，已跳过: {src_plugin}')
         return
 
-    print('📋 配置 OpenCode 插件...')
+    print('部署 OpenCode 插件...')
     os.makedirs(opencode_plugins_dir, exist_ok=True)
 
     # 复制插件（源文件名 opencode-plugin.ts → 部署名 pet-plugin.ts）
@@ -301,8 +308,8 @@ def setup_opencode(platform_dir, hooks_config):
     with open(companion, 'w') as f:
         f.write(str(platform_dir))
 
-    print(f'  ✓ 插件已部署: {dst_plugin}')
-    print(f'  ✓ 配置文件:   {companion}')
+    print(f'  插件已部署到: {dst_plugin}')
+    print(f'  配置文件已写入: {companion}')
 
 
 if __name__ == '__main__':

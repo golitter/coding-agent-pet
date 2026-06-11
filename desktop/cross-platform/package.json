@@ -7,6 +7,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "build:app": "tauri build --bundles app",
+    "test:hooks": "uv run python -m unittest hooks/scripts/test_hooks.py && node --test hooks/tests/*.test.mjs",
     "lint": "eslint src && prettier --check .",
     "lint:fix": "eslint --fix src && prettier --write .",
     "format": "prettier --write .",

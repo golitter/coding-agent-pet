@@ -1,8 +1,8 @@
 #!/bin/bash
-# KotoriPet (Tauri) Hook 配置脚本
-# 自动将 pet hook 添加到 Claude Code 和 Codex 的 settings 中，部署 OpenCode 插件
+# Configure Claude Code / Codex / OpenCode hooks for Kotori Pet.
 set -euo pipefail
 
 PLATFORM_DIR="$(cd "$(dirname "$0")" && pwd)"
+PYTHON_BIN="/usr/bin/python3"
 
-/usr/bin/python3 "$PLATFORM_DIR/hooks/scripts/setup_hooks.py" "$PLATFORM_DIR"
+"$PYTHON_BIN" "$PLATFORM_DIR/hooks/scripts/setup_hooks.py" "$PLATFORM_DIR"

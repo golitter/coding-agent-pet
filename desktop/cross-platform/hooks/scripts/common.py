@@ -1,9 +1,4 @@
-"""Shared logic for Claude Code / Codex pet hooks.
-
-Both hook entry scripts (claude_hook.py, codex_hook.py) call into this module
-to avoid duplicating the ~130 lines of config loading, session file management,
-and socket push logic.
-"""
+"""Shared helpers for pet hook scripts."""
 
 import json
 import os
@@ -13,67 +8,115 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def read_stdin_json():
-    """Read event JSON from stdin; silently exit on failure."""
+DEFAULT_STATE = {'state': 'idle', 'dialogue': ''}
+POST_TOOL_STATE = {'state': 'running', 'dialogue': '处理中...'}
+
+
+def exit_quietly(output=None):
+    """Exit without surfacing hook errors to the parent tool."""
+    if output is not None:
+        print(output)
+    sys.exit(0)
+
+
+def read_stdin_json(fallback_output=None):
+    """Read JSON from stdin; exit quietly when the hook payload is unusable."""
     try:
         return json.load(sys.stdin)
     except Exception:
-        sys.exit(0)
+        exit_quietly(fallback_output)
+
+
+def first_present(payload, *keys, default=''):
+    """Return the first non-empty value among candidate keys."""
+    for key in keys:
+        value = payload.get(key)
+        if value not in (None, ''):
+            return value
+    return default
+
+
+def platform_dir_from_script(script_file):
+    """Resolve desktop/cross-platform from hooks/scripts/*.py."""
+    return str(Path(script_file).resolve().parent.parent.parent)
+
+
+def load_json_file(path):
+    with open(path, 'r') as file_obj:
+        return json.load(file_obj)
 
 
 def load_config(platform_dir):
-    """Load config.json (or fallback to config.example.json).
+    """Load config.json, falling back to config.example.json."""
+    platform_path = Path(platform_dir).resolve()
+    repo_root = platform_path.parent.parent
 
-    Returns: (config_dict, repo_root_path)
-    """
-    platform_dir = Path(platform_dir).resolve()
-    repo_root = platform_dir.parent.parent  # desktop/cross-platform → repo root
-
-    config_path = str(platform_dir / 'config.json')
-    if not os.path.exists(config_path):
-        config_path = str(platform_dir / 'config.example.json')
+    config_path = platform_path / 'config.json'
+    if not config_path.exists():
+        config_path = platform_path / 'config.example.json'
 
     try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-    except Exception as e:
-        print(f'[pet-hook] Cannot load config {config_path}: {e}', file=sys.stderr)
-        sys.exit(0)
+        config = load_json_file(config_path)
+    except Exception as exc:
+        print(f'[pet-hook] Cannot load config {config_path}: {exc}', file=sys.stderr)
+        exit_quietly()
 
     return config, str(repo_root)
 
 
-def resolve(config_val, repo_root, *auto_parts):
-    """Resolve a path: use config value if non-null string, else join auto_parts from repo root."""
-    if config_val is not None and isinstance(config_val, str) and config_val.strip():
-        p = os.path.expanduser(config_val)
-        if os.path.isabs(p):
-            return p
-        return str(Path(repo_root) / p)
-    return str(Path(repo_root).joinpath(*auto_parts))
+def resolve_path(config_value, repo_root, *fallback_parts):
+    """Resolve configured paths relative to repo root when needed."""
+    if isinstance(config_value, str) and config_value.strip():
+        expanded = os.path.expanduser(config_value)
+        if os.path.isabs(expanded):
+            return expanded
+        return str(Path(repo_root) / expanded)
+    return str(Path(repo_root).joinpath(*fallback_parts))
+
+
+def atomic_write_json(path, payload):
+    """Write JSON atomically via a temp file."""
+    tmp_path = f'{path}.tmp'
+    with open(tmp_path, 'w') as file_obj:
+        json.dump(payload, file_obj, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
 
 
 def write_session(session_file, payload):
-    """Atomic write of session JSON: write to .tmp then rename."""
+    """Best-effort session file update."""
     try:
-        tmp_file = session_file + '.tmp'
-        with open(tmp_file, 'w') as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_file, session_file)
+        atomic_write_json(session_file, payload)
     except Exception:
-        # Best-effort — hook failures must not block the AI tool
         pass
 
 
 def push_socket(socket_path, payload):
-    """Best-effort push of payload JSON to Unix socket. Silent on failure."""
+    """Best-effort push of payload JSON to Unix socket."""
     try:
-        if os.path.exists(socket_path):
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(0.1)
-            sock.connect(socket_path)
-            sock.sendall(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
-            sock.close()
+        if not os.path.exists(socket_path):
+            return
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(0.1)
+        sock.connect(socket_path)
+        sock.sendall(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+        sock.close()
+    except Exception:
+        pass
+
+
+def resolve_state(hook_event, state_map):
+    """Map a hook event to pet state and dialogue."""
+    if hook_event == 'PostToolUse':
+        return POST_TOOL_STATE.copy()
+    return dict(state_map.get(hook_event, DEFAULT_STATE))
+
+
+def append_debug_log(log_path, **fields):
+    if not log_path:
+        return
+    try:
+        with open(log_path, 'a') as log_file:
+            log_file.write(json.dumps(fields, ensure_ascii=False) + '\n')
     except Exception:
         pass
 
@@ -94,27 +137,27 @@ def process_event(platform_dir, source, hook_event, session_id, tool_name,
     """
     config, repo_root = load_config(platform_dir)
 
-    pet_id           = config.get('pet_id', 'kotori-minami')
-    sessions_dir     = resolve(config.get('sessions_dir'), repo_root,
-                                'desktop', 'cross-platform', 'runtime', 'sessions')
-    socket_path      = config.get('socket_path') or '/tmp/kotori-pet.sock'
-    state_map        = config.get('state_map', {})
-    terminal_events  = set(config.get('terminal_events', ['StopFailure']))
+    pet_id = config.get('pet_id', 'kotori-minami')
+    sessions_dir = resolve_path(
+        config.get('sessions_dir'),
+        repo_root,
+        'desktop',
+        'cross-platform',
+        'runtime',
+        'sessions',
+    )
+    socket_path = config.get('socket_path') or '/tmp/kotori-pet.sock'
+    state_map = config.get('state_map', {})
+    terminal_events = set(config.get('terminal_events', ['StopFailure']))
 
     os.makedirs(sessions_dir, exist_ok=True)
 
-    # ── Resolve state and dialogue ──
-    if hook_event == 'PostToolUse':
-        pet_state = 'running'
-        dialogue  = '处理中...'
-    else:
-        mapping   = state_map.get(hook_event, {'state': 'idle', 'dialogue': ''})
-        pet_state = mapping.get('state', 'idle')
-        dialogue  = mapping.get('dialogue', '')
+    state_info = resolve_state(hook_event, state_map)
+    pet_state = state_info.get('state', 'idle')
+    dialogue = state_info.get('dialogue', '')
 
     is_terminal = hook_event in terminal_events
 
-    # ── Build payload ──
     context = {
         'cwd':       cwd,
         'tool_name': tool_name,
@@ -134,30 +177,17 @@ def process_event(platform_dir, source, hook_event, session_id, tool_name,
         'context':    context,
     }
 
-    # ── Debug log (optional) ──
-    if log_path:
-        try:
-            with open(log_path, 'a') as log:
-                log.write(json.dumps({
-                    'time':          datetime.now(timezone.utc).isoformat(),
-                    'event':         hook_event,
-                    'session_id':    session_id,
-                    'state':         pet_state,
-                    'dialogue':      dialogue,
-                    'socket_exists': os.path.exists(socket_path),
-                    'sessions_dir':  sessions_dir,
-                }, ensure_ascii=False) + '\n')
-        except Exception:
-            pass
+    append_debug_log(
+        log_path,
+        time=datetime.now(timezone.utc).isoformat(),
+        event=hook_event,
+        session_id=session_id,
+        state=pet_state,
+        dialogue=dialogue,
+        socket_exists=os.path.exists(socket_path),
+        sessions_dir=sessions_dir,
+    )
 
-    # ── Session file lifecycle ──
     session_file = os.path.join(sessions_dir, session_id + '.json')
-
-    # Delayed cleanup after Stop/terminal events is handled by the Rust backend
-    # (ActivityAggregator schedules the removal on receiving this payload), NOT here.
-    # Hook scripts are short-lived processes — a threading.Timer here would be
-    # killed when the process exits, before it could ever fire.
     write_session(session_file, payload)
-
-    # ── Best-effort socket push ──
     push_socket(socket_path, payload)
