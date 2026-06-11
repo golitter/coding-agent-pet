@@ -184,25 +184,30 @@ OpenCode 启动时运行 `bun install` 安装依赖，之后插件可直接 impo
 export const MyPlugin = async (ctx) => {
   return {
     "tool.execute.before": async (input, output) => {
-      // input.tool — 工具名（如 "bash", "read"）
-      // output.args — 可修改的工具参数
+      // input.tool      — 工具名（如 "bash", "read"）
+      // input.sessionID — 会话 ID（注意大写 D）
+      // input.callID    — 调用 ID
+      // output.args     — 可修改的工具参数
       if (input.tool === "bash") {
         console.log("即将执行:", output.args.command);
       }
     },
     "tool.execute.after": async (input, output) => {
-      // 工具执行完毕后的回调
+      // input: { tool, sessionID, callID }
+      // output: { title, output, metadata }
     },
   };
 };
 ```
 
-- **`input`**（只读）：包含工具名、调用参数等上下文
+- **`input`**（只读）：`{ tool, sessionID, callID }` — 包含工具名、会话 ID、调用 ID
 - **`output`**（可修改）：可以修改工具参数、阻断执行等
+
+> **注意**：`sessionID` 是大写 D（不是 `sessionId`）。这是 OpenCode 插件 API 的命名约定，JS 区分大小写。
 
 ### 事件型 Hook（event）
 
-通用事件订阅，接收 `({ event })` 参数：
+通用事件订阅，接收 `({ event })` 参数。事件对象结构为 `{ id, type, properties }`，session ID 位于 `event.properties.sessionID`：
 
 ```typescript
 export const NotificationPlugin = async ({ $ }) => {
@@ -215,6 +220,8 @@ export const NotificationPlugin = async ({ $ }) => {
   };
 };
 ```
+
+> **注意**：事件中的 session ID 在 `event.properties.sessionID`（嵌套在 `properties` 里），不是 `event.sessionID`。`event.id` 是**事件 ID**（`evt_xxx` 格式），不是会话 ID（`ses_xxx` 格式）。
 
 ### 环境注入 Hook（shell.env）
 

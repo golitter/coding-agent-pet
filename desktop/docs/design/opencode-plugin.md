@@ -100,10 +100,23 @@ OpenCode 事件
   "pascalEvent": "Stop",
   "state": "jumping",
   "dialogue": "搞定啦！✨",
-  "sessionId": "abc123...",
+  "sessionId": "ses_149004ab5ffe...",
   "isTerminal": false
 }
 ```
+
+## Session ID 提取
+
+OpenCode 的两种 hook 提供 session ID 的方式不同：
+
+| Hook 类型 | session ID 来源 | 字段路径 |
+|---|---|---|
+| `tool.execute.before` | 第一个参数对象 | `input.sessionID`（大写 D） |
+| `tool.execute.after` | 第一个参数对象 | `input.sessionID`（大写 D） |
+| `event` handler | 事件对象的 properties | `event.properties.sessionID` |
+
+> **常见陷阱**：字段名是 `sessionID`（大写 D），不是 `sessionId`（小写 d）。JS 区分大小写，写错会导致永远匹配不到，fallback 到 `"unknown"`。
+> **事件 ID vs 会话 ID**：事件对象有 `event.id`（格式 `evt_xxx`），这是事件 ID 不是会话 ID。会话 ID 格式为 `ses_xxx`，位于 `event.properties.sessionID`。
 
 ## 与现有系统的关系
 

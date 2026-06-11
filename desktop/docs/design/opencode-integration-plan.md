@@ -40,7 +40,9 @@ Kotori Pet 已通过 shell 脚本 + Python hooks 实现了对 Claude Code 和 Co
   - **Fire-and-forget**：**不 await socket push**。OpenCode 插件在主进程内运行（非独立进程），await socket push 意味着每个事件处理都被阻塞到 socket 操作完成。当宠物未启动时，100ms 超时会累积为可感知延迟。将 socket push 放入 `setTimeout(cb, 0)` 脱离当前 microtask，或直接调用不 await
   - 在回调中调用 `socket.destroy()` 确保连接不泄漏
 - **事件映射**：复用已有的 `OPENCODE_TO_PET` 映射表（dot.case → PascalCase）和 state resolution 逻辑
-  - **session_id 提取**：生产版保持与调试版一致的 fallback 链：`input?.sessionId ?? input?.session_id ?? "unknown"`（tool 拦截型）和 `event.sessionId ?? event.session_id ?? event.id ?? "unknown"`（事件型），与 `codex_hook.py` 的多字段 fallback 策略一致
+  - **session_id 提取**：OpenCode 的 tool hook 第一个参数直接包含 `sessionID`（大写 D）：`input.sessionID`；事件型 hook 的 session ID 位于 `event.properties.sessionID`。无需多字段 fallback 链
+    - **常见陷阱**：字段名是 `sessionID`（大写 D），不是 `sessionId`（小写 d），JS 区分大小写，写错会导致永远匹配不到
+    - **事件 ID vs 会话 ID**：`event.id` 是事件 ID（`evt_xxx` 格式），不是会话 ID（`ses_xxx` 格式），不可用作 session_id
 - **UserPromptSubmit 缺失**：OpenCode 没有 `message.send` 事件（消息类事件仅有 `message.updated`、`message.removed`、`message.part.updated`、`message.part.removed`），也没有任何事件能可靠地表示"用户提交了 prompt"。**不映射 `UserPromptSubmit`**。用户发送消息后，宠物会从 `SessionStart`/`waving` 状态过渡到第一次 `PreToolUse`/`running`，中间有短暂 `waving` 状态。这与 Claude Code/Codex 的行为有细微差异，但属于 OpenCode API 限制
 - **错误隔离**：所有逻辑包裹在 try/catch 中，插件异常不影响 OpenCode 运行
 - **多会话隔离**：OpenCode 支持多会话（`session.created` 可触发多次）。每次事件使用独立的 `session_id` 构建文件路径（`<sessions_dir>/<session_id>.json`），天然隔离。Socket 推送每次新建连接，无需排队
