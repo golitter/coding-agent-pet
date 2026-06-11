@@ -1,29 +1,32 @@
-# Agent Hooks — Claude Code & Codex 驱动虚拟宠物的方式
+# Agent Hooks — Claude Code & Codex & OpenCode 驱动虚拟宠物的方式
 
-本目录详细描述 Claude Code 和 OpenAI Codex 如何通过各自的 Hooks 系统驱动 Kotori 虚拟宠物的渲染。
+本目录详细描述 Claude Code、OpenAI Codex 和 OpenCode 如何通过各自的 Hooks / 插件系统驱动 Kotori 虚拟宠物的渲染。
 
-两个平台的事件机制不同，但宠物端通过 `common.py` 统一处理，最终效果一致。
+Claude Code 和 Codex 的事件机制不同，但宠物端通过 `common.py` 统一处理，最终效果一致。OpenCode 采用不同的插件架构（JS/TS 进程内模块），尚未实现宠物集成，文档作为参考储备。
 
 ## 文件
 
 | 文件 | 内容 |
 |---|---|
-| [events.md](events.md) | 所有 Hook 事件类型 + 两个平台各自行为的对照表（速查） |
+| [events.md](events.md) | 所有 Hook 事件类型 + 平台行为对照表（速查） |
 | [claude-code.md](claude-code.md) | Claude Code 如何通过 Hooks 触发宠物状态变化 |
 | [codex.md](codex.md) | OpenAI Codex 如何通过 Hooks 触发宠物状态变化 |
+| [opencode.md](opencode.md) | OpenCode 插件系统参考（事件、Hook API、潜在集成方案） |
 
-## 两个平台的对比
+## 三个平台的对比
 
-| | Claude Code | Codex |
-|---|---|---|
-| **配置文件** | `~/.claude/settings.json` | `~/.codex/hooks.json` 或 `config.toml` |
-| **Hook 入口** | `pet-claude-hook.sh` → `claude_hook.py` | `pet-codex-hook.sh` → `codex_hook.py` |
-| **事件字段名** | `hook_event_name` (PascalCase) | `hook_event_name` / `event` / `codex_event_type` (snake_case) |
-| **注册事件数** | 11 个 | 9 个 |
-| **独有事件** | `PreCompact`, `SessionEnd` | — |
-| **信任机制** | 启动时快照，修改需在 `/hooks` 审查 | 非托管 hook 需 review & trust，按 hash 校验 |
-| **输出格式** | exit 0 静默；exit 2 阻断 | 期望 stdout 返回 `{}` |
-| **调试日志** | — | `/tmp/kotori-pet-codex-hook.log` |
+| | Claude Code | Codex | OpenCode |
+|---|---|---|---|
+| **机制** | 命令行脚本 + stdin JSON | 命令行脚本 + stdin JSON | JS/TS 插件模块，进程内运行 |
+| **配置文件** | `~/.claude/settings.json` | `~/.codex/hooks.json` 或 `config.toml` | `.opencode/plugins/` 目录或 `opencode.json` |
+| **Hook 入口** | `pet-claude-hook.sh` → `claude_hook.py` | `pet-codex-hook.sh` → `codex_hook.py` | 导出 Plugin 函数 → 返回 Hooks 对象 |
+| **事件字段名** | `hook_event_name` (PascalCase) | `hook_event_name` / `event` / `codex_event_type` (snake_case) | 事件名即对象键名（如 `session.idle`） |
+| **注册事件数** | 11 个 | 9 个 | 20+ 个事件类别 |
+| **独有事件** | `PreCompact`, `SessionEnd` | — | `session.compacted`, 自定义工具, `shell.env` |
+| **信任机制** | 启动时快照，修改需在 `/hooks` 审查 | 非托管 hook 需 review & trust，按 hash 校验 | — |
+| **输出格式** | exit 0 静默；exit 2 阻断 | 期望 stdout 返回 `{}` | 函数参数 `(input, output)`，throw 阻断 |
+| **自定义工具** | ❌ | ❌ | ✅ `tool()` API |
+| **宠物集成** | ✅ 已实现 | ✅ 已实现 | ❌ 待实现（详见 opencode.md） |
 
 ## 共享的处理流程
 
