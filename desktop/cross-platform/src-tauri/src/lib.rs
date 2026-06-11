@@ -151,7 +151,8 @@ pub fn run() {
             commands::purge_all_sessions,
             commands::read_file_bytes,
             commands::read_frames_batch,
-            commands::cursor_in_window
+            commands::cursor_in_window,
+            commands::js_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running KotoriPet");

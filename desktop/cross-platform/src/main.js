@@ -24,6 +24,17 @@ const EXIT_THRESHOLD = 20; // alpha >= 20 → exit pass-through (hysteresis)
 const SOLID_CONFIRM_COUNT = 2; // consecutive solid frames before exiting
 const POLL_INTERVAL_MS = 80; // polling rate while in pass-through mode (80ms ≈ 12Hz)
 
+/** Bridge JS → Rust log for diagnostics. Appears in RUST_LOG output. */
+function jsLog(level, tag, msg) {
+  invoke("js_log", { level, tag, msg }).catch(() => {});
+}
+const MAX_EXIT_RETRIES = 3; // retries for setIgnoreCursorEvents(false) on failure
+const EXIT_RETRY_BASE_MS = 100; // backoff base: 100ms, 200ms, 300ms
+const RECOVERY_POLL_MS = 500; // recovery polling interval when normal exit fails
+const DRAG_TIMEOUT_MS = 5000; // max drag duration before force-reset
+const HEALTH_CHECK_MS = 3000; // periodic state consistency check
+const MAX_CONSECUTIVE_POLL_ERRORS = 10; // poll error threshold to force exit
+
 // Module-level hit-test flag — shared between setupInteractions and hideAllMenus.
 // Disabled during drag / right-click menu to prevent pass-through interference.
 let hitTestEnabled = true;
@@ -81,6 +92,7 @@ async function main() {
 
   // 8. Start animation
   animator.start();
+  jsLog("info", "Main", `Animator started — hitTestReady=${animator.hitTestReady}`);
 
   // 9. Show initial dialogue
   bubble.show("准备好了～", 0, "idle");
@@ -108,6 +120,7 @@ async function main() {
   setupInteractions(animator, contextMenu, bubble, petSprite);
 
   console.log("[Main] ✓ Pet initialized");
+  jsLog("info", "Main", `Pet initialized — scale=${config.scale} fps=${config.fps}`);
 }
 
 /** Set window size and position — matches mac PetWindow dimensions exactly */
@@ -271,8 +284,12 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // --- Pass-through (hit-test) state ---
   let isPassThrough = false;
   let applyingPassThrough = false; // async guard against rapid toggling
+  let pendingExit = false; // deferred exit flag for race conditions
   let pollTimerId = null;
+  let recoveryPollTimerId = null; // recovery polling when normal exit fails
   let solidHitCount = 0;
+  let consecutivePollErrors = 0; // tracks consecutive IPC errors in pollCursor
+  let dragTimerId = null; // drag safety timeout
 
   // --- Coordinate helpers ---
 
@@ -296,33 +313,76 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     applyingPassThrough = true;
     try {
       await appWindow.setIgnoreCursorEvents(true);
+      // If exit was requested while we were awaiting, undo the enter immediately
+      if (pendingExit) {
+        pendingExit = false;
+        try {
+          await appWindow.setIgnoreCursorEvents(false);
+        } catch {}
+        jsLog("warn", "HitTest", "enter cancelled — pendingExit was set");
+        return; // stay in normal mode
+      }
       isPassThrough = true;
       solidHitCount = 0;
+      consecutivePollErrors = 0;
       startPolling();
+      jsLog("info", "HitTest", "ENTER pass-through");
     } finally {
       applyingPassThrough = false;
     }
   }
 
   async function exitPassThrough() {
-    if (!isPassThrough || applyingPassThrough) return;
+    if (!isPassThrough) return;
+    // If another enter/exit is in progress, defer instead of silently dropping.
+    if (applyingPassThrough) {
+      pendingExit = true;
+      return;
+    }
     applyingPassThrough = true;
     try {
       stopPolling();
-      await appWindow.setIgnoreCursorEvents(false);
-      isPassThrough = false;
-      solidHitCount = 0;
-      lastExitTime = performance.now();
+      // Retry with backoff: the IPC call can fail transiently.
+      for (let attempt = 0; attempt < MAX_EXIT_RETRIES; attempt++) {
+        try {
+          await appWindow.setIgnoreCursorEvents(false);
+          isPassThrough = false;
+          solidHitCount = 0;
+          consecutivePollErrors = 0;
+          lastExitTime = performance.now();
+          jsLog("info", "HitTest", "EXIT pass-through");
+          return; // success
+        } catch (e) {
+          console.warn(`[HitTest] exitPassThrough attempt ${attempt + 1} failed:`, e);
+          if (attempt < MAX_EXIT_RETRIES - 1) {
+            await new Promise((r) => setTimeout(r, EXIT_RETRY_BASE_MS * (attempt + 1)));
+          }
+        }
+      }
+      // All retries failed — start recovery polling as last resort
+      console.error("[HitTest] exitPassThrough failed after retries, starting recovery polling");
+      jsLog("error", "HitTest", "exit FAILED after retries — recovery polling started");
+      startRecoveryPolling();
     } finally {
       applyingPassThrough = false;
+      // Process deferred exit if it was requested while we were running
+      if (pendingExit && isPassThrough) {
+        pendingExit = false;
+        exitPassThrough();
+      }
     }
   }
 
   /** Start polling via chained setTimeout — prevents overlapping async calls
-   *  that could occur with setInterval if the IPC call takes >50ms. */
+   *  that could occur with setInterval if the IPC call takes >80ms. */
   function startPolling() {
     if (pollTimerId !== null) return;
+    stopRecoveryPolling(); // clean up any lingering recovery timer
     const tick = async () => {
+      // Clear ID first — we're executing right now, so no pending timeout exists.
+      // This prevents a stale pollTimerId from blocking the next startPolling() call
+      // after an exitPassThrough() sets isPassThrough=false mid-chain.
+      pollTimerId = null;
       if (!isPassThrough) return; // stopped while waiting
       await pollCursor();
       if (isPassThrough) {
@@ -336,6 +396,41 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     if (pollTimerId !== null) {
       clearTimeout(pollTimerId);
       pollTimerId = null;
+    }
+  }
+
+  /** Recovery polling — last-resort safety net. Runs when normal exitPassThrough
+   *  fails after all retries. Periodically forces setIgnoreCursorEvents(false)
+   *  until it succeeds. Slower interval than normal polling to avoid overhead. */
+  function startRecoveryPolling() {
+    if (recoveryPollTimerId !== null) return;
+    const tick = async () => {
+      if (!isPassThrough) {
+        recoveryPollTimerId = null;
+        return;
+      }
+      try {
+        await appWindow.setIgnoreCursorEvents(false);
+        isPassThrough = false;
+        solidHitCount = 0;
+        consecutivePollErrors = 0;
+        lastExitTime = performance.now();
+        console.log("[HitTest] Recovery exit succeeded");
+        jsLog("info", "HitTest", "Recovery exit succeeded");
+        recoveryPollTimerId = null;
+        return;
+      } catch (e) {
+        console.warn("[HitTest] Recovery exit failed:", e);
+      }
+      recoveryPollTimerId = setTimeout(tick, RECOVERY_POLL_MS);
+    };
+    recoveryPollTimerId = setTimeout(tick, RECOVERY_POLL_MS);
+  }
+
+  function stopRecoveryPolling() {
+    if (recoveryPollTimerId !== null) {
+      clearTimeout(recoveryPollTimerId);
+      recoveryPollTimerId = null;
     }
   }
 
@@ -379,7 +474,12 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
         solidHitCount = 0;
       }
     } catch (e) {
+      consecutivePollErrors++;
       console.warn("[HitTest] Poll error:", e);
+      if (consecutivePollErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+        console.error("[HitTest] Too many consecutive poll errors, forcing exit");
+        exitPassThrough();
+      }
     }
   }
 
@@ -399,6 +499,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // Drag: mousedown → mousemove with threshold → drag window + directional anim
   document.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // left button only
+    jsLog("info", "Mouse", `down isPassThrough=${isPassThrough} hitTest=${hitTestEnabled}`);
     // Disable hit-test during drag to prevent pass-through interference
     hitTestEnabled = false;
     if (isPassThrough) {
@@ -406,6 +507,25 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     }
     dragStart = { x: e.screenX, y: e.screenY };
     isDragging = false;
+    // Safety timeout: if drag state persists beyond DRAG_TIMEOUT_MS (e.g.
+    // mouseup lost after OS-level startDragging), force-reset it.
+    clearTimeout(dragTimerId);
+    dragTimerId = setTimeout(() => {
+      if (isDragging || dragStart) {
+        console.warn("[Drag] Timeout — force-resetting stuck drag state");
+        jsLog("warn", "Drag", "Timeout — force-resetting stuck drag state");
+        if (isDragging) {
+          animator.handleDrag(0);
+          if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
+        }
+        dragStart = null;
+        isDragging = false;
+        hitTestEnabled = true;
+      }
+    }, DRAG_TIMEOUT_MS);
   });
 
   // mousemove can fire at 120Hz on ProMotion / high-precision trackpads.
@@ -434,6 +554,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       const dy = e.screenY - dragStart.y;
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         isDragging = true;
+        jsLog("info", "Drag", "startDragging called");
         appWindow.startDragging();
         // Start on-demand rAF loop for direction animation
         rafId = requestAnimationFrame(processMove);
@@ -465,6 +586,8 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
   document.addEventListener("mouseup", (e) => {
     if (e.button !== 0) return;
+    clearTimeout(dragTimerId);
+    jsLog("info", "Mouse", `up isDragging=${isDragging} dragStart=${!!dragStart}`);
 
     if (isDragging) {
       animator.handleDrag(0); // signal: drag ended
@@ -538,6 +661,57 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       invoke("quit_app").catch((e) => console.error("[Keyboard] quit_app failed:", e));
     }
   });
+
+  // --- Fix 4b: window focus recovery for stuck drag state ---
+  // After OS-level startDragging(), mouseup may not reach JS. Window refocus
+  // (which happens after native drag completes) is a reliable signal to reset.
+  // IMPORTANT: Only check isDragging (not dragStart). On macOS, clicking an
+  // unfocused window fires: mousedown → focus (3ms later) → mouseup. If we
+  // checked dragStart too, every first click on an unfocused window would be
+  // swallowed — dragStart is set on every mousedown, not just actual drags.
+  window.addEventListener("focus", () => {
+    if (isDragging) {
+      console.log("[Drag] Reset stuck drag state on window focus");
+      jsLog("warn", "Drag", "Reset stuck drag state on window focus");
+      animator.handleDrag(0);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      clearTimeout(dragTimerId);
+      dragStart = null;
+      isDragging = false;
+      hitTestEnabled = true;
+    }
+  });
+
+  // --- Fix 5: Global health check (catch-all safety net) ---
+  // Periodically verify state consistency and force-recover from any stuck state.
+  setInterval(() => {
+    // Pass-through stuck: isPassThrough=true but no polling running
+    if (isPassThrough && !applyingPassThrough) {
+      if (pollTimerId === null && recoveryPollTimerId === null) {
+        console.warn("[HealthCheck] Pass-through with no active polling — forcing exit");
+        jsLog("warn", "HealthCheck", "pass-through stuck with no polling — forcing exit");
+        exitPassThrough();
+      }
+    }
+    // Inconsistent drag state (should never happen, but catch it)
+    if ((isDragging || dragStart) && hitTestEnabled) {
+      // hitTestEnabled should be false during any drag/click sequence
+      // If it's true while dragStart is set, the mouseup was lost
+      console.warn("[HealthCheck] Inconsistent drag/hitTest state — resetting drag");
+      if (isDragging) {
+        animator.handleDrag(0);
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+      }
+      dragStart = null;
+      isDragging = false;
+    }
+  }, HEALTH_CHECK_MS);
 }
 
 // Start

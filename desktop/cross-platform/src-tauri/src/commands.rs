@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tracing::info;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FrontendConfig {
@@ -274,5 +275,16 @@ pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), Stri
 
             Ok((rel_x, rel_y))
         }
+    }
+}
+
+/// Bridge JS console → Rust log. Lets the frontend write diagnostic messages
+/// that appear in the same stream as Rust-side logs (stdout / RUST_LOG).
+#[tauri::command]
+pub fn js_log(level: String, tag: String, msg: String) {
+    match level.as_str() {
+        "error" => tracing::error!("[JS:{}]: {}", tag, msg),
+        "warn" => tracing::warn!("[JS:{}]: {}", tag, msg),
+        _ => info!("[JS:{}]: {}", tag, msg),
     }
 }
