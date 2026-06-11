@@ -18,6 +18,7 @@ desktop/
 │   │   └── src/                #     main/lib/config/commands/aggregator/watcher
 │   ├── hooks/                  #   Hook 脚本
 │   │   ├── pet-hook.sh                 # shell wrapper (claude-code / codex)
+│   │   ├── opencode-plugin.ts          # OpenCode 插件（TS，进程内运行）
 │   │   └── scripts/            #   Python 实现 (common + claude_hook + codex_hook)
 │   ├── runtime/sessions/       #   运行时会话状态（不入 git）
 │   ├── config.example.json     #   配置模板
@@ -30,7 +31,7 @@ desktop/
     ├── spritesheet.md          #   精灵图规格（55 帧）
     ├── design/                 #   设计文档
     │   └── hit-test.md         #     透明像素点击穿透
-    ├── agent-hooks/            #   Hook 协议（events / claude-code / codex）
+    ├── agent-hooks/            #   Hook 协议（events / claude-code / codex / opencode）
     └── bugfix/                 #   Bugfix 计划
 ```
 

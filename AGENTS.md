@@ -1,6 +1,6 @@
 # 🐦 Kotori Pet
 
-基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）的跨平台桌面宠物。像素风南琴梨（Kotori Minami）跟随 Claude Code / Codex 的生命周期事件切换动画与气泡台词。
+基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）的跨平台桌面宠物。像素风南琴梨（Kotori Minami）跟随 Claude Code / Codex / OpenCode 的生命周期事件切换动画与气泡台词。
 
 > 技术参考详见 [docs/reference/details.md](docs/reference/details.md)
 
@@ -35,7 +35,7 @@ cp config.example.json config.json   # 按需修改
 | 单击宠物 | 跳跃 🎉 |
 | 三连击（800ms 内） | 清空所有会话 🧹 |
 | 拖动 | 移动位置（方向奔跑动画） |
-| 右键 | 菜单：Codex / VS Code / 关闭 |
+| 右键 | 菜单：Codex / OpenCode / VS Code / 关闭 |
 
 ## 状态优先级
 

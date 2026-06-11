@@ -1,5 +1,9 @@
 # OpenCode 宠物插件 — 设计文档
 
+## 状态
+
+**已实现生产版本**。生产版插件位于 `desktop/cross-platform/hooks/opencode-plugin.ts`，包含完整的 session 文件写入 + Unix socket 推送功能。本文档中的调试版源码保留在 `opencode-plugin.ts`（本目录）作为参考。
+
 ## 背景
 
 Kotori Pet 已通过 Hooks 系统支持 Claude Code 和 OpenAI Codex 的生命周期事件驱动宠物动画。OpenCode 采用不同的插件架构——JS/TS 模块在进程内运行，而非 Claude Code/Codex 的"命令行脚本 + stdin JSON"模式。
@@ -10,13 +14,16 @@ Kotori Pet 已通过 Hooks 系统支持 Claude Code 和 OpenAI Codex 的生命�
 
 | 文件 | 说明 |
 |---|---|
-| [opencode-plugin.ts](opencode-plugin.ts) | 插件源码（独立调试版） |
-| `~/.config/opencode/plugins/pet-plugin.ts` | 运行时位置（全局） |
+| [opencode-plugin.ts](opencode-plugin.ts) | 调试版源码（console.log 输出，保留参考） |
+| [../../cross-platform/hooks/opencode-plugin.ts](../../cross-platform/hooks/opencode-plugin.ts) | **生产版源码**（session 文件 + socket 推送） |
+| `~/.config/opencode/plugins/pet-plugin.ts` | 运行时位置（全局，由 setup-hooks.sh 自动部署） |
 
-部署：
+部署（自动）：
 
 ```bash
-cp desktop/docs/design/opencode-plugin.ts ~/.config/opencode/plugins/pet-plugin.ts
+cd desktop/cross-platform && ./setup-hooks.sh
+# 自动复制 → ~/.config/opencode/plugins/pet-plugin.ts
+# 自动写入 .kotori-pet-config-dir
 ```
 
 ## 架构
@@ -33,11 +40,11 @@ OpenCode 事件
                                               │
                                               ▼
                                     resolveState() 查表
-                                    STATE_MAP → { state, dialogue }
+                                    config.json state_map → { state, dialogue }
                                               │
                                               ▼
-                                    console.log 输出（调试版）
-                                    未来：写 session 文件 + 推 Unix socket
+                                    异步写 session 文件（原子 rename）
+                                    + Unix socket 推送（fire-and-forget）
 ```
 
 ## 事件映射
@@ -82,7 +89,7 @@ OpenCode 事件
 
 ## 调试输出格式
 
-每个事件触发时输出一行 JSON：
+调试版每个事件触发时输出一行 JSON（生产版不再输出调试日志，改为写 session 文件 + 推 socket）：
 
 ```json
 {
@@ -98,35 +105,23 @@ OpenCode 事件
 }
 ```
 
-插件初始化时输出：
-
-```json
-{
-  "ts": "2026-06-11T12:34:56.789Z",
-  "plugin": "kotori-pet",
-  "msg": "initialized",
-  "project": "pet",
-  "directory": "/path/to/project",
-  "worktree": "/path/to/worktree"
-}
-```
-
 ## 与现有系统的关系
 
-当前版本为**独立调试版**，只做事件捕获 + 日志输出，不连接宠物后端。未来集成时需增加：
+生产版插件已实现完整集成：
 
-1. **读 `config.json`** — 复用 `state_map`、`terminal_events`、`socket_path`、`sessions_dir`
-2. **写 session 文件** — 原子写入（`.tmp` + `rename`），格式与 Python hooks 一致
-3. **推 Unix socket** — 连接 `/tmp/kotori-pet.sock`，发送相同 payload
+1. **读 `config.json`** — 通过同伴文件 `~/.config/opencode/plugins/.kotori-pet-config-dir` 定位 platform dir，加载 `state_map`、`terminal_events`、`socket_path`、`sessions_dir`
+2. **异步写 session 文件** — `fs.promises.writeFile(.tmp)` + `fs.promises.rename(.tmp, target)` 原子写入，格式与 Python hooks 一致
+3. **推 Unix socket** — `node:net.createConnection()`，fire-and-forget，100ms 超时
 
-这三个步骤加上后，插件即成为与 `claude_hook.py` / `codex_hook.py` 等价的事件源。
+插件已成为与 `claude_hook.py` / `codex_hook.py` 等价的事件源。Rust 后端无需任何修改（source-agnostic 设计）。
 
 ## 测试方法
 
-1. 部署插件到全局目录（见上方）
-2. 启动 OpenCode TUI：`opencode`
-3. 输入任意 prompt，观察 console 输出
-4. 验证事件映射链路：`rawEvent → pascalEvent → state → dialogue`
+1. 运行 `cd desktop/cross-platform && ./setup-hooks.sh` — 确认输出包含 OpenCode 部署成功
+2. 确认 `~/.config/opencode/plugins/pet-plugin.ts` 和 `.kotori-pet-config-dir` 文件已创建
+3. 启动宠物应用 (`./build-and-run.sh`)
+4. 启动 OpenCode TUI，发送 prompt
+5. 观察宠物状态变化：waving → running → jumping/failed
 
 ## 参考
 

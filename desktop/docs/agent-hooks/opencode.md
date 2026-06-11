@@ -367,65 +367,43 @@ export const MyPlugin = async ({ client }) => {
 
 ---
 
-## 九、潜在宠物集成方案
+## 九、宠物集成（Production Integration）
 
-> 以下为设计草案，尚未实现。
+> 已实现。生产版插件位于 `desktop/cross-platform/hooks/opencode-plugin.ts`，由 `setup-hooks.sh` 自动部署到 `~/.config/opencode/plugins/pet-plugin.ts`。
 
-OpenCode 的插件在进程内运行，无法像 Claude Code / Codex 那样通过 shell 脚本 → Python → Unix socket 的路径推送宠物状态。可行的集成方案：
+OpenCode 的插件在进程内运行（Bun 运行时），采用与 Claude Code/Codex 等价的文件系统 + Unix socket 方案：
 
-### 方案 A：HTTP 推送
+1. **Config 加载**：从同伴文件 `~/.config/opencode/plugins/.kotori-pet-config-dir` 读取 `desktop/cross-platform/` 路径，加载 `config.json` 获取 `state_map`、`sessions_dir`、`socket_path`、`terminal_events`
+2. **异步写入 session 文件**：`fs.promises.writeFile(.tmp)` + `fs.promises.rename(.tmp, target)` 原子写入，格式与 `common.py` 完全一致
+3. **Unix socket 推送**：`node:net` 的 `createConnection()`，fire-and-forget（不 await），100ms 超时，失败静默
+4. **错误隔离**：所有逻辑包裹在 try/catch 中，插件异常不影响 OpenCode 运行
 
-```typescript
-export const PetPlugin: Plugin = async (ctx) => {
-  const PET_SOCKET = "http://localhost:17321/event";
+### 部署
 
-  const pushEvent = async (state: string, sessionId: string, dialogue: string) => {
-    await fetch(PET_SOCKET, {
-      method: "POST",
-      body: JSON.stringify({ state, session_id: sessionId, dialogue }),
-    });
-  };
-
-  return {
-    event: async ({ event }) => {
-      if (event.type === "session.created") {
-        await pushEvent("waving", event.sessionId, "嗨！小鸟来啦～");
-      }
-      if (event.type === "session.idle") {
-        await pushEvent("jumping", event.sessionId, "搞定啦！✨");
-      }
-      if (event.type === "session.error") {
-        await pushEvent("failed", event.sessionId, "呜...出了点问题");
-      }
-    },
-    "tool.execute.before": async (input, output) => {
-      await pushEvent("running", input.sessionId, "执行中...");
-    },
-    "tool.execute.after": async (input, output) => {
-      await pushEvent("running", input.sessionId, "处理中...");
-    },
-  };
-};
+```bash
+cd desktop/cross-platform && ./setup-hooks.sh
+# 自动复制 opencode-plugin.ts → ~/.config/opencode/plugins/pet-plugin.ts
+# 自动写入 .kotori-pet-config-dir 同伴文件
 ```
 
-### 方案 B：文件系统（与现有架构对齐）
+### 事件映射
 
-沿用 `sessions/` 目录 + Unix socket 的方式，通过 Bun 的 `$` API 写文件和推 socket：
+| OpenCode 事件 | PascalCase | 宠物 state |
+|---|---|---|
+| `session.created` | `SessionStart` | `waving` |
+| `session.idle` | `Stop` | `jumping` |
+| `session.error` | `StopFailure` | `failed` |
+| `session.deleted` | `SessionEnd` | `waving` |
+| `session.compacted` | `PreCompact` | `waiting` |
+| `permission.asked` | `PermissionRequest` | `waiting` |
+| `tool.execute.before` | `PreToolUse` | `running` |
+| `tool.execute.after` | `PostToolUse` | `running` |
+| `question` 工具 (before) | `QuestionAsked` | `waiting` |
 
-```typescript
-export const PetPlugin: Plugin = async ({ $, directory }) => {
-  const SESSIONS_DIR = "/path/to/desktop/cross-platform/runtime/sessions";
+### 已知限制
 
-  return {
-    event: async ({ event }) => {
-      if (event.type === "session.created") {
-        await $`echo '${JSON.stringify({ state: "waving", dialogue: "嗨！" })}' > ${SESSIONS_DIR}/${event.sessionId}.json`;
-      }
-      // ...
-    },
-  };
-};
-```
+- **无 `UserPromptSubmit` 映射**：OpenCode API 无此事件，用户发消息后宠物保持 `waving` 直到首次 `PreToolUse`
+- **同步 I/O 避免**：使用 `fs.promises.*` 异步版本，避免阻塞 Bun 主进程事件循环
 
 ---
 

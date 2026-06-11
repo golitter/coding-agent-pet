@@ -25,7 +25,8 @@
   },
   "hooks": {
     "claude_code_settings": "~/.claude/settings.json",
-    "codex_hooks": "~/.codex/hooks.json"
+    "codex_hooks": "~/.codex/hooks.json",
+    "opencode_plugins_dir": "~/.config/opencode/plugins"
   },
   "terminal_events": ["StopFailure", "SessionEnd"],
   "state_map": {
@@ -38,7 +39,8 @@
     "PermissionRequest": { "state": "waiting", "dialogue": "需要你的授权～" },
     "SubagentStop": { "state": "idle", "dialogue": "" },
     "PreCompact": { "state": "waiting", "dialogue": "整理一下记忆..." },
-    "SessionEnd": { "state": "waving", "dialogue": "下次见！♪" }
+    "SessionEnd": { "state": "waving", "dialogue": "下次见！♪" },
+    "QuestionAsked": { "state": "waiting", "dialogue": "需要你的选择～" }
   },
   "menu": {
     "items": [

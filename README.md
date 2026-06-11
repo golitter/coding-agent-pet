@@ -1,6 +1,6 @@
 # 🐦 Kotori Pet
 
-一只住在桌面上的像素风南琴梨（Kotori Minami）。她跟随 Claude Code / Codex 的生命周期事件切换动画与气泡台词。
+一只住在桌面上的像素风南琴梨（Kotori Minami）。她跟随 Claude Code / Codex / OpenCode 的生命周期事件切换动画与气泡台词。
 
 基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）构建。
 
@@ -25,12 +25,12 @@ cp config.example.json config.json   # 按需修改
 | 单击 | 跳跃 🎉 |
 | 三连击（800ms 内） | 清空所有会话 🧹 |
 | 拖动 | 移动位置（方向奔跑动画） |
-| 右键 | 菜单：Codex / VS Code / 关闭 |
+| 右键 | 菜单：Codex / OpenCode / VS Code / 关闭 |
 
 ## 架构
 
 ```
-Claude Code / Codex → hook 脚本 → session 文件 + Unix Socket → Tauri 渲染器
+Claude Code / Codex / OpenCode → hook 脚本/插件 → session 文件 + Unix Socket → Tauri 渲染器
                                                                 ├── Rust: 多会话聚合 + 双通道监听
                                                                 └── JS: 精灵动画 + 对话气泡
 ```
