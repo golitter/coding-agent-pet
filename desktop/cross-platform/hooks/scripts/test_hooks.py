@@ -1,5 +1,6 @@
 """Lightweight tests for hook scripts."""
 
+import importlib
 import json
 import sys
 import tempfile
@@ -11,8 +12,8 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-import codex_hook
-import setup_hooks
+codex_hook = importlib.import_module('codex_hook')
+setup_hooks = importlib.import_module('setup_hooks')
 
 
 def call_quietly(func, *args, **kwargs):

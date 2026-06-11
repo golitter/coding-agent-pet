@@ -8,7 +8,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 CLAUDE_EVENTS = [
     'Notification', 'PermissionRequest', 'PostToolUse', 'PreCompact',
     'PreToolUse', 'SessionEnd', 'SessionStart', 'Stop', 'StopFailure',
