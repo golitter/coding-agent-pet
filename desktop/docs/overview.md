@@ -17,7 +17,7 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
 └───────────┼─────────────────────────────────┼─────────────────┘
             │ stdin JSON                      │ stdin JSON
             ▼                                 ▼
-   pet-claude-hook.sh                pet-codex-hook.sh
+   pet-hook.sh claude-code           pet-hook.sh codex
             │                                 │
             └────────────┬────────────────────┘
                          ▼
@@ -69,8 +69,7 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
         ├── build-and-run.sh           #   编译并启动脚本
         ├── package.json               #   Node.js 前端依赖
         ├── hooks/                     #   Hook 脚本
-        │   ├── pet-claude-hook.sh     #     Claude Code 入口 (shell wrapper)
-        │   ├── pet-codex-hook.sh      #     Codex 入口 (shell wrapper)
+        │   ├── pet-hook.sh             #     Shell 入口 (claude-code / codex)
         │   └── scripts/               #     Python 实现
         │       ├── common.py          #       共享逻辑
         │       ├── claude_hook.py     #       Claude Code 事件处理

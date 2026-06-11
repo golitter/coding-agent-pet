@@ -19,7 +19,7 @@ Claude Code 的 hooks 配置写在 `~/.claude/settings.json` 中：
       {
         "hooks": [
           {
-            "command": "/path/to/desktop/cross-platform/hooks/pet-claude-hook.sh",
+            "command": "/path/to/desktop/cross-platform/hooks/pet-hook.sh claude-code",
             "type": "command"
           }
         ]
@@ -126,14 +126,14 @@ Claude Code 通过 stdin 传递 JSON，每个事件的字段略有不同。
 
 ## 三、宠物 Hook 处理流程
 
-### 入口：pet-claude-hook.sh → claude_hook.py
+### 入口：pet-hook.sh claude-code → claude_hook.py
 
 ```
 Claude Code 触发 hook
         │
         │ stdin JSON
         ▼
-pet-claude-hook.sh
+pet-hook.sh claude-code
         │
         │ /usr/bin/python3 scripts/claude_hook.py
         ▼
@@ -282,7 +282,7 @@ t=10s   (2s timer fires)              session 文件被删除                →
 
 | 文件 | 职责 |
 |---|---|
-| `hooks/pet-claude-hook.sh` | Shell 入口，调用 Python |
+| `hooks/pet-hook.sh` | Shell 入口 (claude-code / codex)，调用 Python |
 | `hooks/scripts/claude_hook.py` | 解析 Claude Code stdin JSON |
 | `hooks/scripts/common.py` | 共享逻辑：配置加载、状态映射、socket 推送 |
 | `setup-hooks.sh` | 自动注册 hook 到 `~/.claude/settings.json` |

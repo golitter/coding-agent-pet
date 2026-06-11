@@ -13,6 +13,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def read_stdin_json():
+    """Read event JSON from stdin; silently exit on failure."""
+    try:
+        return json.load(sys.stdin)
+    except Exception:
+        sys.exit(0)
+
+
 def load_config(platform_dir):
     """Load config.json (or fallback to config.example.json).
 

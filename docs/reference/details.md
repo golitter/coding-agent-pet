@@ -75,8 +75,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| [pet-claude-hook.sh](../../desktop/cross-platform/hooks/pet-claude-hook.sh) | Claude Code hook 入口（shell wrapper） |
-| [pet-codex-hook.sh](../../desktop/cross-platform/hooks/pet-codex-hook.sh) | Codex hook 入口（shell wrapper） |
+| [pet-hook.sh](../../desktop/cross-platform/hooks/pet-hook.sh) | Shell 入口（claude-code / codex 参数分派） |
 | [scripts/common.py](../../desktop/cross-platform/hooks/scripts/common.py) | 共享逻辑：写 session 文件 + 推 socket |
 | [scripts/claude_hook.py](../../desktop/cross-platform/hooks/scripts/claude_hook.py) | Claude Code 事件解析 |
 | [scripts/codex_hook.py](../../desktop/cross-platform/hooks/scripts/codex_hook.py) | Codex 事件解析（snake_case → PascalCase） |

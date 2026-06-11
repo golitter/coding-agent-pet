@@ -17,7 +17,7 @@ desktop/
 │   ├── src-tauri/              #   后端 (Rust)
 │   │   └── src/                #     main/lib/config/commands/aggregator/watcher
 │   ├── hooks/                  #   Hook 脚本
-│   │   ├── pet-{claude,codex}-hook.sh   # shell wrapper
+│   │   ├── pet-hook.sh                 # shell wrapper (claude-code / codex)
 │   │   └── scripts/            #   Python 实现 (common + claude_hook + codex_hook)
 │   ├── runtime/sessions/       #   运行时会话状态（不入 git）
 │   ├── config.example.json     #   配置模板

@@ -22,7 +22,7 @@ Codex 的 hooks 可以通过两种格式配置：
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/desktop/cross-platform/hooks/pet-codex-hook.sh"
+            "command": "/path/to/desktop/cross-platform/hooks/pet-hook.sh codex"
           }
         ]
       }
@@ -45,7 +45,7 @@ matcher = "Bash"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = '/path/to/pet-codex-hook.sh'
+command = '/path/to/pet-hook.sh codex'
 timeout = 30
 ```
 
@@ -218,14 +218,14 @@ Codex 通过 stdin 传递 JSON，字段命名与 Claude Code 有所不同。
 
 ## 四、宠物 Hook 处理流程
 
-### 入口：pet-codex-hook.sh → codex_hook.py
+### 入口：pet-hook.sh codex → codex_hook.py
 
 ```
 Codex 触发 hook
         │
         │ stdin JSON
         ▼
-pet-codex-hook.sh
+pet-hook.sh codex
         │
         │ /usr/bin/python3 scripts/codex_hook.py
         ▼
@@ -447,7 +447,7 @@ t=10s   (2s timer fires)              session 文件被删除                →
 
 | 文件 | 职责 |
 |---|---|
-| `hooks/pet-codex-hook.sh` | Shell 入口，调用 Python |
+| `hooks/pet-hook.sh` | Shell 入口 (claude-code / codex)，调用 Python |
 | `hooks/scripts/codex_hook.py` | 解析 Codex stdin JSON，EVENT_ALIASES 转换 |
 | `hooks/scripts/common.py` | 共享逻辑：配置加载、状态映射、socket 推送 |
 | `setup-hooks.sh` | 自动注册 hook 到 `~/.codex/hooks.json` |

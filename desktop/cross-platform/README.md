@@ -84,8 +84,7 @@ desktop/cross-platform/
 │       ├── watcher.rs    #   Unix Socket 服务端 + 文件监听 (防抖)
 │       └── commands.rs   #   Tauri 命令：获取配置 / AppleScript (安全过滤) / 清空会话 / 退出
 ├── hooks/                # Hook 脚本
-│   ├── pet-claude-hook.sh  # Claude Code hook 入口
-│   ├── pet-codex-hook.sh   # Codex hook 入口
+│   ├── pet-hook.sh           # Shell 入口 (claude-code / codex 参数分派)
 │   └── scripts/            # Python 实现
 │       ├── common.py       #   共享逻辑
 │       ├── claude_hook.py  #   Claude Code 事件处理

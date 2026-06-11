@@ -34,8 +34,9 @@ from common import resolve  # noqa: E402
 
 pet_base_dir = resolve(config.get('pet_base_dir'), str(repo_root))
 hook_dir     = str(platform_dir / 'hooks')
-claude_hook  = os.path.join(hook_dir, 'pet-claude-hook.sh')
-codex_hook   = os.path.join(hook_dir, 'pet-codex-hook.sh')
+hook_script  = os.path.join(hook_dir, 'pet-hook.sh')
+claude_hook  = f'{hook_script} claude-code'
+codex_hook   = f'{hook_script} codex'
 
 hooks_config = config.get('hooks', {})
 claude_settings = os.path.expanduser(hooks_config.get('claude_code_settings', '~/.claude/settings.json'))
@@ -58,6 +59,8 @@ OLD_PATHS = [
     'kotori-desktop-pet/hooks/pet-codex-hook.sh',
     'desktop/mac/hooks/pet-claude-hook.sh',
     'desktop/mac/hooks/pet-codex-hook.sh',
+    'hooks/pet-claude-hook.sh',
+    'hooks/pet-codex-hook.sh',
 ]
 
 def setup_platform(settings_path, hook_cmd, events, platform_name):

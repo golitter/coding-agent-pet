@@ -19,7 +19,7 @@ Claude Code 和 Codex 的事件机制不同，但宠物端通过 `common.py` 统
 |---|---|---|---|
 | **机制** | 命令行脚本 + stdin JSON | 命令行脚本 + stdin JSON | JS/TS 插件模块，进程内运行 |
 | **配置文件** | `~/.claude/settings.json` | `~/.codex/hooks.json` 或 `config.toml` | `.opencode/plugins/` 目录或 `opencode.json` |
-| **Hook 入口** | `pet-claude-hook.sh` → `claude_hook.py` | `pet-codex-hook.sh` → `codex_hook.py` | 导出 Plugin 函数 → 返回 Hooks 对象 |
+| **Hook 入口** | `pet-hook.sh claude-code` → `claude_hook.py` | `pet-hook.sh codex` → `codex_hook.py` | 导出 Plugin 函数 → 返回 Hooks 对象 |
 | **事件字段名** | `hook_event_name` (PascalCase) | `hook_event_name` / `event` / `codex_event_type` (snake_case) | 事件名即对象键名（如 `session.idle`） |
 | **注册事件数** | 11 个 | 9 个 | 20+ 个事件类别 |
 | **独有事件** | `PreCompact`, `SessionEnd` | — | `session.compacted`, 自定义工具, `shell.env` |

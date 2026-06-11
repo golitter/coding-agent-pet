@@ -4,7 +4,6 @@ Reads event JSON from stdin (provided by Claude Code's hook system),
 extracts fields using Claude Code's schema, and delegates to common.process_event.
 """
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -12,18 +11,14 @@ from pathlib import Path
 # Allow `import common` whether invoked as a script or module
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from common import process_event  # noqa: E402, I001
+from common import process_event, read_stdin_json  # noqa: E402, I001
 
 
 def main():
     # desktop/cross-platform/hooks/scripts/ → desktop/cross-platform/
     platform_dir = str(Path(__file__).resolve().parent.parent.parent)
 
-    # ── Read stdin ──
-    try:
-        input_data = json.load(sys.stdin)
-    except Exception:
-        sys.exit(0)
+    input_data = read_stdin_json()
 
     # Claude Code uses 'hook_event_name'
     hook_event = input_data.get('hook_event_name', '') or ''
