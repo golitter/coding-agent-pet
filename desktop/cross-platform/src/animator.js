@@ -31,6 +31,8 @@ export class SpriteAnimator {
     this.timer = null;
     this.fps = 10;
     this.onFrame = null; // callback(imageElement)
+    this.frameTiming = {}; // { stateName: { holds: [tickCount, ...] } }
+    this.holdRemaining = 1;
 
     // Alpha mask system for per-pixel hit testing
     this.alphaMasks = new Map(); // stateName → Uint8Array[] (indexed by frame number)
@@ -39,6 +41,11 @@ export class SpriteAnimator {
     this.baseHeight = SPRITE_H;
     this.hitTestReady = false;
     this.pendingOneShot = null; // queued one-shot to fire after current finishes
+  }
+
+  setFrameTiming(timing) {
+    this.frameTiming = timing || {};
+    this.resetHold();
   }
 
   /** Pre-load all sprite frames from disk via Tauri asset protocol.
@@ -130,6 +137,7 @@ export class SpriteAnimator {
   /** Start the animation loop */
   start() {
     if (this.timer) return;
+    this.resetHold();
     this.showCurrentFrame();
     this.timer = setInterval(() => this.tick(), 1000 / this.fps);
     console.log(`[Animator] ✓ Started at ${this.fps} FPS`);
@@ -156,6 +164,7 @@ export class SpriteAnimator {
     }
     this.currentState = state;
     this.currentFrameIndex = 0;
+    this.resetHold();
     this.showCurrentFrame();
   }
 
@@ -174,6 +183,7 @@ export class SpriteAnimator {
     this.preOneShotState = this.currentState;
     this.currentState = state;
     this.currentFrameIndex = 0;
+    this.resetHold();
     this.showCurrentFrame();
   }
 
@@ -186,6 +196,7 @@ export class SpriteAnimator {
       if (this.currentState !== "running-right") {
         this.currentState = "running-right";
         this.currentFrameIndex = 0;
+        this.resetHold();
       }
     } else if (dx < -0.5) {
       if (this.currentState !== "running-right" && this.currentState !== "running-left") {
@@ -194,6 +205,7 @@ export class SpriteAnimator {
       if (this.currentState !== "running-left") {
         this.currentState = "running-left";
         this.currentFrameIndex = 0;
+        this.resetHold();
       }
     } else if (dx === 0) {
       if (this.currentState === "running-right" || this.currentState === "running-left") {
@@ -203,6 +215,7 @@ export class SpriteAnimator {
             : this.preDragState;
         this.currentState = restore;
         this.currentFrameIndex = 0;
+        this.resetHold();
         this.showCurrentFrame();
       }
     }
@@ -329,6 +342,9 @@ export class SpriteAnimator {
     const frames = this.frames[this.currentState];
     if (!frames || frames.length === 0) return;
 
+    this.holdRemaining--;
+    if (this.holdRemaining > 0) return;
+
     this.currentFrameIndex++;
 
     // One-shot: play full cycle then return to previous state (or fire queued one-shot)
@@ -338,13 +354,16 @@ export class SpriteAnimator {
         this.pendingOneShot = null;
         this.currentState = next;
         this.currentFrameIndex = 0;
+        this.resetHold();
       } else {
         this.currentState = this.preOneShotState;
         this.preOneShotState = "idle";
         this.currentFrameIndex = 0;
+        this.resetHold();
       }
     } else {
       this.currentFrameIndex = this.currentFrameIndex % frames.length;
+      this.resetHold();
     }
 
     this.showCurrentFrame();
@@ -356,5 +375,24 @@ export class SpriteAnimator {
     if (this.onFrame) {
       this.onFrame(frames[this.currentFrameIndex]);
     }
+  }
+
+  holdFor(state, frameIndex) {
+    const stateTiming = this.frameTiming?.[state];
+    const defaultTiming = this.frameTiming?.default;
+    const stateHolds = stateTiming?.holds;
+    const defaultHolds = defaultTiming?.holds;
+    let rawHold = 1;
+    if (Array.isArray(stateHolds) && frameIndex < stateHolds.length) {
+      rawHold = stateHolds[frameIndex];
+    } else if (Array.isArray(defaultHolds) && defaultHolds.length > 0) {
+      rawHold = defaultHolds[frameIndex] ?? defaultHolds[0];
+    }
+    const hold = Number(rawHold);
+    return Number.isFinite(hold) ? Math.max(1, Math.floor(hold)) : 1;
+  }
+
+  resetHold() {
+    this.holdRemaining = this.holdFor(this.currentState, this.currentFrameIndex);
   }
 }

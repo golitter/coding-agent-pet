@@ -48,7 +48,7 @@
 |---|---|---|
 | [README.md](../../desktop/docs/bugfix/README.md) | Bugfix 计划索引 | — |
 | [active-count-undercount.md](../../desktop/docs/bugfix/active-count-undercount.md) | 多会话计数 N-1 问题 | 已实施 |
-| [idle-blink-too-fast.md](../../desktop/docs/bugfix/idle-blink-too-fast.md) | idle 状态眨眼太快 | 待实施 |
+| [idle-blink-too-fast.md](../../desktop/docs/bugfix/idle-blink-too-fast.md) | idle 状态眨眼太快 | 已实施 |
 | [pet-unresponsive-stuck-state.md](../../desktop/docs/bugfix/pet-unresponsive-stuck-state.md) | 宠物无响应/拖动卡死 | 已实施 |
 
 ---

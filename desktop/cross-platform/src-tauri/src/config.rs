@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tracing::info;
 
@@ -13,6 +13,7 @@ pub struct PetConfig {
     pub socket_path: String,
     pub scale: f64,
     pub fps: f64,
+    pub frame_timing: std::collections::HashMap<String, FrameTiming>,
     /// How long a session file can stay unchanged before being considered dead.
     /// During this window, a session is counted as alive even if no events fire
     /// (covers reading/thinking/long-tool-calls). After it expires, the session
@@ -38,6 +39,11 @@ pub struct MenuItem {
     pub script: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FrameTiming {
+    pub holds: Vec<u32>,
+}
+
 /// Raw JSON config for deserialization.
 #[derive(Debug, Deserialize, Default)]
 struct RawConfig {
@@ -55,6 +61,7 @@ struct RawConfig {
 struct RawRenderer {
     scale: Option<f64>,
     fps: Option<f64>,
+    frame_timing: Option<std::collections::HashMap<String, FrameTiming>>,
     stale_timeout_sec: Option<u64>,
     cleanup_interval_sec: Option<u64>,
     corner_margin: Option<i32>,
@@ -145,6 +152,7 @@ impl PetConfig {
         let renderer = raw.renderer.unwrap_or_default();
         let scale = renderer.scale.unwrap_or(0.6);
         let fps = renderer.fps.unwrap_or(10.0);
+        let frame_timing = renderer.frame_timing.unwrap_or_default();
         let stale_timeout_sec = renderer.stale_timeout_sec.unwrap_or(3600);
         let cleanup_interval_sec = renderer.cleanup_interval_sec.unwrap_or(30);
         let corner_margin = renderer.corner_margin.unwrap_or(20);
@@ -194,6 +202,7 @@ impl PetConfig {
             socket_path,
             scale,
             fps,
+            frame_timing,
             stale_timeout_sec,
             cleanup_interval_sec,
             corner_margin,

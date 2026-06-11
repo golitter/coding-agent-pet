@@ -23,6 +23,7 @@ const ENTER_THRESHOLD = 10; // alpha < 10 → enter pass-through
 const EXIT_THRESHOLD = 20; // alpha >= 20 → exit pass-through (hysteresis)
 const SOLID_CONFIRM_COUNT = 2; // consecutive solid frames before exiting
 const POLL_INTERVAL_MS = 80; // polling rate while in pass-through mode (80ms ≈ 12Hz)
+const NORMAL_HIT_TEST_POLL_MS = 80; // catches "first click" with no prior mousemove
 
 /** Bridge JS → Rust log for diagnostics. Appears in RUST_LOG output. */
 function jsLog(level, tag, msg) {
@@ -65,6 +66,7 @@ async function main() {
 
   // 2. Create animator
   const animator = new SpriteAnimator();
+  animator.setFrameTiming(config.frame_timing);
   await animator.loadFrames(config.frames_dir, config.fps);
 
   // 3. Get DOM elements
@@ -293,13 +295,23 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
   // --- Coordinate helpers ---
 
-  /** Check alpha at CSS-relative coords (for normal-mode mousemove).
-   *  Uses cached rect to avoid layout thrashing; invalidated on resize. */
+  /** Check alpha at CSS-relative coords.
+   *  Uses cached rect to avoid layout thrashing; invalidated on resize.
+   *  Coordinates outside the rendered sprite are transparent window padding,
+   *  not edge pixels of the sprite.
+   */
   function checkAlphaAtCss(cssX, cssY) {
     const rect = cachedRect ?? (cachedRect = petSprite.getBoundingClientRect());
     const spriteX = (cssX - rect.left) * (SPRITE_W / rect.width);
     const spriteY = (cssY - rect.top) * (SPRITE_H / rect.height);
+    if (spriteX < 0 || spriteY < 0 || spriteX >= SPRITE_W || spriteY >= SPRITE_H) {
+      return 0;
+    }
     return animator.getAlphaAt(animator.currentState, animator.currentFrameIndex, spriteX, spriteY);
+  }
+
+  function isPointInsideWindow(winX, winY) {
+    return winX >= 0 && winY >= 0 && winX < window.innerWidth && winY < window.innerHeight;
   }
 
   // --- Pass-through control ---
@@ -447,22 +459,15 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     try {
       const [winX, winY] = await invoke("cursor_in_window");
 
-      const rect = cachedRect ?? (cachedRect = petSprite.getBoundingClientRect());
-      const spriteX = (winX - rect.left) * (SPRITE_W / rect.width);
-      const spriteY = (winY - rect.top) * (SPRITE_H / rect.height);
-
-      // Cursor outside sprite bounds → restore
-      if (spriteX < 0 || spriteY < 0 || spriteX >= SPRITE_W || spriteY >= SPRITE_H) {
+      // Cursor outside the transparent window → restore so the pet can catch
+      // the next entry. Transparent padding inside the window remains
+      // pass-through.
+      if (!isPointInsideWindow(winX, winY)) {
         exitPassThrough();
         return;
       }
 
-      const alpha = animator.getAlphaAt(
-        animator.currentState,
-        animator.currentFrameIndex,
-        spriteX,
-        spriteY,
-      );
+      const alpha = checkAlphaAtCss(winX, winY);
 
       // Hysteresis: require EXIT_THRESHOLD + consecutive solid frames
       if (alpha >= EXIT_THRESHOLD) {
@@ -483,6 +488,28 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     }
   }
 
+  /** Normal-mode polling covers the edge case where the cursor is already on
+   *  a transparent pixel before the first click, so no mousemove fires to arm
+   *  pass-through. */
+  async function pollNormalHitTest() {
+    if (isPassThrough || applyingPassThrough || !hitTestEnabled || dragStart) return;
+    try {
+      const [winX, winY] = await invoke("cursor_in_window");
+      if (!isPointInsideWindow(winX, winY)) return;
+
+      const alpha = checkAlphaAtCss(winX, winY);
+      if (alpha < ENTER_THRESHOLD) {
+        enterPassThrough(); // async, non-blocking
+      }
+    } catch {
+      // Best-effort helper only. Mousemove and mousedown guards still protect
+      // interactions if the polling IPC is temporarily unavailable.
+    }
+  }
+
+  setInterval(pollNormalHitTest, NORMAL_HIT_TEST_POLL_MS);
+  pollNormalHitTest();
+
   // Triple-click detection: 3 left-clicks within TRIPLE_CLICK_WINDOW_MS
   // triggers a full purge of the sessions directory (see `purge_all` in
   // aggregator.rs). Below 3 clicks the counter simply biases toward the
@@ -500,6 +527,25 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   document.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // left button only
     jsLog("info", "Mouse", `down isPassThrough=${isPassThrough} hitTest=${hitTestEnabled}`);
+
+    // A click can begin without any prior mousemove, especially when the pet
+    // window was unfocused. Guard mousedown itself so the first click on a
+    // transparent pixel cannot start a drag sequence or trigger the jump on
+    // mouseup.
+    if (!isPassThrough && hitTestEnabled) {
+      const alpha = checkAlphaAtCss(e.clientX, e.clientY);
+      if (alpha < ENTER_THRESHOLD) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragStart = null;
+        isDragging = false;
+        clickCount = 0;
+        enterPassThrough(); // async, non-blocking
+        jsLog("info", "HitTest", `transparent mousedown ignored alpha=${alpha}`);
+        return;
+      }
+    }
+
     // Disable hit-test during drag to prevent pass-through interference
     hitTestEnabled = false;
     if (isPassThrough) {
@@ -623,6 +669,17 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
   // Right-click → context menu
   document.addEventListener("contextmenu", (e) => {
+    if (!isPassThrough && hitTestEnabled) {
+      const alpha = checkAlphaAtCss(e.clientX, e.clientY);
+      if (alpha < ENTER_THRESHOLD) {
+        e.preventDefault();
+        e.stopPropagation();
+        enterPassThrough(); // async, non-blocking
+        jsLog("info", "HitTest", `transparent contextmenu ignored alpha=${alpha}`);
+        return;
+      }
+    }
+
     e.preventDefault();
     // Disable hit-test while menu is visible
     hitTestEnabled = false;

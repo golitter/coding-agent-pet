@@ -1,5 +1,5 @@
 use crate::aggregator::ActivityAggregator;
-use crate::config::PetConfig;
+use crate::config::{FrameTiming, PetConfig};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -11,6 +11,7 @@ pub struct FrontendConfig {
     pub frames_dir: String,
     pub scale: f64,
     pub fps: f64,
+    pub frame_timing: HashMap<String, FrameTiming>,
     pub dialogue_font_size: u32,
     pub dialogue_max_width: u32,
     pub dialogue_corner_radius: u32,
@@ -64,6 +65,7 @@ pub fn get_config(config: tauri::State<'_, PetConfig>) -> FrontendConfig {
         frames_dir: config.frames_dir.clone(),
         scale: config.scale,
         fps: config.fps,
+        frame_timing: config.frame_timing.clone(),
         dialogue_font_size: config.dialogue_font_size,
         dialogue_max_width: config.dialogue_max_width,
         dialogue_corner_radius: config.dialogue_corner_radius,

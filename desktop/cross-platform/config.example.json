@@ -8,6 +8,11 @@
   "renderer": {
     "scale": 0.6,
     "fps": 10,
+    "_frame_timing_comment": "Per-frame hold counts in fps ticks. idle: frames 0/1/2/4/5 are open eyes, frame 3 is blink; total 35 ticks = 3.5s at 10fps.",
+    "frame_timing": {
+      "default": { "holds": [1] },
+      "idle": { "holds": [10, 4, 4, 1, 4, 12] }
+    },
     "_stale_timeout_sec_comment": "How long (sec) a session file can stay unchanged before being considered dead. 1h covers reading/thinking/long-tool-calls; crashes get cleaned up after this TTL.",
     "stale_timeout_sec": 3600,
     "cleanup_interval_sec": 30,

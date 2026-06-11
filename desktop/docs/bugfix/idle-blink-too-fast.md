@@ -1,5 +1,7 @@
 # Bug：idle 状态眨眼太快，像在抽搐
 
+状态：已实施。
+
 ## 现象
 
 宠物处于 `idle`（静止）状态时，眨眼动作频率极高、节奏也不对——眼睛几乎每隔零点几秒就「唰」地眨一下，看起来像在抽搐，而不是真人那种「长时间睁眼、偶尔一瞬」的自然节奏。整体帧切换也偏快，画面一直在动，没有「静止呼吸」的感觉。
@@ -60,13 +62,13 @@ tick() {
 ```json
 "frame_timing": {
   "default": { "holds": [1] },
-  "idle": { "holds": [3, 2, 1, 1, 1, 10] }
+  "idle": { "holds": [10, 4, 4, 1, 4, 12] }
 }
 ```
 
 - `holds` 是与帧一一对应的整数数组，单位是「tick」（1 tick = `1/fps` 秒 = 100ms）。
 - `[1]` 表示每帧停 1 个 tick（即旧行为，匀速）。
-- `idle` 例子里第 0 帧停 300ms、第 5 帧停 1000ms（长睁眼），中间眨眼帧各 100ms，模拟「长时间睁眼 → 快速眨一下 → 再长睁眼」。
+- `idle` 里第 0/1/2/4/5 帧是睁眼，第 3 帧是闭眼；`[10, 4, 4, 1, 4, 12]` 让一轮变成 3.5s，闭眼只停 100ms。
 
 **animator.js Before**（[tick()](../../cross-platform/src/animator.js#L142-L158) 精简版）：
 
@@ -133,13 +135,13 @@ tick() {
 ```json
 "frame_timing": {
   "default": { "holds": [1] },
-  "idle": { "holds": [3, 2, 1, 1, 1, 10] }
+  "idle": { "holds": [10, 4, 4, 1, 4, 12] }
 }
 ```
 
-**⚠️ 前置确认**：上面 `idle.holds` 的具体数组**需要先用肉眼看一遍 [idle/](../../../assets/kotori-minami/frames/idle) 的 6 帧到底是哪几帧睁眼、哪几帧半闭、哪几帧全闭**，再据此分配 hold 值（睁眼帧给大值、眨眼帧给 1）。当前文档里的 `[3,2,1,1,1,10]` 是占位示例，不代表真实帧序。确认后把数组写实，并在本文件补一行注明「第 N 帧是睁眼」。
+已肉眼确认 [idle/](../../../assets/kotori-minami/frames/idle) 的 6 帧：第 0/1/2/4/5 帧睁眼，第 3 帧闭眼。因此闭眼帧只保留 1 tick，睁眼帧拉长。
 
-**效果**：以 `[3,2,1,1,1,10]` 为例，idle 一圈 = (3+2+1+1+1+10) × 100ms = **1.8s**，其中眨眼那几帧只占 300ms，睁眼停留 1s+，节奏接近真人。
+**效果**：以 `[10,4,4,1,4,12]` 为例，idle 一圈 = 35 × 100ms = **3.5s**，其中闭眼只占 100ms，节奏接近「长时间睁眼 → 快速眨一下」。
 
 ### 改动 ③ — （可选临时方案）给 idle 单独降速
 
@@ -153,10 +155,10 @@ tick() {
 
 ## 实施清单
 
-- [ ] 改动 ①：[animator.js](../../cross-platform/src/animator.js) 加 `frameTiming` / `holdRemaining` / `holdFor`，改 `tick()`；`transitionTo`/`triggerOneShot`/`handleDrag` 切换后重置 `holdRemaining`
-- [ ] 改动 ①：[main.js](../../cross-platform/src/main.js) 从 config 灌入 `frame_timing`
-- [ ] 改动 ②：肉眼确认 [idle/](../../../assets/kotori-minami/frames/idle) 6 帧的睁眼/闭眼分布，把真实 `holds` 数组写实
-- [ ] 改动 ②：[config.json](../../cross-platform/config.json) + [config.example.json](../../cross-platform/config.example.json) 加 `frame_timing` 字段及注释
+- [x] 改动 ①：[animator.js](../../cross-platform/src/animator.js) 加 `frameTiming` / `holdRemaining` / `holdFor`，改 `tick()`；`transitionTo`/`triggerOneShot`/`handleDrag` 切换后重置 `holdRemaining`
+- [x] 改动 ①：[main.js](../../cross-platform/src/main.js) 从 config 灌入 `frame_timing`
+- [x] 改动 ②：肉眼确认 [idle/](../../../assets/kotori-minami/frames/idle) 6 帧的睁眼/闭眼分布，把真实 `holds` 数组写实
+- [x] 改动 ②：[config.json](../../cross-platform/config.json) + [config.example.json](../../cross-platform/config.example.json) 加 `frame_timing` 字段及注释
 - [ ] 手动验证：
   - [ ] idle 状态下眨眼间隔 ≥ 2~3s，睁眼帧明显停留
   - [ ] `running` / `jumping` 等动作状态帧率不变、仍流畅
