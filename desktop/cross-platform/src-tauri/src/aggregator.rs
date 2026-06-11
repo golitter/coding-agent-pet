@@ -17,7 +17,8 @@ use tokio::sync::broadcast;
 use tracing::info;
 
 /// Priority order for aggregating multi-agent activities.
-/// Higher number = higher priority.
+/// Higher number = higher priority. Kept as reference; get_priority uses match for O(1).
+#[allow(dead_code)]
 const STATE_PRIORITY: &[(&str, i32)] = &[
     ("waiting", 8),
     ("running", 7),
@@ -31,11 +32,16 @@ const STATE_PRIORITY: &[(&str, i32)] = &[
 ];
 
 fn get_priority(state: &str) -> i32 {
-    STATE_PRIORITY
-        .iter()
-        .find(|(s, _)| *s == state)
-        .map(|(_, p)| *p)
-        .unwrap_or(0)
+    match state {
+        "waiting" => 8,
+        "running" => 7,
+        "running-right" | "running-left" => 6,
+        "review" => 5,
+        "jumping" => 4,
+        "waving" => 3,
+        "idle" => 1,
+        _ => 0,
+    }
 }
 
 /// Filesystem mtime of a path, as unix seconds (0 if unavailable).
@@ -111,16 +117,6 @@ pub struct ActivityAggregator {
 // ── Convenience helpers for accessing `inner.activities` ──
 
 impl ActivityAggregator {
-    /// Lock inner and remove an activity by session_id. Returns true if removed.
-    fn remove_session(&self, id: &str) -> bool {
-        self.inner.lock().unwrap().activities.remove(id).is_some()
-    }
-
-    /// Lock inner and insert an activity.
-    fn insert_session(&self, id: String, activity: AgentActivity) {
-        self.inner.lock().unwrap().activities.insert(id, activity);
-    }
-
     /// Lock inner and replace all activities atomically.
     fn replace_all_sessions(&self, new: HashMap<String, AgentActivity>) {
         let mut inner = self.inner.lock().unwrap();
@@ -178,30 +174,41 @@ impl ActivityAggregator {
         source: &str,
         is_terminal: bool,
     ) {
-        if is_terminal {
-            self.remove_session(session_id);
-            // Also delete file
-            let path = PathBuf::from(&self.sessions_dir).join(format!("{}.json", session_id));
-            let _ = std::fs::remove_file(path);
-            self.aggregate_and_notify();
-            return;
-        }
+        // Single lock acquisition: insert/remove + aggregate under one hold,
+        // then broadcast outside the lock to avoid blocking other callers.
+        let change = {
+            let mut inner = self.inner.lock().unwrap();
 
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+            if is_terminal {
+                inner.activities.remove(session_id);
+            } else {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                inner.activities.insert(
+                    session_id.to_string(),
+                    AgentActivity {
+                        state: state.to_string(),
+                        dialogue: dialogue.to_string(),
+                        source: source.to_string(),
+                        is_terminal: false,
+                        updated_at: now,
+                    },
+                );
+            }
 
-        let activity = AgentActivity {
-            state: state.to_string(),
-            dialogue: dialogue.to_string(),
-            source: source.to_string(),
-            is_terminal: false,
-            updated_at: now,
+            Self::compute_change(&mut inner)
         };
 
-        self.insert_session(session_id.to_string(), activity);
-        self.aggregate_and_notify();
+        // File deletion and broadcast outside the lock
+        if is_terminal {
+            let path = PathBuf::from(&self.sessions_dir).join(format!("{}.json", session_id));
+            let _ = std::fs::remove_file(path);
+        }
+        if let Some(change) = change {
+            let _ = self.tx.send(change);
+        }
     }
 
     /// Remove an agent's activity iff it is still in `expected_state`.
@@ -533,10 +540,9 @@ impl ActivityAggregator {
         }
     }
 
-    /// Aggregate all activities into a single display state using priority.
-    fn aggregate_and_notify(&self) {
-        let mut inner = self.inner.lock().unwrap();
-
+    /// Compute aggregated state change from the current activities.
+    /// Returns `Some(StateChange)` if the display state actually changed, `None` otherwise.
+    fn compute_change(inner: &mut Inner) -> Option<StateChange> {
         if inner.activities.is_empty() {
             let changed = inner.aggregated.current_state != "idle"
                 || !inner.aggregated.current_dialogue.is_empty()
@@ -545,15 +551,14 @@ impl ActivityAggregator {
             inner.aggregated.current_dialogue = String::new();
             inner.aggregated.active_count = 0;
 
-            drop(inner);
             if changed {
-                let _ = self.tx.send(StateChange {
+                return Some(StateChange {
                     state: "idle".to_string(),
                     dialogue: String::new(),
                     active_count: 0,
                 });
             }
-            return;
+            return None;
         }
 
         let mut best: Option<&AgentActivity> = None;
@@ -571,9 +576,6 @@ impl ActivityAggregator {
             .map(|s| s.state.clone())
             .unwrap_or_else(|| "idle".to_string());
         let new_dialogue = best.map(|s| s.dialogue.clone()).unwrap_or_default();
-        // Count every known activity — "active_count" means "agents currently
-        // known to be alive", not "agents visibly producing output". An agent
-        // in `idle` (e.g. after SubagentStop) is still alive and should count.
         let new_count = inner.activities.len();
 
         let changed = inner.aggregated.current_state != new_state
@@ -590,13 +592,29 @@ impl ActivityAggregator {
                 new_state, new_dialogue, new_count
             );
 
-            // Drop the lock before broadcasting to avoid blocking other callers.
-            drop(inner);
-            let _ = self.tx.send(StateChange {
+            Some(StateChange {
                 state: new_state,
                 dialogue: new_dialogue,
                 active_count: new_count,
-            });
+            })
+        } else {
+            None
         }
+    }
+
+    /// Aggregate all activities and broadcast if changed.
+    fn aggregate_and_notify(&self) {
+        let change = self.inner.lock().unwrap().aggregate();
+        if let Some(change) = change {
+            let _ = self.tx.send(change);
+        }
+    }
+}
+
+/// Helper methods on Inner for aggregation.
+impl Inner {
+    /// Compute and return state change (called while the lock is held).
+    fn aggregate(&mut self) -> Option<StateChange> {
+        ActivityAggregator::compute_change(self)
     }
 }

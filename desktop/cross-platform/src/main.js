@@ -22,7 +22,7 @@ const WINDOW_PAD_H = 60;
 const ENTER_THRESHOLD = 10; // alpha < 10 → enter pass-through
 const EXIT_THRESHOLD = 20; // alpha >= 20 → exit pass-through (hysteresis)
 const SOLID_CONFIRM_COUNT = 2; // consecutive solid frames before exiting
-const POLL_INTERVAL_MS = 50; // polling rate while in pass-through mode
+const POLL_INTERVAL_MS = 80; // polling rate while in pass-through mode (80ms ≈ 12Hz)
 
 // Module-level hit-test flag — shared between setupInteractions and hideAllMenus.
 // Disabled during drag / right-click menu to prevent pass-through interference.
@@ -261,6 +261,13 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let isDragging = false;
   const DRAG_THRESHOLD = 3;
 
+  // --- Sprite rect cache (avoids layout thrashing on every mousemove) ---
+  let cachedRect = null;
+  const invalidateRect = () => {
+    cachedRect = null;
+  };
+  window.addEventListener("resize", invalidateRect);
+
   // --- Pass-through (hit-test) state ---
   let isPassThrough = false;
   let applyingPassThrough = false; // async guard against rapid toggling
@@ -270,9 +277,9 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // --- Coordinate helpers ---
 
   /** Check alpha at CSS-relative coords (for normal-mode mousemove).
-   *  Uses live getBoundingClientRect() to stay correct across DPI changes. */
+   *  Uses cached rect to avoid layout thrashing; invalidated on resize. */
   function checkAlphaAtCss(cssX, cssY) {
-    const rect = petSprite.getBoundingClientRect();
+    const rect = cachedRect ?? (cachedRect = petSprite.getBoundingClientRect());
     const spriteX = (cssX - rect.left) * (SPRITE_W / rect.width);
     const spriteY = (cssY - rect.top) * (SPRITE_H / rect.height);
     return animator.getAlphaAt(animator.currentState, animator.currentFrameIndex, spriteX, spriteY);
@@ -345,7 +352,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     try {
       const [winX, winY] = await invoke("cursor_in_window");
 
-      const rect = petSprite.getBoundingClientRect();
+      const rect = cachedRect ?? (cachedRect = petSprite.getBoundingClientRect());
       const spriteX = (winX - rect.left) * (SPRITE_W / rect.width);
       const spriteY = (winY - rect.top) * (SPRITE_H / rect.height);
 

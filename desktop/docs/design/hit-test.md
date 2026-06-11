@@ -26,7 +26,7 @@ Kotori Pet 的 Tauri 窗口是矩形透明窗口。点击窗口内任意位置�
   │   → 否则 → 继续正常交互
   │
   └─ 穿透模式 (ignore=true)
-      定时器 50ms 轮询
+      定时器 80ms 轮询
       → invoke("cursor_in_window")  [Rust CGEvent，见下]
       → 检查精灵 alpha（EXIT_THRESHOLD + 连续确认）
       → 连续 2 帧实体 或 离开窗口? → exitPassThrough()
@@ -76,7 +76,7 @@ WKWebView 里 `fetch("asset://localhost/...")` 抛 `TypeError: Load failed`。�
 
 **`read_file_bytes(path)`** — 读 PNG 原始字节（坑 1+2）。路径校验：只允许 `frames_dir` 内的文件，防止 webview 任意文件读取。
 
-**`read_frames_batch(paths)`** — 批量读取多帧 PNG 字节，单次 IPC 返回 `Map<path, bytes>`。替代 55+ 次 `read_file_bytes` 调用，启动速度显著提升。路径校验同上。
+**`read_frames_batch(paths)`** — 批量读取多帧 PNG 字节，单次 IPC 返回 `Map<path, bytes>`。替代 55+ 次 `read_file_bytes` 调用，启动速度显著提升。路径校验采用两级策略：lexicle 快路径（`normalize_path` 无 syscall）+ canonicalize 慢路径（含符号链接时降级）。
 
 **`cursor_in_window(window)`** — 用 CGEvent 读实时光标，返回窗口内逻辑坐标（Y 从顶部）。坐标转换：
 
@@ -96,27 +96,28 @@ extern "C" {
 
 ### 4. `src/animator.js` — alpha 蒙版系统
 
-- 构造函数加 `alphaMasks: Map`、`framePaths`、`baseWidth/Height`、`hitTestReady`
-- `loadFrames()` 同时记录每帧原生路径到 `framePaths`
+- 构造函数加 `alphaMasks: Map<string, Uint8Array[]>`（stateName → 按帧索引的 alpha 数组）、`framePaths`、`baseWidth/Height`、`hitTestReady`
+- `loadFrames()` **并行**加载所有帧（`Promise.all`），同时记录每帧原生路径到 `framePaths`
 - `computeAlphaMasks()`（async，loadFrames 末尾 await）：
   - **单次批量 IPC** `invoke("read_frames_batch")` 读取所有帧字节，替代逐帧 `read_file_bytes`
-  - 每帧 Blob → objectURL → 新 Image → 离屏 canvas（`willReadFrequently`）`clearRect` → drawImage → 提取 alpha 通道为 Uint8Array
+  - **两阶段处理**：Phase 1 并行加载所有 Image（`Promise.all`，消除串行 await 瓶颈）；Phase 2 顺序在离屏 canvas（`willReadFrequently`）上 drawImage → 提取 alpha 通道为 `Uint8Array`
+  - 数据结构：`Map<stateName, Uint8Array[]>`，按帧索引直接查找，热路径零字符串拼接
   - try-catch 包裹，失败时 `hitTestReady = false`
-- `getAlphaAt(state, frame, x, y)` — **mask 缺失/unready 返回 255**（fail-safe，宠物不会失联）
+- `getAlphaAt(state, frame, x, y)` — 查 `alphaMasks.get(state)?.[frame]`；**mask 缺失/unready 返回 255**（fail-safe，宠物不会失联）
 
 ### 5. `src/main.js` — 穿透控制
 
-**常量：** `ENTER_THRESHOLD=10`、`EXIT_THRESHOLD=20`（双阈值 hysteresis）、`SOLID_CONFIRM_COUNT=2`、`POLL_INTERVAL_MS=50`、`REENTRY_COOLDOWN_MS=200`
+**常量：** `ENTER_THRESHOLD=10`、`EXIT_THRESHOLD=20`（双阈值 hysteresis）、`SOLID_CONFIRM_COUNT=2`、`POLL_INTERVAL_MS=80`、`REENTRY_COOLDOWN_MS=200`
 
 **状态：** `isPassThrough`、`applyingPassThrough`（async 防抖锁）、`hitTestEnabled`、`solidHitCount`、`lastExitTime`
 
 **关键函数：**
 - `enterPassThrough()` — 幂等 + 防抖锁 + 重入冷却；`setIgnoreCursorEvents(true)` + startPolling
 - `exitPassThrough()` — 幂等 + 防抖锁；stopPolling + `setIgnoreCursorEvents(false)` + 记录 lastExitTime
-- `pollCursor()` — `invoke("cursor_in_window")` → 用实时 `getBoundingClientRect()` 算精灵坐标 → 查 alpha → 双阈值+连续确认决定退出
+- `pollCursor()` — `invoke("cursor_in_window")` → 用缓存的 `getBoundingClientRect()` 算精灵坐标（resize 时失效）→ 查 alpha → 双阈值+连续确认决定退出
 - `startPolling()` / `stopPolling()` — 链式 `setTimeout`（非 `setInterval`），await 完才调度下一轮，防止 async 重叠
 
-**mousemove 命中检测：** 正常模式下用 `e.clientX/Y` + 实时 `getBoundingClientRect()` 查 alpha（不缓存 rect，正确处理 DPI 变化），透明则 enterPassThrough
+**mousemove 命中检测：** 正常模式下用 `e.clientX/Y` + 缓存的 `getBoundingClientRect()` 查 alpha（缓存 rect 避免 120Hz 布局抖动，`resize` 事件时自动失效），透明则 enterPassThrough
 
 **与现有交互集成：**
 | 交互 | 处理 |

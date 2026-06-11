@@ -78,7 +78,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 | `quit_app` | 退出应用（`app.exit(0)`） |
 | `purge_all_sessions` | 手动清空：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除文件数 |
 | `read_file_bytes` | 读 PNG 原始字节（hit-test alpha 蒙版），**路径校验限制在 `frames_dir` 内** |
-| `read_frames_batch` | 批量读取多帧 PNG（单次 IPC 替代 55+ 次 `read_file_bytes`），路径校验同上 |
+| `read_frames_batch` | 批量读取多帧 PNG（单次 IPC 替代 55+ 次 `read_file_bytes`），**两级路径校验**：lexicle 快路径（无 syscall）+ canonicalize 慢路径（含符号链接时降级） |
 | `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
 
 前端通过 `window.__TAURI__.core.invoke('get_config')` 调用。
@@ -124,10 +124,13 @@ src-tauri/    → cross-platform/    (config 所在目录)
 
 | 方法 | 说明 |
 |---|---|
-| `remove_session(id)` | 删除指定活动会话 |
-| `insert_session(id, activity)` | 插入/更新活动会话 |
 | `replace_all_sessions(new)` | 原子替换所有活动会话（用于 `load_from_disk`） |
 | `remove_orphaned_sessions(file_ids)` | 批量删除无对应磁盘文件的活动会话 |
+| `compute_change(inner)` | 从当前 activities 计算聚合状态变化，返回 `Option<StateChange>`（锁内调用） |
+| `aggregate_and_notify()` | 加锁 → 调用 `Inner::aggregate()` → 锁外广播 |
+| `Inner::aggregate()` | 持锁期间调用 `compute_change`，返回变化 |
+
+`update()` 方法在单次加锁内完成 insert/remove + 聚合计算，锁外再做文件删除和广播，避免双次加锁。
 
 这种设计避免了多个独立 Mutex 导致的死锁风险。
 
@@ -173,7 +176,7 @@ Rust 端通过 `app_handle.emit("state-change", &change)` 推送到前端。广�
 
 | 触发 | 间隔配置 | 行为 |
 |---|---|---|
-| 定时器 | `renderer.cleanup_interval_sec` (默认 5s) | **双向清理**：①移除已被 hook 删除的内存 orphan 会话；②删除 mtime >`stale_timeout_sec` 的磁盘孤儿文件（崩溃会话兜底）|
+| 定时器 | `renderer.cleanup_interval_sec` (默认 30s) | **双向清理**：①移除已被 hook 删除的内存 orphan 会话；②删除 mtime >`stale_timeout_sec` 的磁盘孤儿文件（崩溃会话兜底）|
 | 启动加载 | 一次性 | `load_from_disk()` 全量恢复磁盘会话（跳过 terminal 与过期文件）|
 | 文件对账 | 事件驱动（debounce 100ms）| `reconcile_with_disk()` 增量补漏 + 清理 terminal/过期一次性状态残留，**不覆盖** socket 通道已写入的新鲜状态——socket 为主、文件为兜底 |
 | terminal 标记 | 即时 | 收到 `isTerminal: true` 时立即删除 |
@@ -310,7 +313,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 ### 帧加载
 
-通过 Tauri 的 `convertFileSrc` 将本地文件路径转为 asset protocol URL，预加载所有 PNG 帧：
+通过 Tauri 的 `convertFileSrc` 将本地文件路径转为 asset protocol URL，**并行预加载**所有 PNG 帧（`Promise.all`，55 帧同时加载而非逐帧等待）：
 
 | 状态 | 帧数 | 用途 |
 |---|---|---|

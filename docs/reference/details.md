@@ -92,7 +92,7 @@
 | `purge_all_sessions` | 清空所有 session 文件（三连击触发） |
 | `run_applescript` | 执行 AppleScript（过滤 `do shell script`、`do script` 和反引号） |
 | `read_file_bytes` | 读 PNG 原始字节，路径校验限制在 `frames_dir` 内（hit-test alpha 蒙版） |
-| `read_frames_batch` | 批量读取多帧 PNG，单次 IPC 替代 55+ 次 `read_file_bytes`（路径校验同上） |
+| `read_frames_batch` | 批量读取多帧 PNG，单次 IPC 替代 55+ 次 `read_file_bytes`（两级路径校验：lexicle 快路径 + canonicalize 慢路径） |
 | `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
 
 事件通道：Rust → JS 通过 `emit("agent-state", payload)` 推送聚合状态。
@@ -107,6 +107,7 @@
 | `pet_base_dir` | `null` | 项目根，`null` 自动检测 |
 | `socket_path` | `/tmp/kotori-pet.sock` | Unix socket 路径 |
 | `stale_timeout_sec` | `3600` | session 文件过期阈值（秒），1h 覆盖长工具调用 |
+| `renderer.cleanup_interval_sec` | `30` | 定时清理间隔（秒），扫描过期文件和孤儿内存会话 |
 | `renderer.scale` | `0.6` | 精灵缩放因子 |
 | `renderer.fps` | `10` | 动画帧率 |
 | `renderer.corner_margin` | `20` | 屏幕右下角边距 (px) |
@@ -190,6 +191,6 @@ assets/kotori-minami/
 
 `waiting > running > running-left/right > review > jumping > waving > idle > failed`
 
-多会话同时活动时，按上表选出最高优先级状态作为宠物显示态。详见
+多会话同时活动时，按上表选出最高优先级状态作为宠物显示态。`get_priority()` 使用 `match` 表达式 O(1) 查找（替代线性扫描），详见
 [aggregator.rs](../../desktop/cross-platform/src-tauri/src/aggregator.rs) 与
 [events.md "session 清理规则"](../../desktop/docs/agent-hooks/events.md)。

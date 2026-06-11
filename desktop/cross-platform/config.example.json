@@ -10,7 +10,7 @@
     "fps": 10,
     "_stale_timeout_sec_comment": "How long (sec) a session file can stay unchanged before being considered dead. 1h covers reading/thinking/long-tool-calls; crashes get cleaned up after this TTL.",
     "stale_timeout_sec": 3600,
-    "cleanup_interval_sec": 5,
+    "cleanup_interval_sec": 30,
     "corner_margin": 20
   },
   "dialogue": {

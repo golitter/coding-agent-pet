@@ -146,7 +146,7 @@ impl PetConfig {
         let scale = renderer.scale.unwrap_or(0.6);
         let fps = renderer.fps.unwrap_or(10.0);
         let stale_timeout_sec = renderer.stale_timeout_sec.unwrap_or(3600);
-        let cleanup_interval_sec = renderer.cleanup_interval_sec.unwrap_or(5);
+        let cleanup_interval_sec = renderer.cleanup_interval_sec.unwrap_or(30);
         let corner_margin = renderer.corner_margin.unwrap_or(20);
 
         let dialogue = raw.dialogue.unwrap_or_default();

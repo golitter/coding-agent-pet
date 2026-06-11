@@ -33,7 +33,7 @@ export class SpriteAnimator {
     this.onFrame = null; // callback(imageElement)
 
     // Alpha mask system for per-pixel hit testing
-    this.alphaMasks = new Map(); // key: "state:idx" → Uint8Array (baseWidth×baseHeight)
+    this.alphaMasks = new Map(); // stateName → Uint8Array[] (indexed by frame number)
     this.framePaths = {}; // { stateName: [nativePath, ...] } — raw FS paths for byte reads
     this.baseWidth = SPRITE_W;
     this.baseHeight = SPRITE_H;
@@ -74,24 +74,23 @@ export class SpriteAnimator {
       for (const row of manifestRows) {
         const state = row.state;
         if (!state || !Array.isArray(row.frames)) continue;
-        const frames = [];
-        const paths = [];
-        for (const absPath of row.frames) {
-          // Extract just the filename — manifest paths are machine-specific.
-          const basename = String(absPath).split("/").pop();
-          const nativePath = `${framesDir}/${state}/${basename}`;
-          const url = convertFileSrc(nativePath);
-          const img = new Image();
-          img.src = url;
-          await new Promise((resolve) => {
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-          });
-          frames.push(img);
-          paths.push(nativePath);
-        }
-        this.frames[state] = frames;
-        this.framePaths[state] = paths;
+        // Load all frames in parallel — avoids sequential await on each image
+        const loadResults = await Promise.all(
+          row.frames.map(async (absPath) => {
+            const basename = String(absPath).split("/").pop();
+            const nativePath = `${framesDir}/${state}/${basename}`;
+            const url = convertFileSrc(nativePath);
+            const img = new Image();
+            img.src = url;
+            await new Promise((resolve) => {
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+            });
+            return { img, nativePath };
+          }),
+        );
+        this.frames[state] = loadResults.map((r) => r.img);
+        this.framePaths[state] = loadResults.map((r) => r.nativePath);
       }
     } else {
       // Fallback: legacy probe (kept so a missing manifest doesn't break the app)
@@ -222,6 +221,11 @@ export class SpriteAnimator {
     let maskCount = 0;
     let failCount = 0;
 
+    // Pre-initialize mask arrays for each state
+    for (const [state, paths] of Object.entries(this.framePaths)) {
+      this.alphaMasks.set(state, new Array(paths.length));
+    }
+
     try {
       // Collect all frame paths for a single batch IPC call
       const allPaths = [];
@@ -247,32 +251,38 @@ export class SpriteAnimator {
         return;
       }
 
-      // Process each frame's bytes
-      for (let idx = 0; idx < pathIndex.length; idx++) {
-        const [state, i] = pathIndex[idx];
-        const nativePath = allPaths[idx];
-        const bytes = bytesMap[nativePath];
-        if (!bytes) {
+      // Phase 1: Load all clean images in parallel (the async bottleneck)
+      const loadedImages = await Promise.all(
+        pathIndex.map(async ([state, i], idx) => {
+          const nativePath = allPaths[idx];
+          const bytes = bytesMap[nativePath];
+          if (!bytes) return null;
+
+          const u8 = new Uint8Array(bytes);
+          const blob = new Blob([u8], { type: "image/png" });
+          const cleanUrl = URL.createObjectURL(blob);
+
+          const cleanImg = await new Promise((resolve) => {
+            const im = new Image();
+            im.onload = () => resolve(im);
+            im.onerror = () => resolve(null);
+            im.src = cleanUrl;
+          });
+          if (!cleanImg) {
+            URL.revokeObjectURL(cleanUrl);
+            return null;
+          }
+          return { state, i, cleanImg, cleanUrl };
+        }),
+      );
+
+      // Phase 2: Extract alpha masks (sequential — single shared canvas)
+      for (const item of loadedImages) {
+        if (!item) {
           failCount++;
           continue;
         }
-
-        const u8 = new Uint8Array(bytes);
-        const blob = new Blob([u8], { type: "image/png" });
-        const cleanUrl = URL.createObjectURL(blob);
-
-        // Load the blob into a fresh Image (untainted)
-        const cleanImg = await new Promise((resolve) => {
-          const im = new Image();
-          im.onload = () => resolve(im);
-          im.onerror = () => resolve(null);
-          im.src = cleanUrl;
-        });
-        if (!cleanImg) {
-          failCount++;
-          URL.revokeObjectURL(cleanUrl);
-          continue;
-        }
+        const { state, i, cleanImg, cleanUrl } = item;
 
         // clearRect prevents residual pixels from polluting transparent frames
         ctx.clearRect(0, 0, this.baseWidth, this.baseHeight);
@@ -285,7 +295,7 @@ export class SpriteAnimator {
         for (let j = 0, k = 3; j < alpha.length; j++, k += 4) {
           alpha[j] = data[k];
         }
-        this.alphaMasks.set(`${state}:${i}`, alpha);
+        this.alphaMasks.get(state)[i] = alpha;
         maskCount++;
       }
 
@@ -304,7 +314,9 @@ export class SpriteAnimator {
    *  the mask is missing — this prevents the pet from becoming unclickable. */
   getAlphaAt(state, frameIndex, x, y) {
     if (!this.hitTestReady) return 255;
-    const mask = this.alphaMasks.get(`${state}:${frameIndex}`);
+    const stateMasks = this.alphaMasks.get(state);
+    if (!stateMasks) return 255;
+    const mask = stateMasks[frameIndex];
     if (!mask) return 255;
     const cx = Math.max(0, Math.min(this.baseWidth - 1, Math.round(x)));
     const cy = Math.max(0, Math.min(this.baseHeight - 1, Math.round(y)));
