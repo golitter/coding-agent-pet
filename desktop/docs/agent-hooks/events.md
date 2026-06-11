@@ -23,7 +23,7 @@
 | `SubagentStop` | `subagent_stop` | — | ✓ | ✓ | ✗ | `idle` | (空) | 回到静息，仍计入 active_count |
 | `PreCompact` | — | `session.compacted` | ✓ | ✗ | ✓ | `waiting` | 整理一下记忆... | **Codex 无此事件** |
 | `SessionEnd` | — | `session.deleted` | ✓ | ✗ | ✓ | `waving` | 下次见！♪ | **Codex 无此事件**，terminal，立即删除 |
-| `QuestionAsked` | — | `question` 工具 (before) | ✓ | ✗ | ✓ | `waiting` | 需要你的选择～ | OpenCode `question` 工具拦截；Claude Code 在 config 中注册 |
+| `QuestionAsked` | — | `question` 工具 (before) | ✗ | ✗ | ✓ | `waiting` | 需要你的选择～ | OpenCode `question` 工具拦截；Claude Code/Codex hook 未注册（仅 `state_map` 预留） |
 
 **注册数**：Claude Code 11 个，Codex 9 个，OpenCode 通过 `opencode-plugin.ts` 订阅 6 个 `event` 型 + 2 个 `tool.execute.*` 拦截型 = 8 个事件（其中 `question` 工具触发 `QuestionAsked` 为附加映射）。
 

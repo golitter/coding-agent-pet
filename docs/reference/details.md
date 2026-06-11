@@ -21,7 +21,7 @@
 |---|---|
 | [overview.md](../../desktop/docs/overview.md) | 跨平台实现概述 + 系统架构图 + 安全设计 |
 | [renderer.md](../../desktop/docs/renderer.md) | Tauri 渲染器详解（编译/运行/组件） |
-| [spritesheet.md](../../desktop/docs/spritesheet.md) | 精灵图规格（1536×1872 · 8×9 网格 · 55 帧） |
+| [spritesheet.md](../../desktop/docs/spritesheet.md) | 精灵图规格（1536×1872 · 8×9 网格 · 57 帧） |
 
 ### 设计文档 (`desktop/docs/design/`)
 
@@ -101,7 +101,7 @@
 | `purge_all_sessions` | 清空所有 session 文件（三连击触发） |
 | `run_applescript` | 执行 AppleScript（过滤 `do shell script`、`do script` 和反引号） |
 | `read_file_bytes` | 读 PNG 原始字节，路径校验限制在 `frames_dir` 内（hit-test alpha 蒙版） |
-| `read_frames_batch` | 批量读取多帧 PNG，单次 IPC 替代 55+ 次 `read_file_bytes`（两级路径校验：lexicle 快路径 + canonicalize 慢路径） |
+| `read_frames_batch` | 批量读取多帧 PNG，单次 IPC 替代 57 次 `read_file_bytes`（两级路径校验：lexicle 快路径 + canonicalize 慢路径） |
 | `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
 | `js_log` | JS → Rust 日志桥接，前端诊断信息输出到 `RUST_LOG` 流（`info`/`warn`/`error` 级别） |
 
@@ -163,7 +163,7 @@ npm run lint:fix       # 自动修复
 
 ```text
 assets/kotori-minami/
-├── frames/                        # 运行时动画帧（55 帧 PNG）
+├── frames/                        # 运行时动画帧（57 帧 PNG）
 │   ├── frames-manifest.json       #   帧清单
 │   ├── idle/                      #   6 帧（呼吸/眨眼循环）
 │   ├── running/                   #   6 帧（活跃工作）

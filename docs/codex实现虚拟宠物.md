@@ -2,7 +2,7 @@
 
 > 参考教程：<https://zhuanlan.zhihu.com/p/2034795997839221924>
 
-> 💡 **本项目使用的图像资源即由此流程生成。** 资料包位于 [../assets/kotori-minami/](../assets/kotori-minami/)，包含 55 帧动画 + 精灵图，由 `/hatch-pet` Skill 输出后按本项目 9 个状态机重新解帧归档。
+> 💡 **本项目使用的图像资源即由此流程生成。** 资料包位于 [../assets/kotori-minami/](../assets/kotori-minami/)，包含 57 帧动画 + 精灵图，由 `/hatch-pet` Skill 输出后按本项目 9 个状态机重新解帧归档。
 
 ---
 

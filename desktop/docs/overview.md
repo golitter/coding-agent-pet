@@ -50,7 +50,7 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
 .
 ├── assets/
 │   └── kotori-minami/                 # 宠物资料包 (只读)
-│       ├── frames/                    #   55 帧 PNG 动画 (运行时资源)
+│       ├── frames/                    #   57 帧 PNG 动画 (运行时资源)
 │       └── imagegen/                  #   生成流水线工件 (prompts/qa/decoded/...)
 └── desktop/
     ├── docs/                          # 文档
@@ -82,11 +82,14 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
         ├── hooks/                     #   Hook 脚本
         │   ├── pet-hook.sh            #     Shell 入口 (claude-code / codex)
         │   ├── opencode-plugin.ts     #     OpenCode 插件（TS，进程内运行）
-        │   └── scripts/               #     Python 实现
-        │       ├── common.py          #       共享逻辑
-        │       ├── claude_hook.py     #       Claude Code 事件处理
-        │       ├── codex_hook.py      #       Codex 事件处理
-        │       └── setup_hooks.py     #       Hook 注册逻辑
+        │   ├── opencode-shared.mjs    #     OpenCode 共享逻辑（事件映射 / payload / IO）
+        │   ├── scripts/               #     Python 实现
+        │   │   ├── common.py          #       共享逻辑
+        │   │   ├── claude_hook.py     #       Claude Code 事件处理
+        │   │   ├── codex_hook.py      #       Codex 事件处理
+        │   │   ├── setup_hooks.py     #       Hook 注册逻辑
+        │   │   └── test_hooks.py      #       轻量测试（事件映射 / 配置写入）
+        │   └── tests/                 #     OpenCode 轻量测试（Node --test）
         ├── src/                       #   前端源码 (HTML/CSS/JS)
         │   ├── index.html             #     主页面
         │   ├── main.js                #     入口, 窗口设置, 交互绑定

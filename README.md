@@ -5,10 +5,10 @@
 基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）构建。
 
 <p align="center">
-  <img src="docs/spritesheet.webp" alt="Kotori 精灵图（9 行 × 8 列，共 55 帧动画）" width="320">
+  <img src="docs/spritesheet.webp" alt="Kotori 精灵图（9 行 × 8 列，共 57 帧动画）" width="320">
 </p>
 
-> ↑ 完整精灵图：9 个状态行 × 8 列网格，共 55 帧动画。规格详见 [desktop/docs/spritesheet.md](desktop/docs/spritesheet.md)。
+> ↑ 完整精灵图：9 个状态行 × 8 列网格，共 57 帧动画。规格详见 [desktop/docs/spritesheet.md](desktop/docs/spritesheet.md)。
 
 ## 快速开始
 

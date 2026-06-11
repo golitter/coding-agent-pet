@@ -78,7 +78,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 | `quit_app` | 退出应用（`app.exit(0)`） |
 | `purge_all_sessions` | 手动清空：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除文件数 |
 | `read_file_bytes` | 读 PNG 原始字节（hit-test alpha 蒙版），**路径校验限制在 `frames_dir` 内** |
-| `read_frames_batch` | 批量读取多帧 PNG（单次 IPC 替代 55+ 次 `read_file_bytes`），**两级路径校验**：lexicle 快路径（无 syscall）+ canonicalize 慢路径（含符号链接时降级） |
+| `read_frames_batch` | 批量读取多帧 PNG（单次 IPC 替代 57 次 `read_file_bytes`），**两级路径校验**：lexicle 快路径（无 syscall）+ canonicalize 慢路径（含符号链接时降级） |
 | `cursor_in_window` | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS） |
 | `js_log` | JS → Rust 日志桥接，前端诊断信息输出到 `RUST_LOG` 流 |
 
@@ -314,7 +314,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 ### 帧加载
 
-通过 Tauri 的 `convertFileSrc` 将本地文件路径转为 asset protocol URL，**并行预加载**所有 PNG 帧（`Promise.all`，55 帧同时加载而非逐帧等待）：
+通过 Tauri 的 `convertFileSrc` 将本地文件路径转为 asset protocol URL，**并行预加载**所有 PNG 帧（`Promise.all`，57 帧同时加载而非逐帧等待）：
 
 | 状态 | 帧数 | 用途 |
 |---|---|---|
@@ -328,7 +328,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | running | 6 | 工作中 |
 | review | 6 | 审阅代码 |
 
-总计 **55 帧**。
+总计 **57 帧**。
 
 ### 可配置参数
 

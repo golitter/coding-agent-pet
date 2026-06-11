@@ -19,7 +19,8 @@ desktop/
 │   ├── hooks/                  #   Hook 脚本
 │   │   ├── pet-hook.sh                 # shell wrapper (claude-code / codex)
 │   │   ├── opencode-plugin.ts          # OpenCode 插件（TS，进程内运行，由 setup-hooks.sh 部署到 ~/.config/opencode/plugins/）
-│   │   └── scripts/            #   Python 实现 (common + claude_hook + codex_hook + setup_hooks)
+│   │   ├── opencode-shared.mjs         # OpenCode 共享逻辑（事件映射 / payload / IO）
+│   │   └── scripts/            #   Python 实现 (common + claude_hook + codex_hook + setup_hooks + test_hooks)
 │   ├── runtime/sessions/       #   运行时会话状态（不入 git）
 │   ├── config.example.json     #   配置模板
 │   ├── setup.sh                #   全流程脚本
@@ -28,7 +29,7 @@ desktop/
 └── docs/                       # 技术文档
     ├── overview.md             #   跨平台实现概述
     ├── renderer.md             #   Tauri 渲染器详解
-    ├── spritesheet.md          #   精灵图规格（55 帧）
+    ├── spritesheet.md          #   精灵图规格（57 帧）
     ├── design/                 #   设计文档
     │   └── hit-test.md         #     透明像素点击穿透
     ├── agent-hooks/            #   Hook 协议（events / claude-code / codex / opencode）
