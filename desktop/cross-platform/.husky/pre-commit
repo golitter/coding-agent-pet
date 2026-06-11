@@ -1,2 +1,27 @@
 cd desktop/cross-platform || exit 1
+
+# ── Frontend: Prettier + ESLint (lint-staged, only changed files) ──
 npx lint-staged
+
+# ── Rust: fmt check (all files — cargo fmt has no staged-only mode) ──
+cd src-tauri
+cargo fmt --check --quiet 2>/dev/null
+if [ $? -ne 0 ]; then
+  echo "❌ cargo fmt check failed. Run 'cargo fmt' in src-tauri/ to fix."
+  exit 1
+fi
+cd ..
+
+# ── Shell: shellcheck (only staged .sh files) ──
+staged_sh=$(git diff --cached --name-only --diff-filter=ACM -- '*.sh' ':!node_modules')
+if [ -n "$staged_sh" ]; then
+  shellcheck $staged_sh
+fi
+
+# ── Python: ruff (only staged .py files) ──
+staged_py=$(git diff --cached --name-only --diff-filter=ACM -- '*.py' ':!node_modules')
+if [ -n "$staged_py" ]; then
+  python3 -m ruff check $staged_py 2>/dev/null || npx ruff check $staged_py 2>/dev/null || {
+    echo "⚠️  ruff not installed. Install: pip install ruff"
+  }
+fi
