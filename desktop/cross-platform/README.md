@@ -182,9 +182,9 @@ npm run test:hooks   # hooks 轻量测试（Python unittest + Node --test）
 
 ## 相关文档
 
-| 文档                                                           | 说明                    |
-| -------------------------------------------------------------- | ----------------------- |
-| [../docs/overview.md](../docs/overview.md)                     | 跨平台实现概述          |
-| [../docs/agent-hooks/README.md](../docs/agent-hooks/README.md) | Hook 机制详解（三平台） |
-| [../docs/renderer.md](../docs/renderer.md)                     | Tauri 渲染器详解        |
-| [../docs/spritesheet.md](../docs/spritesheet.md)               | 精灵图规格              |
+| 文档                                                                 | 说明                    |
+| -------------------------------------------------------------------- | ----------------------- |
+| [../docs/reference/overview.md](../docs/reference/overview.md)       | 跨平台实现概述          |
+| [../docs/agent-hooks/README.md](../docs/agent-hooks/README.md)       | Hook 机制详解（三平台） |
+| [../docs/reference/renderer.md](../docs/reference/renderer.md)       | Tauri 渲染器详解        |
+| [../docs/reference/spritesheet.md](../docs/reference/spritesheet.md) | 精灵图规格              |

@@ -66,5 +66,5 @@ $skill-installer hatch-pet
 Skill 默认输出的 6 个动作（idle / working / thinking / waiting / done / sleeping）需要按本项目的 **9 个状态机**重新生成、解帧、归档。完整的状态映射、精灵图规格、重新生成流程见：
 
 - 资源目录：[../assets/kotori-minami/](../assets/kotori-minami/)（`frames/` 运行时帧 + `imagegen/` 生成产物与 prompt）
-- 精灵图规格：[../desktop/docs/spritesheet.md](../desktop/docs/spritesheet.md)
+- 精灵图规格：[../desktop/docs/reference/spritesheet.md](../desktop/docs/reference/spritesheet.md)
 - 事件 → 状态映射：[../desktop/docs/agent-hooks/events.md](../desktop/docs/agent-hooks/events.md)

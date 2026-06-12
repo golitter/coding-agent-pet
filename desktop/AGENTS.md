@@ -26,14 +26,11 @@ desktop/
 │   ├── setup.sh                #   全流程脚本
 │   ├── build-and-run.sh        #   编译重启
 │   └── setup-hooks.sh          #   单独配置 hooks
-└── docs/                       # 技术文档
-    ├── overview.md             #   跨平台实现概述
-    ├── renderer.md             #   Tauri 渲染器详解
-    ├── spritesheet.md          #   精灵图规格（57 帧）
-    ├── design/                 #   设计文档
-    │   └── hit-test.md         #     透明像素点击穿透
-    ├── agent-hooks/            #   Hook 协议（events / claude-code / codex / opencode）
-    └── bugfix/                 #   Bugfix 计划
+└── docs/                       # 技术文档（按主题分目录）
+    ├── reference/              #   技术参考（overview / renderer / spritesheet）
+    ├── agent-hooks/            #   Hook 集成（events / claude-code / codex / opencode）
+    ├── design/                 #   设计文档（功能设计 + 重构方案）
+    └── bugfix/                 #   Bugfix 记录（问题分析 + 修复方案）
 ```
 
 ## 核心命令（在 `cross-platform/` 内执行）
@@ -59,3 +56,7 @@ tail -f /tmp/kotori-pet-tauri.log                    # 渲染器后台日志
 ## 完整文档
 
 详见 [../docs/reference/details.md](../docs/reference/details.md)
+
+## docs/ 分类规范
+
+新增文档按主题归入子目录，不放松散文件：`reference/`（技术规格）、`agent-hooks/`（Hook 集成）、`design/`（设计方案）、`bugfix/`（Bug 记录）。不确定时放 `reference/`。

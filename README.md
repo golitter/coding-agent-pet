@@ -17,7 +17,7 @@
   <img src="docs/images/spritesheet.webp" alt="Kotori 精灵图（9 行 × 8 列，共 57 帧动画）" width="320">
 </p>
 
-> ↑ 完整精灵图：9 个状态行 × 8 列网格，共 57 帧动画。规格详见 [desktop/docs/spritesheet.md](desktop/docs/spritesheet.md)。
+> ↑ 完整精灵图：9 个状态行 × 8 列网格，共 57 帧动画。规格详见 [desktop/docs/reference/spritesheet.md](desktop/docs/reference/spritesheet.md)。
 
 ## 快速开始
 

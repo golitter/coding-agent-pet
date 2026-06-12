@@ -25,13 +25,13 @@
 | [hooks.md](../hooks.md) | Codex / Claude Code 官方 Hooks 文档链接 |
 | [prompts/AGENTS文档修正.md](../prompts/AGENTS文档修正.md) | AGENTS.md 文档规范（本文档的元规则） |
 
-### 跨平台文档 (`desktop/docs/`)
+### 跨平台文档 (`desktop/docs/reference/`)
 
 | 文档 | 内容 |
 |---|---|
-| [overview.md](../../desktop/docs/overview.md) | 跨平台实现概述 + 系统架构图 + 安全设计 |
-| [renderer.md](../../desktop/docs/renderer.md) | Tauri 渲染器详解（编译/运行/组件） |
-| [spritesheet.md](../../desktop/docs/spritesheet.md) | 精灵图规格（1536×1872 · 8×9 网格 · 57 帧） |
+| [overview.md](../../desktop/docs/reference/overview.md) | 跨平台实现概述 + 系统架构图 + 安全设计 |
+| [renderer.md](../../desktop/docs/reference/renderer.md) | Tauri 渲染器详解（编译/运行/组件） |
+| [spritesheet.md](../../desktop/docs/reference/spritesheet.md) | 精灵图规格（1536×1872 · 8×9 网格 · 57 帧） |
 
 ### 设计文档 (`desktop/docs/design/`)
 
@@ -73,8 +73,8 @@
 | [lib.rs](../../desktop/cross-platform/src-tauri/src/lib.rs) | 应用初始化 + 组件串联 |
 | [config.rs](../../desktop/cross-platform/src-tauri/src/config.rs) | 配置加载 + 路径自动检测 |
 | [commands.rs](../../desktop/cross-platform/src-tauri/src/commands.rs) | Tauri commands（前端 → Rust 入口，含 hit-test 支持） |
-| [aggregator.rs](../../desktop/cross-platform/src-tauri/src/aggregator.rs) | 多会话聚合 + 优先级仲裁 + 磁盘对账 |
-| [watcher.rs](../../desktop/cross-platform/src-tauri/src/watcher.rs) | 双通道状态监听（Unix socket 主 + 文件对账） |
+| [aggregator.rs](../../desktop/cross-platform/src-tauri/src/aggregator.rs) | 多会话聚合 + 优先级仲裁 + 增量路径对账（upsert 语义） |
+| [watcher.rs](../../desktop/cross-platform/src-tauri/src/watcher.rs) | 双通道状态监听（Unix socket 主 + 变更路径防抖对账） |
 
 ### 前端 (`desktop/cross-platform/src/`)
 
@@ -92,8 +92,8 @@
 |---|---|
 | [pet-hook.sh](../../desktop/cross-platform/hooks/pet-hook.sh) | Shell 入口（claude-code / codex 参数分派） |
 | [opencode-plugin.ts](../../desktop/cross-platform/hooks/opencode-plugin.ts) | OpenCode 插件（TS，进程内运行，`setup-hooks.sh` 部署到 `~/.config/opencode/plugins/`） |
-| [opencode-shared.mjs](../../desktop/cross-platform/hooks/opencode-shared.mjs) | OpenCode 共享逻辑：配置加载、repo root 检测、事件映射、payload 构建、session/socket IO |
-| [scripts/common.py](../../desktop/cross-platform/hooks/scripts/common.py) | 共享逻辑：写 session 文件 + 推 socket |
+| [opencode-shared.mjs](../../desktop/cross-platform/hooks/opencode-shared.mjs) | OpenCode 共享逻辑：配置加载、pet_base_dir 解析、事件映射、payload 构建、session/socket IO（debug 受 `KOTORI_PET_OPENCODE_DEBUG` 环境变量控制） |
+| [scripts/common.py](../../desktop/cross-platform/hooks/scripts/common.py) | 共享逻辑：pet_base_dir 解析、写 session 文件 + 推 socket |
 | [scripts/claude_hook.py](../../desktop/cross-platform/hooks/scripts/claude_hook.py) | Claude Code 事件解析 |
 | [scripts/codex_hook.py](../../desktop/cross-platform/hooks/scripts/codex_hook.py) | Codex 事件解析（snake_case → PascalCase） |
 | [scripts/setup_hooks.py](../../desktop/cross-platform/hooks/scripts/setup_hooks.py) | Hook 注册逻辑（由 `setup-hooks.sh` 内联调用） |
@@ -127,7 +127,7 @@
 | `pet_base_dir` | `null` | 项目根，`null` 自动检测 |
 | `frames_dir` | `null` | 精灵帧目录，`null` 自动检测（`{pet_base_dir}/assets/{pet_id}/frames`） |
 | `socket_path` | `/tmp/kotori-pet.sock` | Unix socket 路径 |
-| `sessions_dir` | `null` | session 文件目录，`null` 自动检测 |
+| `sessions_dir` | `null` | session 文件目录，`null` 自动检测（`{pet_base_dir}/desktop/cross-platform/runtime/sessions`） |
 | `stale_timeout_sec` | `3600` | session 文件过期阈值（秒），1h 覆盖长工具调用 |
 | `renderer.cleanup_interval_sec` | `30` | 定时清理间隔（秒），扫描过期文件和孤儿内存会话 |
 | `renderer.scale` | `0.6` | 精灵缩放因子 |
@@ -197,7 +197,7 @@ assets/kotori-minami/
     └── final/                     #   最终 spritesheet.webp / spritesheet.png
 ```
 
-规格细节见 [desktop/docs/spritesheet.md](../../desktop/docs/spritesheet.md)。
+规格细节见 [desktop/docs/reference/spritesheet.md](../../desktop/docs/reference/spritesheet.md)。
 
 ---
 

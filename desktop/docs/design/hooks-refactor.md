@@ -173,7 +173,7 @@ OLD_PATHS = [
 | 文件 | 涉及内容 |
 |---|---|
 | `AGENTS.md`（根 + desktop） | 目录结构中的 shell 文件名 |
-| `desktop/docs/overview.md` | 目录结构图、ASCII 架构图 |
+| `desktop/docs/reference/overview.md` | 目录结构图、ASCII 架构图 |
 | `desktop/docs/agent-hooks/README.md` | Hook 入口对照表 |
 | `desktop/docs/agent-hooks/claude-code.md` | 配置示例中的 command 路径 |
 | `desktop/docs/agent-hooks/codex.md` | 配置示例中的 command 路径 |
