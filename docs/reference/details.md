@@ -7,6 +7,16 @@
 
 ## 1. 文档索引
 
+### 已验证的 AI Coding CLI 版本
+
+当前仓库中的 Hooks / 插件集成已按下列版本完成联调：
+
+- Claude Code：`2.1.81`
+- OpenCode：`1.17.3`
+- Codex CLI：`0.139.0`
+
+这些版本信息尤其影响 `desktop/docs/agent-hooks/`、`desktop/cross-platform/hooks/` 与 `setup-hooks.sh` 的行为判断；若上游 CLI 更新了 Hook 协议或插件接口，文档和实现都可能需要同步调整。
+
 ### 顶层文档 (`docs/`)
 
 | 文档 | 内容 |

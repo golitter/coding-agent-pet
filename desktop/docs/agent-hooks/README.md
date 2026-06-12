@@ -4,6 +4,16 @@
 
 Claude Code 和 Codex 的事件机制不同，但宠物端通过 `common.py` 统一处理，最终效果一致。OpenCode 采用不同的插件架构（JS/TS 进程内模块），通过 `opencode-plugin.ts` 实现宠物集成。
 
+## 已验证版本
+
+当前文档与实现基于以下 AI Coding CLI 版本联调：
+
+- Claude Code：`2.1.81`
+- OpenCode：`1.17.3`
+- Codex CLI：`0.139.0`
+
+若后续版本变更了 Hook 字段、事件命名、信任机制或插件 API，本目录中的集成细节可能需要同步更新。
+
 ## 文件
 
 | 文件 | 内容 |

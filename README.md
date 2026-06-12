@@ -3,6 +3,10 @@
 一个基于 Claude Code、Codex、OpenCode Hooks 的桌面虚拟宠物项目。
 当前默认角色是像素风南琴梨（Kotori Minami），会随着 AI 编程助手的生命周期事件切换动画与气泡台词。
 
+<p align="center">
+  Claude Code (2.1.81) · OpenCode (1.17.3) · Codex CLI (0.139.0)
+</p>
+
 基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）构建。
 
 <p align="center">

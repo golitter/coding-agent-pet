@@ -14,6 +14,14 @@ bash setup.sh                        # 正式推荐：一键安装 & 启动
 正式使用时，推荐把 `bash setup.sh` 作为标准入口。
 `./build-and-run.sh` 主要用于已经完成初始化后的开发态“编译并重启”。
 
+### 已验证的 AI Coding CLI 版本
+
+这些 hooks / 插件集成当前已按下列版本完成联调，若上游 CLI 后续改动 Hook 协议、事件字段或插件 API，可能需要同步适配：
+
+- Claude Code：`2.1.81`
+- OpenCode：`1.17.3`
+- Codex CLI：`0.139.0`
+
 ### `setup.sh` / `setup-hooks.sh` 会做什么
 
 - 自动写入或更新三套集成：
