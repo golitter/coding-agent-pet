@@ -59,7 +59,12 @@ test("buildPayload carries terminal state and context", () => {
 
 test("resolvePath uses platform dir for relative values and fallback paths", () => {
   assert.equal(
-    resolvePath("runtime/custom", "/repo/root", ["desktop", "cross-platform", "runtime", "sessions"]),
+    resolvePath("runtime/custom", "/repo/root", [
+      "desktop",
+      "cross-platform",
+      "runtime",
+      "sessions",
+    ]),
     "/repo/root/runtime/custom",
   );
   assert.equal(
@@ -69,14 +74,8 @@ test("resolvePath uses platform dir for relative values and fallback paths", () 
 });
 
 test("detectRepoRoot handles real app layout and flat test fixtures", () => {
-  assert.equal(
-    detectRepoRoot("/repo/desktop/cross-platform"),
-    "/repo",
-  );
-  assert.equal(
-    detectRepoRoot("/tmp/kotori-plugin/platform"),
-    "/tmp/kotori-plugin",
-  );
+  assert.equal(detectRepoRoot("/repo/desktop/cross-platform"), "/repo");
+  assert.equal(detectRepoRoot("/tmp/kotori-plugin/platform"), "/tmp/kotori-plugin");
 });
 
 test("resolveSessionId prefers nested event properties", () => {
