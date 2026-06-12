@@ -27,6 +27,10 @@ cp config.example.json config.json   # 按需修改
 bash setup.sh                        # 正式推荐：依赖 → 配置 → hooks → 编译 → 启动
 ./build-and-run.sh                   # 开发辅助：编译并重启
 ./setup-hooks.sh                     # 单独配置 hooks
+npm run lint                         # ESLint + Prettier 检查
+npm run lint:fix                     # 自动修复
+npm run format                       # Prettier 格式化
+npm test                             # hooks 单元测试
 ```
 
 ## 交互
