@@ -1,5 +1,9 @@
 # coding-agent-pet
 
+<p align="center">
+  <img src="docs/images/coding-agent-pet-logo.png" alt="coding-agent-pet logo" width="96">
+</p>
+
 一个基于 Claude Code、Codex、OpenCode Hooks 的桌面虚拟宠物项目。
 当前默认角色是像素风南琴梨（Kotori Minami），会随着 AI 编程助手的生命周期事件切换动画与气泡台词。
 
@@ -10,7 +14,7 @@
 基于 [Tauri v2](https://v2.tauri.app/)（Rust + HTML/CSS/JS）构建。
 
 <p align="center">
-  <img src="docs/spritesheet.webp" alt="Kotori 精灵图（9 行 × 8 列，共 57 帧动画）" width="320">
+  <img src="docs/images/spritesheet.webp" alt="Kotori 精灵图（9 行 × 8 列，共 57 帧动画）" width="320">
 </p>
 
 > ↑ 完整精灵图：9 个状态行 × 8 列网格，共 57 帧动画。规格详见 [desktop/docs/spritesheet.md](desktop/docs/spritesheet.md)。
