@@ -304,6 +304,23 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 所有 `invoke` 调用都带有 `.catch()` 错误处理。
 
+#### Variant 系统
+
+每项通过 `getMenuPresentation(title, action)` 推导视觉变体（`data-variant` 属性）：
+
+| variant | 触发条件 | 视觉效果 |
+|---|---|---|
+| `quit` | action 为 `quit` | 红色文字 + 悬浮粉色高亮 |
+| `app` | 其他 | 默认样式 |
+
+#### 定位
+
+菜单定位使用 clamp 算法，以右键点击位置为基准，通过 `Math.max/Math.min` 将菜单完全限制在窗口内部（`MENU_MARGIN = 4px`），适配小窗口场景。菜单设置 `max-width: calc(100vw - 8px)` 确保不超出视口。
+
+#### 视觉
+
+菜单使用渐变背景 + `backdrop-filter: blur(28px)` 毛玻璃效果，入场动画 `context-menu-in`（0.16s ease-out 缩放+淡入）。各项使用圆角高亮 + `transform: translateY(-1px)` 微动效。
+
 ### 平台检测
 
 使用 `navigator.userAgentData?.platform`（现代 API）搭配 `navigator.userAgent` 降级检测 macOS，替代已废弃的 `navigator.platform`。

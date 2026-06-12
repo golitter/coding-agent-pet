@@ -172,7 +172,7 @@ function buildContextMenu(menuEl, items) {
         () => {
           invoke("quit_app").catch((e) => console.error("[Menu] quit_app failed:", e));
         },
-        getQuitShortcut(),
+        { shortcut: getQuitShortcut(), variant: "quit" },
       ),
     );
     return;
@@ -190,24 +190,44 @@ function buildContextMenu(menuEl, items) {
           () => {
             invoke("quit_app").catch((e) => console.error("[Menu] quit_app failed:", e));
           },
-          getQuitShortcut(),
+          { shortcut: getQuitShortcut(), variant: "quit" },
         ),
       );
     } else if (item.action === "applescript" && item.script) {
       menuEl.appendChild(
-        createMenuItem(item.title, () => {
-          invoke("run_applescript", { script: item.script }).catch((e) =>
-            console.error("[Menu] run_applescript failed:", e),
-          );
-        }),
+        createMenuItem(
+          item.title,
+          () => {
+            invoke("run_applescript", { script: item.script }).catch((e) =>
+              console.error("[Menu] run_applescript failed:", e),
+            );
+          },
+          getMenuPresentation(item.title, item.action),
+        ),
       );
     }
   }
 }
 
-function createMenuItem(title, onClick, shortcut = "") {
+function getMenuPresentation(title, action) {
+  if (action === "quit") {
+    return { variant: "quit", shortcut: getQuitShortcut() };
+  }
+  return { variant: "app" };
+}
+
+function createMenuItem(title, onClick, options = {}) {
+  const { shortcut = "", icon = "", variant = "app" } = options;
   const el = document.createElement("div");
   el.className = "context-menu-item";
+  el.dataset.variant = variant;
+
+  if (icon) {
+    const iconEl = document.createElement("span");
+    iconEl.className = "context-menu-icon";
+    iconEl.textContent = icon;
+    el.appendChild(iconEl);
+  }
 
   const label = document.createElement("span");
   label.className = "context-menu-label";
@@ -710,17 +730,23 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       exitPassThrough();
     }
     contextMenu.classList.remove("hidden");
-    contextMenu.style.left = `${e.clientX}px`;
-    contextMenu.style.top = `${e.clientY}px`;
+    const MENU_MARGIN = 4;
+    contextMenu.style.left = `${MENU_MARGIN}px`;
+    contextMenu.style.top = `${MENU_MARGIN}px`;
 
-    // Adjust position if menu goes off-screen
+    // Clamp menu fully inside the pet window, including the small-window case
+    // where the menu must shrink to fit available width.
     const rect = contextMenu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-      contextMenu.style.left = `${window.innerWidth - rect.width - 4}px`;
-    }
-    if (rect.bottom > window.innerHeight) {
-      contextMenu.style.top = `${window.innerHeight - rect.height - 4}px`;
-    }
+    const clampedLeft = Math.max(
+      MENU_MARGIN,
+      Math.min(e.clientX, window.innerWidth - rect.width - MENU_MARGIN),
+    );
+    const clampedTop = Math.max(
+      MENU_MARGIN,
+      Math.min(e.clientY, window.innerHeight - rect.height - MENU_MARGIN),
+    );
+    contextMenu.style.left = `${clampedLeft}px`;
+    contextMenu.style.top = `${clampedTop}px`;
   });
 
   // Click anywhere else to close menu
