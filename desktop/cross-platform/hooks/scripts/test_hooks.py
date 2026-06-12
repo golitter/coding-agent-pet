@@ -13,6 +13,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 codex_hook = importlib.import_module('codex_hook')
+common = importlib.import_module('common')
 setup_hooks = importlib.import_module('setup_hooks')
 
 
@@ -26,6 +27,39 @@ class CodexHookTests(unittest.TestCase):
         self.assertEqual(codex_hook.EVENT_ALIASES['post_tool_use'], 'PostToolUse')
         self.assertEqual(codex_hook.EVENT_ALIASES['session_start'], 'SessionStart')
         self.assertEqual(codex_hook.EVENT_ALIASES['stop_failure'], 'StopFailure')
+
+
+class CommonPathTests(unittest.TestCase):
+    def test_resolve_base_dir_prefers_pet_base_dir(self):
+        self.assertEqual(
+            common.resolve_base_dir({'pet_base_dir': 'pets/kotori'}, '/repo'),
+            '/repo/pets/kotori',
+        )
+        self.assertEqual(common.resolve_base_dir({}, '/repo'), '/repo')
+
+    def test_resolve_path_from_base_uses_pet_base_dir_for_relative_sessions_dir(self):
+        self.assertEqual(
+            common.resolve_path_from_base(
+                'runtime/custom-sessions',
+                '/repo/pets/kotori',
+                'desktop',
+                'cross-platform',
+                'runtime',
+                'sessions',
+            ),
+            '/repo/pets/kotori/runtime/custom-sessions',
+        )
+        self.assertEqual(
+            common.resolve_path_from_base(
+                None,
+                '/repo/pets/kotori',
+                'desktop',
+                'cross-platform',
+                'runtime',
+                'sessions',
+            ),
+            '/repo/pets/kotori/desktop/cross-platform/runtime/sessions',
+        )
 
 
 class SetupHooksTests(unittest.TestCase):

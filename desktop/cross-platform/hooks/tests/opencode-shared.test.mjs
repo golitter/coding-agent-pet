@@ -10,6 +10,7 @@ import {
   detectRepoRoot,
   findConfigPath,
   loadPluginRuntime,
+  resolvePetBaseDir,
   resolvePath,
   resolveSessionId,
   resolveState,
@@ -57,7 +58,7 @@ test("buildPayload carries terminal state and context", () => {
   assert.deepEqual(payload.context, { cwd: "/tmp/work", tool_name: "bash" });
 });
 
-test("resolvePath uses platform dir for relative values and fallback paths", () => {
+test("resolvePath uses the provided base dir for relative values and fallback paths", () => {
   assert.equal(
     resolvePath("runtime/custom", "/repo/root", [
       "desktop",
@@ -70,6 +71,22 @@ test("resolvePath uses platform dir for relative values and fallback paths", () 
   assert.equal(
     resolvePath(null, "/repo/root", ["desktop", "cross-platform", "runtime", "sessions"]),
     "/repo/root/desktop/cross-platform/runtime/sessions",
+  );
+});
+
+test("resolvePetBaseDir and resolvePath keep plugin path semantics aligned with Rust", () => {
+  assert.equal(
+    resolvePetBaseDir({ pet_base_dir: "pets/kotori" }, "/repo/root"),
+    "/repo/root/pets/kotori",
+  );
+  assert.equal(resolvePetBaseDir({}, "/repo/root"), "/repo/root");
+  assert.equal(
+    resolvePath(
+      "runtime/custom",
+      resolvePetBaseDir({ pet_base_dir: "pets/kotori" }, "/repo/root"),
+      ["desktop", "cross-platform", "runtime", "sessions"],
+    ),
+    "/repo/root/pets/kotori/runtime/custom",
   );
 });
 

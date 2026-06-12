@@ -107,6 +107,10 @@ export function resolvePath(configValue, baseDir, fallbackParts) {
   return path.join(baseDir, ...fallbackParts);
 }
 
+export function resolvePetBaseDir(config, repoRoot) {
+  return resolvePath(config?.pet_base_dir, repoRoot, []);
+}
+
 export function resolveState(eventName, stateMap = {}) {
   if (eventName === "PostToolUse") {
     return { ...POST_TOOL_STATE };

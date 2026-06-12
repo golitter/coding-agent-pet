@@ -73,6 +73,21 @@ def resolve_path(config_value, repo_root, *fallback_parts):
     return str(Path(repo_root).joinpath(*fallback_parts))
 
 
+def resolve_base_dir(config, repo_root):
+    """Resolve pet_base_dir using the same semantics as the Rust backend."""
+    return resolve_path(config.get('pet_base_dir'), repo_root)
+
+
+def resolve_path_from_base(config_value, base_dir, *fallback_parts):
+    """Resolve configured paths relative to pet_base_dir when needed."""
+    if isinstance(config_value, str) and config_value.strip():
+        expanded = os.path.expanduser(config_value)
+        if os.path.isabs(expanded):
+            return expanded
+        return str(Path(base_dir) / expanded)
+    return str(Path(base_dir).joinpath(*fallback_parts))
+
+
 def atomic_write_json(path, payload):
     """Write JSON atomically via a temp file."""
     tmp_path = f'{path}.tmp'
@@ -137,9 +152,10 @@ def process_event(platform_dir, source, hook_event, session_id, tool_name,
     config, repo_root = load_config(platform_dir)
 
     pet_id = config.get('pet_id', 'kotori-minami')
-    sessions_dir = resolve_path(
+    pet_base_dir = resolve_base_dir(config, repo_root)
+    sessions_dir = resolve_path_from_base(
         config.get('sessions_dir'),
-        repo_root,
+        pet_base_dir,
         'desktop',
         'cross-platform',
         'runtime',

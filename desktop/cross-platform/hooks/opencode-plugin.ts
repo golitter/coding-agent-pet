@@ -14,6 +14,7 @@ import {
   debug,
   loadPluginRuntime,
   pushSocket,
+  resolvePetBaseDir,
   resolvePath,
   resolveSessionId,
   resolveToolEvent,
@@ -54,7 +55,8 @@ async function handleEvent(
   if (!runtime) return;
 
   const { config, repoRoot } = runtime;
-  const sessionsDir = resolvePath(config.sessions_dir, repoRoot, [
+  const petBaseDir = resolvePetBaseDir(config, repoRoot);
+  const sessionsDir = resolvePath(config.sessions_dir, petBaseDir, [
     "desktop",
     "cross-platform",
     "runtime",

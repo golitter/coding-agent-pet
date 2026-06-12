@@ -479,7 +479,7 @@ impl ActivityAggregator {
             ));
         }
 
-        let mut backfilled = 0usize;
+        let mut upserted = 0usize;
         let mut removed = 0usize;
         {
             let mut inner = self.inner.lock().unwrap();
@@ -489,18 +489,26 @@ impl ActivityAggregator {
                 }
             }
             for (id, act) in to_upsert {
-                if inner.activities.contains_key(&id) {
-                    continue;
+                let changed = inner
+                    .activities
+                    .get(&id)
+                    .map(|existing| {
+                        existing.state != act.state
+                            || existing.dialogue != act.dialogue
+                            || existing.source != act.source
+                    })
+                    .unwrap_or(true);
+                if changed {
+                    inner.activities.insert(id, act);
+                    upserted += 1;
                 }
-                inner.activities.insert(id, act);
-                backfilled += 1;
             }
         }
 
-        if backfilled > 0 || removed > 0 {
+        if upserted > 0 || removed > 0 {
             info!(
-                "Reconciled changed paths: {} backfilled, {} memory entries removed, {} residue files pruned",
-                backfilled, removed, files_pruned
+                "Reconciled changed paths: {} entries upserted, {} memory entries removed, {} residue files pruned",
+                upserted, removed, files_pruned
             );
             self.aggregate_and_notify();
         }
@@ -582,5 +590,55 @@ impl Inner {
     /// Compute and return state change (called while the lock is held).
     fn aggregate(&mut self) -> Option<StateChange> {
         ActivityAggregator::compute_change(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("kotori-pet-aggregator-{label}-{unique}"))
+    }
+
+    fn write_session_file(dir: &Path, session_id: &str, state: &str, dialogue: &str) -> PathBuf {
+        let path = dir.join(format!("{session_id}.json"));
+        let payload = serde_json::json!({
+            "state": state,
+            "dialogue": dialogue,
+            "source": "codex",
+            "isTerminal": false
+        });
+        fs::write(&path, serde_json::to_string(&payload).unwrap()).unwrap();
+        path
+    }
+
+    #[test]
+    fn reconcile_paths_overwrites_existing_activity_from_disk() {
+        let dir = temp_dir("reconcile");
+        fs::create_dir_all(&dir).unwrap();
+
+        let aggregator = ActivityAggregator::new(dir.to_string_lossy().to_string(), 3600);
+        aggregator.update("session-1", "running", "处理中...", "codex", false);
+
+        let session_path = write_session_file(&dir, "session-1", "waiting", "需要你的授权～");
+        aggregator.reconcile_paths(vec![session_path]);
+
+        let inner = aggregator.inner.lock().unwrap();
+        let activity = inner.activities.get("session-1").unwrap();
+        assert_eq!(activity.state, "waiting");
+        assert_eq!(activity.dialogue, "需要你的授权～");
+        assert_eq!(inner.aggregated.current_state, "waiting");
+        assert_eq!(inner.aggregated.current_dialogue, "需要你的授权～");
+        assert_eq!(inner.aggregated.active_count, 1);
+
+        let _ = fs::remove_dir_all(dir);
     }
 }
