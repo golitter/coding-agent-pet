@@ -18,8 +18,8 @@
   "lint-staged": {
     "src/**/*.{js,html,css}": "prettier --write",
     "src/**/*.js": "eslint --fix",
-    "hooks/**/*.ts": "prettier --write",
-    "*.{json,md}": "prettier --write"
+    "hooks/**/*.{ts,mjs}": "prettier --write",
+    "*.{json,md,mjs,toml,yml,yaml}": "prettier --write"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
