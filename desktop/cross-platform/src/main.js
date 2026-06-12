@@ -23,7 +23,8 @@ const ENTER_THRESHOLD = 10; // alpha < 10 → enter pass-through
 const EXIT_THRESHOLD = 20; // alpha >= 20 → exit pass-through (hysteresis)
 const SOLID_CONFIRM_COUNT = 2; // consecutive solid frames before exiting
 const POLL_INTERVAL_MS = 80; // polling rate while in pass-through mode (80ms ≈ 12Hz)
-const NORMAL_HIT_TEST_POLL_MS = 80; // catches "first click" with no prior mousemove
+const NORMAL_HIT_TEST_POLL_MS = 120; // helper-only polling during recent activity windows
+const NORMAL_HIT_TEST_ACTIVE_MS = 2500; // keep helper polling alive briefly after interaction
 
 /** Bridge JS → Rust log for diagnostics. Appears in RUST_LOG output. */
 function jsLog(level, tag, msg) {
@@ -122,6 +123,13 @@ async function main() {
 
   // 12. Setup mouse interaction handlers
   setupInteractions(animator, contextMenu, bubble, petSprite);
+
+  window.addEventListener("pagehide", () => {
+    jsLog("warn", "Main", "pagehide fired");
+  });
+  window.addEventListener("beforeunload", () => {
+    jsLog("warn", "Main", "beforeunload fired");
+  });
 
   console.log("[Main] ✓ Pet initialized");
   jsLog("info", "Main", `Pet initialized — scale=${config.scale} fps=${config.fps}`);
@@ -309,6 +317,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   const appWindow = getCurrentWindow();
   let dragStart = null;
   let isDragging = false;
+  let windowFocused = document.hasFocus();
   const DRAG_THRESHOLD = 3;
 
   // --- Sprite rect cache (avoids layout thrashing on every mousemove) ---
@@ -325,6 +334,9 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let pollTimerId = null;
   let recoveryPollTimerId = null; // recovery polling when normal exit fails
   let normalPollTimerId = null; // normal-mode helper polling (non-overlapping)
+  let passThroughPollInFlight = false;
+  let lastPassThroughPollAt = 0;
+  let normalPollingUntil = 0;
   let solidHitCount = 0;
   let consecutivePollErrors = 0; // tracks consecutive IPC errors in pollCursor
   let dragTimerId = null; // drag safety timeout
@@ -350,6 +362,37 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     return winX >= 0 && winY >= 0 && winX < window.innerWidth && winY < window.innerHeight;
   }
 
+  function shouldRunNormalHitTestPolling() {
+    return (
+      windowFocused &&
+      hitTestEnabled &&
+      !dragStart &&
+      !isPassThrough &&
+      !applyingPassThrough &&
+      performance.now() < normalPollingUntil
+    );
+  }
+
+  function stopNormalHitTestPolling() {
+    if (normalPollTimerId !== null) {
+      clearTimeout(normalPollTimerId);
+      normalPollTimerId = null;
+    }
+  }
+
+  function armNormalHitTestPolling(durationMs = NORMAL_HIT_TEST_ACTIVE_MS) {
+    if (!animator.hitTestReady) return;
+    normalPollingUntil = Math.max(normalPollingUntil, performance.now() + durationMs);
+    if (shouldRunNormalHitTestPolling()) {
+      startNormalHitTestPolling();
+    }
+  }
+
+  function disarmNormalHitTestPolling() {
+    normalPollingUntil = 0;
+    stopNormalHitTestPolling();
+  }
+
   // --- Pass-through control ---
   let lastExitTime = 0; // re-entry cooldown timestamp
   const REENTRY_COOLDOWN_MS = 200;
@@ -373,6 +416,8 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       isPassThrough = true;
       solidHitCount = 0;
       consecutivePollErrors = 0;
+      lastPassThroughPollAt = performance.now();
+      disarmNormalHitTestPolling();
       startPolling();
       jsLog("info", "HitTest", "ENTER pass-through");
     } finally {
@@ -398,6 +443,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
           solidHitCount = 0;
           consecutivePollErrors = 0;
           lastExitTime = performance.now();
+          armNormalHitTestPolling();
           jsLog("info", "HitTest", "EXIT pass-through");
           return; // success
         } catch (e) {
@@ -432,9 +478,15 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       // after an exitPassThrough() sets isPassThrough=false mid-chain.
       pollTimerId = null;
       if (!isPassThrough) return; // stopped while waiting
-      await pollCursor();
-      if (isPassThrough) {
-        pollTimerId = setTimeout(tick, POLL_INTERVAL_MS);
+      passThroughPollInFlight = true;
+      try {
+        await pollCursor();
+      } finally {
+        passThroughPollInFlight = false;
+        lastPassThroughPollAt = performance.now();
+        if (isPassThrough) {
+          pollTimerId = setTimeout(tick, POLL_INTERVAL_MS);
+        }
       }
     };
     pollTimerId = setTimeout(tick, POLL_INTERVAL_MS);
@@ -445,6 +497,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       clearTimeout(pollTimerId);
       pollTimerId = null;
     }
+    passThroughPollInFlight = false;
   }
 
   /** Recovery polling — last-resort safety net. Runs when normal exitPassThrough
@@ -463,6 +516,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
         solidHitCount = 0;
         consecutivePollErrors = 0;
         lastExitTime = performance.now();
+        armNormalHitTestPolling();
         console.log("[HitTest] Recovery exit succeeded");
         jsLog("info", "HitTest", "Recovery exit succeeded");
         recoveryPollTimerId = null;
@@ -528,7 +582,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
    *  a transparent pixel before the first click, so no mousemove fires to arm
    *  pass-through. */
   async function pollNormalHitTest() {
-    if (isPassThrough || applyingPassThrough || !hitTestEnabled || dragStart) return;
+    if (!shouldRunNormalHitTestPolling()) return;
     try {
       const [winX, winY] = await invoke("cursor_in_window");
       if (!isPointInsideWindow(winX, winY)) return;
@@ -547,13 +601,16 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     if (normalPollTimerId !== null) return;
     const tick = async () => {
       normalPollTimerId = null;
+      if (!shouldRunNormalHitTestPolling()) return;
       await pollNormalHitTest();
-      normalPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
+      if (shouldRunNormalHitTestPolling()) {
+        normalPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
+      }
     };
     normalPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
   }
 
-  startNormalHitTestPolling();
+  armNormalHitTestPolling();
   pollNormalHitTest();
 
   // Triple-click detection: 3 left-clicks within TRIPLE_CLICK_WINDOW_MS
@@ -573,6 +630,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   document.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // left button only
     jsLog("info", "Mouse", `down isPassThrough=${isPassThrough} hitTest=${hitTestEnabled}`);
+    armNormalHitTestPolling();
 
     // A click can begin without any prior mousemove, especially when the pet
     // window was unfocused. Guard mousedown itself so the first click on a
@@ -594,6 +652,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
     // Disable hit-test during drag to prevent pass-through interference
     hitTestEnabled = false;
+    disarmNormalHitTestPolling();
     if (isPassThrough) {
       exitPassThrough(); // async, fire-and-forget
     }
@@ -630,6 +689,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // now only throttles the directional *animation*, not the drag itself.
   let pendingMove = null;
   document.addEventListener("mousemove", (e) => {
+    armNormalHitTestPolling(1200);
     // --- Hit-test: check alpha on every move (normal mode only) ---
     if (!dragStart && !isPassThrough && hitTestEnabled) {
       const alpha = checkAlphaAtCss(e.clientX, e.clientY);
@@ -659,6 +719,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
           dragStart = null;
           isDragging = false;
           hitTestEnabled = true;
+          armNormalHitTestPolling();
         });
         // Start on-demand rAF loop for direction animation
         rafId = requestAnimationFrame(processMove);
@@ -723,10 +784,12 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     dragStart = null;
     isDragging = false;
     hitTestEnabled = true; // re-enable hit-test after drag/click
+    armNormalHitTestPolling();
   });
 
   // Right-click → context menu
   document.addEventListener("contextmenu", (e) => {
+    armNormalHitTestPolling();
     if (!isPassThrough && hitTestEnabled) {
       const alpha = checkAlphaAtCss(e.clientX, e.clientY);
       if (alpha < ENTER_THRESHOLD) {
@@ -741,6 +804,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     e.preventDefault();
     // Disable hit-test while menu is visible
     hitTestEnabled = false;
+    disarmNormalHitTestPolling();
     if (isPassThrough) {
       exitPassThrough();
     }
@@ -768,6 +832,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // Click anywhere else to close menu
   document.addEventListener("click", () => {
     hideAllMenus();
+    armNormalHitTestPolling();
   });
 
   document.addEventListener("keydown", (e) => {
@@ -792,6 +857,9 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // checked dragStart too, every first click on an unfocused window would be
   // swallowed — dragStart is set on every mousedown, not just actual drags.
   window.addEventListener("focus", () => {
+    windowFocused = true;
+    animator.setFocused(true);
+    armNormalHitTestPolling();
     if (isDragging) {
       console.log("[Drag] Reset stuck drag state on window focus");
       jsLog("warn", "Drag", "Reset stuck drag state on window focus");
@@ -804,7 +872,14 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       dragStart = null;
       isDragging = false;
       hitTestEnabled = true;
+      armNormalHitTestPolling();
     }
+  });
+
+  window.addEventListener("blur", () => {
+    windowFocused = false;
+    animator.setFocused(false);
+    disarmNormalHitTestPolling();
   });
 
   // --- Fix 5: Global health check (catch-all safety net) ---
@@ -812,7 +887,13 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   setInterval(() => {
     // Pass-through stuck: isPassThrough=true but no polling running
     if (isPassThrough && !applyingPassThrough) {
-      if (pollTimerId === null && recoveryPollTimerId === null) {
+      const pollRecentlyActive = performance.now() - lastPassThroughPollAt < POLL_INTERVAL_MS * 4;
+      if (
+        pollTimerId === null &&
+        recoveryPollTimerId === null &&
+        !passThroughPollInFlight &&
+        !pollRecentlyActive
+      ) {
         console.warn("[HealthCheck] Pass-through with no active polling — forcing exit");
         jsLog("warn", "HealthCheck", "pass-through stuck with no polling — forcing exit");
         exitPassThrough();

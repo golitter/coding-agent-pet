@@ -4,11 +4,10 @@ set -euo pipefail
 
 PLATFORM_DIR="$(cd "$(dirname "$0")" && pwd)"
 TAURI_DIR="$PLATFORM_DIR/src-tauri"
+BINARY="$TAURI_DIR/target/debug/kotori-pet"
 
 echo "🔨 编译 KotoriPet (Tauri)..."
 (cd "$PLATFORM_DIR" && npx tauri build --debug 2>&1)
-
-BINARY="$TAURI_DIR/target/debug/kotori-pet"
 
 echo "🧹 清除签名限制..."
 if [[ "$(uname)" == "Darwin" ]]; then
@@ -23,13 +22,27 @@ sleep 1
 mkdir -p "$PLATFORM_DIR/runtime/sessions"
 
 echo "🚀 启动新版本..."
-nohup "$BINARY" > /tmp/kotori-pet-tauri.log 2>&1 &
+nohup "$BINARY" </dev/null > /tmp/kotori-pet-tauri.log 2>&1 &
+disown || true
+
 sleep 2
 
+stable_pid=""
+for _ in {1..10}; do
+    stable_pid="$(pgrep -x "kotori-pet" | tail -n 1 || true)"
+    if [[ -n "$stable_pid" ]]; then
+        sleep 1
+        if kill -0 "$stable_pid" 2>/dev/null; then
+            break
+        fi
+    fi
+    stable_pid=""
+    sleep 1
+done
+
 # 验证
-if pgrep -f "kotori-pet" > /dev/null; then
-    PID=$(pgrep -f "kotori-pet")
-    echo "✅ KotoriPet (Tauri) 已启动 (PID: $PID)"
+if [[ -n "$stable_pid" ]] && kill -0 "$stable_pid" 2>/dev/null; then
+    echo "✅ KotoriPet (Tauri) 已启动 (PID: $stable_pid)"
 else
     echo "❌ 启动失败，查看日志: cat /tmp/kotori-pet-tauri.log"
     exit 1

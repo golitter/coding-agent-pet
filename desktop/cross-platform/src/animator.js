@@ -20,6 +20,21 @@ const STATES = [
 ];
 
 const ONE_SHOT_STATES = new Set(["jumping", "waving"]);
+const STATE_FPS = {
+  idle: 7,
+  waiting: 7,
+  failed: 7,
+  review: 8,
+  waving: 8,
+  jumping: 10,
+  running: 10,
+  "running-left": 10,
+  "running-right": 10,
+};
+const BACKGROUND_FPS_FACTOR = 0.6;
+const MIN_BACKGROUND_FPS = 4;
+const ALPHA_MASK_PINNED_STATES = new Set(["idle", "running-left", "running-right"]);
+const ALPHA_MASK_CACHE_LIMIT = 4;
 
 export class SpriteAnimator {
   constructor() {
@@ -30,12 +45,15 @@ export class SpriteAnimator {
     this.preOneShotState = "idle";
     this.timer = null;
     this.fps = 10;
+    this.isFocused = true;
+    this.effectiveFps = 10;
     this.onFrame = null; // callback(imageElement)
     this.frameTiming = {}; // { stateName: { holds: [tickCount, ...] } }
     this.holdRemaining = 1;
 
     // Alpha mask system for per-pixel hit testing
     this.alphaMasks = new Map(); // stateName → Uint8Array[] (indexed by frame number)
+    this.alphaMaskLoadPromises = new Map(); // stateName → Promise<void>
     this.framePaths = {}; // { stateName: [nativePath, ...] } — raw FS paths for byte reads
     this.baseWidth = SPRITE_W;
     this.baseHeight = SPRITE_H;
@@ -74,16 +92,25 @@ export class SpriteAnimator {
    */
   async loadFrames(framesDir, fps) {
     this.fps = fps || 10;
+    this.effectiveFps = this.getTargetFps();
 
-    // 1. Try loading via manifest first
-    const manifestUrl = window.__TAURI__.core.convertFileSrc(`${framesDir}/frames-manifest.json`);
+    // 1. Try loading via manifest first. Read bytes via IPC instead of fetch():
+    // WKWebView asset responses can be inconsistent for JSON, which would
+    // silently drop us into the legacy probe path and reintroduce startup
+    // "file does not exist" noise for the missing sentinel frame.
+    const manifestPath = `${framesDir}/frames-manifest.json`;
     let manifestRows = null;
     try {
-      const res = await fetch(manifestUrl);
-      if (res.ok) {
-        const manifest = await res.json();
+      const manifestBytes = await window.__TAURI__.core.invoke("read_file_bytes", {
+        path: manifestPath,
+      });
+      if (manifestBytes) {
+        const manifestText = new TextDecoder().decode(new Uint8Array(manifestBytes));
+        const manifest = JSON.parse(manifestText);
         if (manifest && Array.isArray(manifest.rows)) {
           manifestRows = manifest.rows;
+        } else {
+          console.warn("[Animator] manifest missing rows array, falling back to probe");
         }
       }
     } catch (e) {
@@ -132,8 +159,9 @@ export class SpriteAnimator {
       `[Animator] ✓ Loaded ${total} frames across ${Object.keys(this.frames).length} states`,
     );
 
-    // Pre-compute alpha masks for per-pixel hit testing
-    await this.computeAlphaMasks();
+    // Warm the interactive states used most often at startup / drag time.
+    await this.ensureAlphaMasksForStates(["idle", "running-left", "running-right"]);
+    this.pruneAlphaMasks();
   }
 
   /** Start the animation loop */
@@ -141,8 +169,8 @@ export class SpriteAnimator {
     if (this.timer) return;
     this.resetHold();
     this.showCurrentFrame();
-    this.timer = setInterval(() => this.tick(), 1000 / this.fps);
-    console.log(`[Animator] ✓ Started at ${this.fps} FPS`);
+    this.restartTimer();
+    console.log(`[Animator] ✓ Started at ${this.effectiveFps} FPS`);
   }
 
   /** Stop the animation loop */
@@ -151,6 +179,12 @@ export class SpriteAnimator {
       clearInterval(this.timer);
       this.timer = null;
     }
+  }
+
+  setFocused(isFocused) {
+    if (this.isFocused === isFocused) return;
+    this.isFocused = isFocused;
+    this.updatePlaybackRate();
   }
 
   /** Transition to a new animation state */
@@ -168,6 +202,9 @@ export class SpriteAnimator {
     this.currentFrameIndex = 0;
     this.resetHold();
     this.showCurrentFrame();
+    this.ensureAlphaMasksForStates([state]).catch(() => {});
+    this.pruneAlphaMasks();
+    this.updatePlaybackRate();
   }
 
   /** Trigger a one-shot animation (jumping, waving).
@@ -187,6 +224,9 @@ export class SpriteAnimator {
     this.currentFrameIndex = 0;
     this.resetHold();
     this.showCurrentFrame();
+    this.ensureAlphaMasksForStates([state]).catch(() => {});
+    this.pruneAlphaMasks();
+    this.updatePlaybackRate();
   }
 
   /** Handle drag direction for running animation */
@@ -199,6 +239,9 @@ export class SpriteAnimator {
         this.currentState = "running-right";
         this.currentFrameIndex = 0;
         this.resetHold();
+        this.ensureAlphaMasksForStates(["running-right"]).catch(() => {});
+        this.pruneAlphaMasks();
+        this.updatePlaybackRate();
       }
     } else if (dx < -0.5) {
       if (this.currentState !== "running-right" && this.currentState !== "running-left") {
@@ -208,6 +251,9 @@ export class SpriteAnimator {
         this.currentState = "running-left";
         this.currentFrameIndex = 0;
         this.resetHold();
+        this.ensureAlphaMasksForStates(["running-left"]).catch(() => {});
+        this.pruneAlphaMasks();
+        this.updatePlaybackRate();
       }
     } else if (dx === 0) {
       if (this.currentState === "running-right" || this.currentState === "running-left") {
@@ -219,57 +265,65 @@ export class SpriteAnimator {
         this.currentFrameIndex = 0;
         this.resetHold();
         this.showCurrentFrame();
+        this.ensureAlphaMasksForStates([restore]).catch(() => {});
+        this.pruneAlphaMasks();
+        this.updatePlaybackRate();
       }
     }
   }
 
-  /** Pre-compute alpha masks for all loaded frames.
-   *  Uses batch IPC (read_frames_batch) to read all frame bytes in a single
-   *  call, then processes them locally — much faster than 55+ individual IPC
-   *  round trips. Memory: ~57 frames × 192×208 ≈ 2.2 MB. */
-  async computeAlphaMasks() {
+  async ensureAlphaMasksForStates(states) {
+    const uniqueStates = [...new Set(states)].filter(
+      (state) => state && this.framePaths[state]?.length,
+    );
+    await Promise.all(uniqueStates.map((state) => this.ensureAlphaMasksForState(state)));
+    this.hitTestReady = this.alphaMasks.size > 0;
+  }
+
+  /** Compute alpha masks only for requested states.
+   *  This keeps startup cheaper and avoids pinning every frame's mask in
+   *  memory when only the current / nearby states are interactable. */
+  async ensureAlphaMasksForState(state) {
+    if (this.hasCompleteAlphaMaskState(state)) return;
+    if (this.alphaMaskLoadPromises.has(state)) {
+      await this.alphaMaskLoadPromises.get(state);
+      return;
+    }
+
+    const task = this.computeAlphaMasksForState(state).finally(() => {
+      this.alphaMaskLoadPromises.delete(state);
+      this.hitTestReady = this.alphaMasks.size > 0;
+    });
+    this.alphaMaskLoadPromises.set(state, task);
+    await task;
+  }
+
+  async computeAlphaMasksForState(state) {
+    const paths = this.framePaths[state];
+    if (!paths || paths.length === 0) return;
+
     const canvas = document.createElement("canvas");
     canvas.width = this.baseWidth;
     canvas.height = this.baseHeight;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
-    let maskCount = 0;
+    let stateMaskCount = 0;
     let failCount = 0;
-
-    // Pre-initialize mask arrays for each state
-    for (const [state, paths] of Object.entries(this.framePaths)) {
-      this.alphaMasks.set(state, new Array(paths.length));
-    }
+    this.alphaMasks.set(state, new Array(paths.length));
 
     try {
-      // Collect all frame paths for a single batch IPC call
-      const allPaths = [];
-      const pathIndex = []; // [state, frameIdx] for each path
-      for (const [state, paths] of Object.entries(this.framePaths)) {
-        for (let i = 0; i < paths.length; i++) {
-          if (paths[i]) {
-            allPaths.push(paths[i]);
-            pathIndex.push([state, i]);
-          }
-        }
-      }
-
-      // Batch read all frames in one IPC call (reduces 55+ IPC round trips to 1)
       let bytesMap;
       try {
         bytesMap = await window.__TAURI__.core.invoke("read_frames_batch", {
-          paths: allPaths,
+          paths,
         });
       } catch (e) {
-        console.warn("[Animator] Batch read failed, hit-test disabled:", e);
-        this.hitTestReady = false;
+        console.warn(`[Animator] Batch read failed for state ${state}, hit-test disabled:`, e);
         return;
       }
 
-      // Phase 1: Load all clean images in parallel (the async bottleneck)
       const loadedImages = await Promise.all(
-        pathIndex.map(async ([state, i], idx) => {
-          const nativePath = allPaths[idx];
+        paths.map(async (nativePath, i) => {
           const bytes = bytesMap[nativePath];
           if (!bytes) return null;
 
@@ -287,19 +341,17 @@ export class SpriteAnimator {
             URL.revokeObjectURL(cleanUrl);
             return null;
           }
-          return { state, i, cleanImg, cleanUrl };
+          return { i, cleanImg, cleanUrl };
         }),
       );
 
-      // Phase 2: Extract alpha masks (sequential — single shared canvas)
       for (const item of loadedImages) {
         if (!item) {
           failCount++;
           continue;
         }
-        const { state, i, cleanImg, cleanUrl } = item;
+        const { i, cleanImg, cleanUrl } = item;
 
-        // clearRect prevents residual pixels from polluting transparent frames
         ctx.clearRect(0, 0, this.baseWidth, this.baseHeight);
         ctx.drawImage(cleanImg, 0, 0, this.baseWidth, this.baseHeight);
         URL.revokeObjectURL(cleanUrl);
@@ -311,17 +363,43 @@ export class SpriteAnimator {
           alpha[j] = data[k];
         }
         this.alphaMasks.get(state)[i] = alpha;
-        maskCount++;
+        stateMaskCount++;
       }
 
-      this.hitTestReady = maskCount > 0;
       console.log(
-        `[Animator] ✓ Computed ${maskCount} alpha masks (${failCount} failed, hitTestReady=${this.hitTestReady})`,
+        `[Animator] ✓ Computed ${stateMaskCount} alpha masks for ${state} (${failCount} failed)`,
       );
     } catch (e) {
-      console.warn("[Animator] ⚠️ computeAlphaMasks failed, hit-test disabled:", e);
-      this.hitTestReady = false;
+      console.warn(`[Animator] ⚠️ computeAlphaMasksForState failed for ${state}:`, e);
+      this.alphaMasks.delete(state);
     }
+  }
+
+  hasCompleteAlphaMaskState(state) {
+    const stateMasks = this.alphaMasks.get(state);
+    const frameCount = this.framePaths[state]?.length ?? 0;
+    return (
+      Array.isArray(stateMasks) &&
+      frameCount > 0 &&
+      stateMasks.length === frameCount &&
+      stateMasks.every(Boolean)
+    );
+  }
+
+  pruneAlphaMasks() {
+    const preserve = new Set([
+      ...ALPHA_MASK_PINNED_STATES,
+      this.currentState,
+      this.preDragState,
+      this.preOneShotState,
+      this.pendingOneShot,
+    ]);
+    const removableStates = [...this.alphaMasks.keys()].filter((state) => !preserve.has(state));
+    while (this.alphaMasks.size > ALPHA_MASK_CACHE_LIMIT && removableStates.length > 0) {
+      const state = removableStates.shift();
+      this.alphaMasks.delete(state);
+    }
+    this.hitTestReady = this.alphaMasks.size > 0;
   }
 
   /** Look up the alpha value at a given sprite pixel coordinate.
@@ -336,6 +414,28 @@ export class SpriteAnimator {
     const cx = Math.max(0, Math.min(this.baseWidth - 1, Math.round(x)));
     const cy = Math.max(0, Math.min(this.baseHeight - 1, Math.round(y)));
     return mask[cy * this.baseWidth + cx];
+  }
+
+  getTargetFps() {
+    const stateFps = STATE_FPS[this.currentState] ?? this.fps;
+    if (this.isFocused) return stateFps;
+    return Math.max(MIN_BACKGROUND_FPS, Math.round(stateFps * BACKGROUND_FPS_FACTOR));
+  }
+
+  updatePlaybackRate() {
+    const nextFps = this.getTargetFps();
+    if (Math.abs(nextFps - this.effectiveFps) < 0.01) return;
+    this.effectiveFps = nextFps;
+    if (this.timer) {
+      this.restartTimer();
+    }
+  }
+
+  restartTimer() {
+    if (this.timer) {
+      clearInterval(this.timer);
+    }
+    this.timer = setInterval(() => this.tick(), 1000 / this.effectiveFps);
   }
 
   // --- Private ---

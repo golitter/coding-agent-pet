@@ -11,6 +11,8 @@ xattr -cr src-tauri/target/debug/kotori-pet  # macOS: 清除签名限制
 
 或使用脚本：`./build-and-run.sh`
 
+> **PID 稳定性**：`build-and-run.sh` 启动后进行 PID 存活检测（10 次重试），`nohup` 使用 `</dev/null` + `disown` 防止终端退出影响进程，`pgrep -x` 精确匹配进程名。
+
 日志级别通过环境变量 `RUST_LOG` 控制（默认 `info`）：
 
 ```bash
@@ -75,7 +77,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 |---|---|
 | `get_config` | 返回前端所需的配置子集（frames_dir, scale, fps, dialogue_\*, menu_items） |
 | `run_applescript` | 执行 AppleScript 命令（**仅 macOS**，含安全检查） |
-| `quit_app` | 退出应用（`app.exit(0)`） |
+| `quit_app` | 退出应用（`app.exit(0)`），前端调用时记录 `info!` 日志 |
 | `purge_all_sessions` | 手动清空：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除文件数 |
 | `read_file_bytes` | 读 PNG 原始字节（hit-test alpha 蒙版），**路径校验限制在 `frames_dir` 内** |
 | `read_frames_batch` | 批量读取多帧 PNG（单次 IPC 替代 57 次 `read_file_bytes`），**两级路径校验**：lexicle 快路径（无 syscall）+ canonicalize 慢路径（含符号链接时降级） |
@@ -110,6 +112,8 @@ src-tauri/    → cross-platform/    (config 所在目录)
 10. 定时清理              ← tokio interval, 间隔从配置读取
 11. 注入配置到 Tauri      ← app.manage(config) + SocketGuard（RAII，Drop 时清理 socket 文件）
 ```
+
+**窗口生命周期**: `on_window_event` 处理 `CloseRequested`（info 日志）和 `Destroyed`（warn 日志）事件。
 
 **macOS 透明窗口**: 通过 `objc` crate 直接操作 NSWindow 和 WKWebView，设置 `opaque=NO`、`backgroundColor=clearColor`、`hasShadow=NO`。
 
@@ -244,6 +248,8 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 8. listen('state-change')  ← 监听 Rust 状态推送
 9. 右键菜单构建            ← 从 config.menu_items 动态生成
 10. 鼠标交互绑定           ← 点击/拖动/右键/三连击清空
+11. focus/blur 监听         ← 窗口聚焦/失焦时切换 `animator.setFocused()` + normal polling 状态
+12. pagehide 监听           ← 输出诊断日志（页面卸载前）
 ```
 
 ### 窗口属性
@@ -282,6 +288,23 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | **右键** | 弹出自定义上下文菜单 |
 
 > 三连击窗口收紧为 800ms（原 3s 过宽，正常交互 3s 内易误触）；刻意的 triple-tap 仍能从容落在窗口内。前两次点击仍播放跳跃动画，第三次切换为清理。
+
+### Focus/Blur 与 Normal Polling
+
+窗口聚焦/失焦通过 `focus` / `blur` 事件追踪 `windowFocused` 状态：
+
+| 事件 | 行为 |
+|---|---|
+| `focus` | `windowFocused = true`；`animator.setFocused(true)` 恢复帧率；`armNormalHitTestPolling()` 恢复 hit-test 轮询 |
+| `blur` | `windowFocused = false`；`animator.setFocused(false)` 降帧率；`disarmNormalHitTestPolling()` 停止 hit-test 轮询 |
+
+Normal hit-test polling 不再永久运行，改为 **活动窗口模式**：
+- `armNormalHitTestPolling(durationMs=2500)` 在鼠标/点击/拖动结束/退出穿透态等交互时刻触发，持续 `NORMAL_HIT_TEST_POLL_MS = 2500`
+- `disarmNormalHitTestPolling()` 在进入穿透态/拖动/右键菜单/blur 时停止
+- `shouldRunNormalHitTestPolling()` 检查 `windowFocused && hitTestEnabled && !dragStart && !isPassThrough && now < normalPollingUntil`
+
+Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标记和 `pollRecentlyActive`（4× POLL_INTERVAL 内有成功 poll）两个条件，避免误判正在进行的轮询为卡死。
+
 
 ### 拖动动画
 
@@ -331,7 +354,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 ### 帧加载
 
-通过 Tauri 的 `convertFileSrc` 将本地文件路径转为 asset protocol URL，**并行预加载**所有 PNG 帧（`Promise.all`，57 帧同时加载而非逐帧等待）：
+帧 manifest 通过 IPC `read_file_bytes` 读取（不再使用 `fetch` + `convertFileSrc`，规避 WKWebView asset protocol 的可靠性问题），然后 `convertFileSrc` 用于并行预加载 PNG 帧（`Promise.all`，57 帧同时加载）。
 
 | 状态 | 帧数 | 用途 |
 |---|---|---|
@@ -347,20 +370,41 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 总计 **57 帧**。
 
+### 逐状态帧率 (STATE_FPS)
+
+不同状态使用不同帧率，全局 `renderer.fps` 为 fallback，按状态通过 `STATE_FPS` 表覆盖：
+
+| 状态 | FPS |
+|---|---|
+| idle | 7 |
+| waiting | 7 |
+| failed | 7 |
+| review | 8 |
+| waving | 8 |
+| jumping | 10 |
+| running | 10 |
+| running-left | 10 |
+| running-right | 10 |
+
+**后台节流**：窗口失焦时 `setFocused(false)` → `BACKGROUND_FPS_FACTOR = 0.6` 降帧（最低 `MIN_BACKGROUND_FPS = 4`），聚焦时恢复。`updatePlaybackRate()` 在每次状态切换/拖动/焦点变化时调用。
+
+### Alpha Mask 懒加载
+
+不再启动时一次性预计算全部 57 帧的 alpha mask，改为 **按需懒加载 + 剪枝**：
+
+- `ensureAlphaMasksForState(state)` 按状态计算 mask，带去重（`alphaMaskLoadPromises` 防止并发重复计算）
+- 启动时仅预加载 `ALPHA_MASK_PINNED_STATES`（`idle`、`running-left`、`running-right`）
+- 状态切换/拖动时调用 `ensureAlphaMasksForStates([state])`，然后 `pruneAlphaMasks()`
+- `pruneAlphaMasks()` 保留当前状态 + pinned + preDrag/preOneShot，超过 `ALPHA_MASK_CACHE_LIMIT = 4` 时淘汰最久未用
+
 ### 可配置参数
 
 | 参数 | 配置项 | 默认值 |
 |---|---|---|
-| 帧率 | `renderer.fps` | 10 FPS (100ms/帧) |
-| 精灵尺寸 | — | 192×208px（`SPRITE_W`/`SPRITE_H` 常量，导出给 main.js） |
-| 定时器 | — | setInterval |
-
-### 动画类型
-
-| 类型 | 状态 | 行为 |
-|---|---|---|
-| **循环** | idle, running, running-right, running-left, waiting, review, failed | 播完一轮后从头循环 |
-| **一次性** | jumping, waving | 播完一轮后自动回到触发前的状态；若播放期间又触发 one-shot，排队等当前播完后立即播放 |
+| 基础帧率 | `renderer.fps` | 10 FPS |
+| 实际帧率 | `STATE_FPS[state]` | 见上表（失焦时 × 0.6） |
+| 精灵尺寸 | — | 192×208px |
+| Alpha mask 缓存 | `ALPHA_MASK_CACHE_LIMIT` | 4 个状态 |
 
 ### 状态切换
 
@@ -370,6 +414,7 @@ animator.triggerOneShot('jumping') // 触发跳跃动画，播完后恢复之前
 animator.handleDrag(5.0)           // 向右拖动 → running-right
 animator.handleDrag(-3.0)          // 向左拖动 → running-left
 animator.handleDrag(0)             // 松手 → 恢复 preDragState
+animator.setFocused(true)          // 窗口聚焦 → 恢复帧率
 ```
 
 ### 拖动方向覆盖

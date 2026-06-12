@@ -70,6 +70,15 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { .. } => {
+                info!("Window close requested: {}", window.label());
+            }
+            tauri::WindowEvent::Destroyed => {
+                warn!("Window destroyed: {}", window.label());
+            }
+            _ => {}
+        })
         .setup(|app| {
             // 1. Load config
             let config = PetConfig::load();

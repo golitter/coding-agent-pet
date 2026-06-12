@@ -86,6 +86,7 @@ pub fn get_config(config: tauri::State<'_, PetConfig>) -> FrontendConfig {
 
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {
+    info!("quit_app command invoked from frontend");
     app.exit(0);
 }
 

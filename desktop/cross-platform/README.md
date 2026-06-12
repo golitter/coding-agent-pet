@@ -7,10 +7,12 @@
 ```bash
 cd desktop/cross-platform
 cp config.example.json config.json   # 按需修改配置
-./setup.sh                           # 一键安装 & 启动
+bash setup.sh                        # 正式推荐：一键安装 & 启动
 ```
 
 `setup.sh` 自动完成：安装前端依赖 → 生成配置 → 注册 hooks → 编译 → 启动。
+正式使用时，推荐把 `bash setup.sh` 作为标准入口。
+`./build-and-run.sh` 主要用于已经完成初始化后的开发态“编译并重启”。
 
 ### `setup.sh` / `setup-hooks.sh` 会做什么
 
@@ -74,8 +76,8 @@ OpenCode           → opencode-plugin.ts (TS 插件) ──┘     ├── Ru
 desktop/cross-platform/
 ├── config.example.json   # 配置模板
 ├── config.json           # 你的配置（自动生成，不入版本控制）
-├── setup.sh              # 一键安装（安装依赖 + hooks + 编译 + 启动）
-├── build-and-run.sh      # 编译并重启
+├── setup.sh              # 正式推荐入口（安装依赖 + hooks + 编译 + 启动）
+├── build-and-run.sh      # 开发辅助：编译并重启
 ├── setup-hooks.sh        # 配置 hooks（Claude Code + Codex + OpenCode）
 ├── package.json          # 前端依赖（Tauri CLI + API）
 ├── src/                  # 前端
@@ -143,7 +145,10 @@ desktop/cross-platform/
 }
 ```
 
-详见 [config.example.json](config.example.json)。修改后运行 `./build-and-run.sh` 重启生效。
+详见 [config.example.json](config.example.json)。修改后：
+
+- 正式使用：运行 `bash setup.sh`
+- 开发时快速重启：运行 `./build-and-run.sh`
 
 ### 日志
 
