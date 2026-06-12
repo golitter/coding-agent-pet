@@ -179,23 +179,39 @@ pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<ActivityAggregato
     // waits for `debounce` of silence, then reconciles once.
     let debounce = Duration::from_millis(100);
 
-    while let Ok(_event) = rx.recv() {
+    while let Ok(event) = rx.recv() {
+        let mut changed_paths = match event {
+            Ok(ev) => ev.paths,
+            Err(_) => Vec::new(),
+        };
+
         // Drain any events already queued from the same burst.
-        while rx.try_recv().is_ok() {}
+        while let Ok(next) = rx.try_recv() {
+            if let Ok(ev) = next {
+                changed_paths.extend(ev.paths);
+            }
+        }
 
         // Extend the quiet window on each new event; only reconcile after the
         // channel falls silent for the full debounce interval.
         loop {
             match rx.recv_timeout(debounce) {
-                Ok(_) => while rx.try_recv().is_ok() {},
+                Ok(next) => {
+                    if let Ok(ev) = next {
+                        changed_paths.extend(ev.paths);
+                    }
+                    while let Ok(queued) = rx.try_recv() {
+                        if let Ok(ev) = queued {
+                            changed_paths.extend(ev.paths);
+                        }
+                    }
+                }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
             }
         }
 
-        // Incremental reconciliation — backfills socket misses, prunes residue
-        // (terminal files + elapsed one-shots), never overwrites socket-fresh
-        // state. Contrast `load_from_disk` (the startup full reload).
-        session_mgr.reconcile_with_disk();
+        // Reconcile only the files that actually changed in this burst.
+        session_mgr.reconcile_paths(changed_paths);
     }
 }

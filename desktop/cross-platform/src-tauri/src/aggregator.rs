@@ -80,8 +80,6 @@ pub struct AgentActivity {
     pub source: String,
     #[allow(dead_code)]
     pub is_terminal: bool,
-    #[allow(dead_code)]
-    pub updated_at: u64, // unix timestamp in seconds
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -182,10 +180,6 @@ impl ActivityAggregator {
             if is_terminal {
                 inner.activities.remove(session_id);
             } else {
-                let now = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
                 inner.activities.insert(
                     session_id.to_string(),
                     AgentActivity {
@@ -193,7 +187,6 @@ impl ActivityAggregator {
                         dialogue: dialogue.to_string(),
                         source: source.to_string(),
                         is_terminal: false,
-                        updated_at: now,
                     },
                 );
             }
@@ -284,13 +277,6 @@ impl ActivityAggregator {
                 continue;
             }
 
-            // Parse date from JSON (kept for the in-memory struct; not used for staleness).
-            let updated_at = json["updatedAt"]
-                .as_str()
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                .map(|dt| dt.timestamp() as u64)
-                .unwrap_or(0);
-
             // Skip stale files using filesystem mtime — single source of truth
             // for staleness, shared with `cleanup_stale`.
             if is_session_file_stale(&path, now, self.stale_timeout_sec) {
@@ -304,7 +290,6 @@ impl ActivityAggregator {
                     dialogue,
                     source,
                     is_terminal: false,
-                    updated_at,
                 },
             );
         }
@@ -410,38 +395,20 @@ impl ActivityAggregator {
         }
     }
 
-    /// Incremental reconciliation against disk — the file watcher's consumption
-    /// path. Brings in activities that exist on disk but are missing from memory
-    /// (covers events the socket channel missed), and prunes residue files the
-    /// socket channel would otherwise have deleted (terminal files, and one-shot
-    /// celebrations whose display window has elapsed).
-    ///
-    /// Activities already in memory are NEVER overwritten: the socket channel is
-    /// authoritative and always at least as fresh as the file (both originate
-    /// from the same hook payload, but the socket arrives without the watcher's
-    /// debounce delay). The file channel exists only to backfill gaps and clear
-    /// residue — replacing the old "replace_all on every change" that did O(n)
-    /// reads per event and could clobber socket-fresh state.
-    ///
-    /// Contrast with `load_from_disk`, the startup full reload.
-    pub fn reconcile_with_disk(&self) {
-        let read_dir = match std::fs::read_dir(&self.sessions_dir) {
-            Ok(d) => d,
-            Err(_) => return,
-        };
-
+    /// Incremental reconciliation for the specific files the watcher reported.
+    /// This keeps hot-path filesystem work proportional to changed files instead
+    /// of rescanning and reparsing the entire sessions directory per event burst.
+    pub fn reconcile_paths(&self, paths: Vec<PathBuf>) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        // Stage all disk reads outside the lock; apply under one short lock.
-        let mut to_insert: Vec<(String, AgentActivity)> = Vec::new();
+        let mut to_upsert: Vec<(String, AgentActivity)> = Vec::new();
         let mut to_remove: Vec<String> = Vec::new();
         let mut files_pruned = 0usize;
 
-        for entry in read_dir.flatten() {
-            let path = entry.path();
+        for path in paths {
             if path.extension().and_then(|e| e.to_str()) != Some("json") {
                 continue;
             }
@@ -449,6 +416,11 @@ impl ActivityAggregator {
                 Some(s) => s.to_string(),
                 None => continue,
             };
+
+            if !path.exists() {
+                to_remove.push(stem);
+                continue;
+            }
 
             let data = match std::fs::read_to_string(&path) {
                 Ok(d) => d,
@@ -471,8 +443,12 @@ impl ActivityAggregator {
                 continue;
             }
 
-            // Stale by mtime — leave for cleanup_stale (its TTL backstop).
+            // Stale by mtime — prune it here too so a changed stale file does
+            // not linger in memory until the next periodic cleanup pass.
             if is_session_file_stale(&path, now, self.stale_timeout_sec) {
+                let _ = std::fs::remove_file(&path);
+                to_remove.push(stem);
+                files_pruned += 1;
                 continue;
             }
 
@@ -492,27 +468,17 @@ impl ActivityAggregator {
 
             let dialogue = json["dialogue"].as_str().unwrap_or("").to_string();
             let source = json["source"].as_str().unwrap_or("").to_string();
-            let updated_at = json["updatedAt"]
-                .as_str()
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                .map(|dt| dt.timestamp() as u64)
-                .unwrap_or(0);
-
-            to_insert.push((
+            to_upsert.push((
                 stem,
                 AgentActivity {
                     state,
                     dialogue,
                     source,
                     is_terminal: false,
-                    updated_at,
                 },
             ));
         }
 
-        // Apply under one lock. Insert is idempotent against a fresher socket
-        // update: if the socket channel populated `id` while we read disk,
-        // skip — never let a stale disk read clobber authoritative socket state.
         let mut backfilled = 0usize;
         let mut removed = 0usize;
         {
@@ -522,7 +488,7 @@ impl ActivityAggregator {
                     removed += 1;
                 }
             }
-            for (id, act) in to_insert {
+            for (id, act) in to_upsert {
                 if inner.activities.contains_key(&id) {
                     continue;
                 }
@@ -533,7 +499,7 @@ impl ActivityAggregator {
 
         if backfilled > 0 || removed > 0 {
             info!(
-                "Reconciled disk: {} backfilled, {} memory entries removed, {} residue files pruned",
+                "Reconciled changed paths: {} backfilled, {} memory entries removed, {} residue files pruned",
                 backfilled, removed, files_pruned
             );
             self.aggregate_and_notify();

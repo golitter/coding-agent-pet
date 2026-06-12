@@ -341,6 +341,89 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let consecutivePollErrors = 0; // tracks consecutive IPC errors in pollCursor
   let dragTimerId = null; // drag safety timeout
 
+  function resetDragState({ restoreAnimation = true, reenableHitTest = true } = {}) {
+    clearTimeout(dragTimerId);
+    if (restoreAnimation && isDragging) {
+      animator.handleDrag(0);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+    dragStart = null;
+    isDragging = false;
+    if (reenableHitTest) {
+      hitTestEnabled = true;
+    }
+  }
+
+  function finishPassThroughExit({ logMessage = "EXIT pass-through", debugTag = "info" } = {}) {
+    isPassThrough = false;
+    solidHitCount = 0;
+    consecutivePollErrors = 0;
+    lastExitTime = performance.now();
+    armNormalHitTestPolling();
+    jsLog(debugTag, "HitTest", logMessage);
+  }
+
+  function beginExclusivePointerInteraction() {
+    hitTestEnabled = false;
+    disarmNormalHitTestPolling();
+    if (isPassThrough) {
+      exitPassThrough(); // async, fire-and-forget
+    }
+  }
+
+  function tryEnterPassThroughAt(
+    clientX,
+    clientY,
+    { event = null, resetDrag = false, resetClickCounter = false, logMessage = "" } = {},
+  ) {
+    if (isPassThrough || !hitTestEnabled) return false;
+    const alpha = checkAlphaAtCss(clientX, clientY);
+    if (alpha >= ENTER_THRESHOLD) return false;
+
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (resetDrag) {
+      dragStart = null;
+      isDragging = false;
+    }
+    if (resetClickCounter) {
+      clickCount = 0;
+    }
+
+    enterPassThrough(); // async, non-blocking
+    if (logMessage) {
+      jsLog("info", "HitTest", `${logMessage} alpha=${alpha}`);
+    }
+    return true;
+  }
+
+  function showContextMenuAt(clientX, clientY) {
+    contextMenu.classList.remove("hidden");
+    const MENU_MARGIN = 4;
+    contextMenu.style.left = `${MENU_MARGIN}px`;
+    contextMenu.style.top = `${MENU_MARGIN}px`;
+
+    // Clamp menu fully inside the pet window, including the small-window case
+    // where the menu must shrink to fit available width.
+    const rect = contextMenu.getBoundingClientRect();
+    const clampedLeft = Math.max(
+      MENU_MARGIN,
+      Math.min(clientX, window.innerWidth - rect.width - MENU_MARGIN),
+    );
+    const clampedTop = Math.max(
+      MENU_MARGIN,
+      Math.min(clientY, window.innerHeight - rect.height - MENU_MARGIN),
+    );
+    contextMenu.style.left = `${clampedLeft}px`;
+    contextMenu.style.top = `${clampedTop}px`;
+    scheduleContextMenuAutoHide();
+  }
+
   // --- Coordinate helpers ---
 
   /** Check alpha at CSS-relative coords.
@@ -439,12 +522,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       for (let attempt = 0; attempt < MAX_EXIT_RETRIES; attempt++) {
         try {
           await appWindow.setIgnoreCursorEvents(false);
-          isPassThrough = false;
-          solidHitCount = 0;
-          consecutivePollErrors = 0;
-          lastExitTime = performance.now();
-          armNormalHitTestPolling();
-          jsLog("info", "HitTest", "EXIT pass-through");
+          finishPassThroughExit();
           return; // success
         } catch (e) {
           console.warn(`[HitTest] exitPassThrough attempt ${attempt + 1} failed:`, e);
@@ -512,13 +590,8 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       }
       try {
         await appWindow.setIgnoreCursorEvents(false);
-        isPassThrough = false;
-        solidHitCount = 0;
-        consecutivePollErrors = 0;
-        lastExitTime = performance.now();
-        armNormalHitTestPolling();
+        finishPassThroughExit({ logMessage: "Recovery exit succeeded" });
         console.log("[HitTest] Recovery exit succeeded");
-        jsLog("info", "HitTest", "Recovery exit succeeded");
         recoveryPollTimerId = null;
         return;
       } catch (e) {
@@ -586,11 +659,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     try {
       const [winX, winY] = await invoke("cursor_in_window");
       if (!isPointInsideWindow(winX, winY)) return;
-
-      const alpha = checkAlphaAtCss(winX, winY);
-      if (alpha < ENTER_THRESHOLD) {
-        enterPassThrough(); // async, non-blocking
-      }
+      tryEnterPassThroughAt(winX, winY);
     } catch {
       // Best-effort helper only. Mousemove and mousedown guards still protect
       // interactions if the polling IPC is temporarily unavailable.
@@ -636,26 +705,19 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     // window was unfocused. Guard mousedown itself so the first click on a
     // transparent pixel cannot start a drag sequence or trigger the jump on
     // mouseup.
-    if (!isPassThrough && hitTestEnabled) {
-      const alpha = checkAlphaAtCss(e.clientX, e.clientY);
-      if (alpha < ENTER_THRESHOLD) {
-        e.preventDefault();
-        e.stopPropagation();
-        dragStart = null;
-        isDragging = false;
-        clickCount = 0;
-        enterPassThrough(); // async, non-blocking
-        jsLog("info", "HitTest", `transparent mousedown ignored alpha=${alpha}`);
-        return;
-      }
+    if (
+      tryEnterPassThroughAt(e.clientX, e.clientY, {
+        event: e,
+        resetDrag: true,
+        resetClickCounter: true,
+        logMessage: "transparent mousedown ignored",
+      })
+    ) {
+      return;
     }
 
     // Disable hit-test during drag to prevent pass-through interference
-    hitTestEnabled = false;
-    disarmNormalHitTestPolling();
-    if (isPassThrough) {
-      exitPassThrough(); // async, fire-and-forget
-    }
+    beginExclusivePointerInteraction();
     dragStart = { x: e.screenX, y: e.screenY };
     isDragging = false;
     // Safety timeout: if drag state persists beyond DRAG_TIMEOUT_MS (e.g.
@@ -665,16 +727,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       if (isDragging || dragStart) {
         console.warn("[Drag] Timeout — force-resetting stuck drag state");
         jsLog("warn", "Drag", "Timeout — force-resetting stuck drag state");
-        if (isDragging) {
-          animator.handleDrag(0);
-          if (rafId !== null) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-          }
-        }
-        dragStart = null;
-        isDragging = false;
-        hitTestEnabled = true;
+        resetDragState();
       }
     }, DRAG_TIMEOUT_MS);
   });
@@ -689,14 +742,9 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // now only throttles the directional *animation*, not the drag itself.
   let pendingMove = null;
   document.addEventListener("mousemove", (e) => {
-    armNormalHitTestPolling(1200);
     // --- Hit-test: check alpha on every move (normal mode only) ---
-    if (!dragStart && !isPassThrough && hitTestEnabled) {
-      const alpha = checkAlphaAtCss(e.clientX, e.clientY);
-      if (alpha < ENTER_THRESHOLD) {
-        enterPassThrough(); // async, non-blocking
-        return;
-      }
+    if (!dragStart && tryEnterPassThroughAt(e.clientX, e.clientY)) {
+      return;
     }
 
     if (!dragStart || e.button !== 0) return;
@@ -710,15 +758,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
         appWindow.startDragging().catch((error) => {
           console.warn("[Drag] startDragging failed:", error);
           jsLog("error", "Drag", "startDragging failed");
-          animator.handleDrag(0);
-          if (rafId !== null) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-          }
-          clearTimeout(dragTimerId);
-          dragStart = null;
-          isDragging = false;
-          hitTestEnabled = true;
+          resetDragState();
           armNormalHitTestPolling();
         });
         // Start on-demand rAF loop for direction animation
@@ -781,52 +821,26 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       }
     }
 
-    dragStart = null;
-    isDragging = false;
-    hitTestEnabled = true; // re-enable hit-test after drag/click
+    resetDragState({ restoreAnimation: false }); // animation already restored above if needed
     armNormalHitTestPolling();
   });
 
   // Right-click → context menu
   document.addEventListener("contextmenu", (e) => {
     armNormalHitTestPolling();
-    if (!isPassThrough && hitTestEnabled) {
-      const alpha = checkAlphaAtCss(e.clientX, e.clientY);
-      if (alpha < ENTER_THRESHOLD) {
-        e.preventDefault();
-        e.stopPropagation();
-        enterPassThrough(); // async, non-blocking
-        jsLog("info", "HitTest", `transparent contextmenu ignored alpha=${alpha}`);
-        return;
-      }
+    if (
+      tryEnterPassThroughAt(e.clientX, e.clientY, {
+        event: e,
+        logMessage: "transparent contextmenu ignored",
+      })
+    ) {
+      return;
     }
 
     e.preventDefault();
     // Disable hit-test while menu is visible
-    hitTestEnabled = false;
-    disarmNormalHitTestPolling();
-    if (isPassThrough) {
-      exitPassThrough();
-    }
-    contextMenu.classList.remove("hidden");
-    const MENU_MARGIN = 4;
-    contextMenu.style.left = `${MENU_MARGIN}px`;
-    contextMenu.style.top = `${MENU_MARGIN}px`;
-
-    // Clamp menu fully inside the pet window, including the small-window case
-    // where the menu must shrink to fit available width.
-    const rect = contextMenu.getBoundingClientRect();
-    const clampedLeft = Math.max(
-      MENU_MARGIN,
-      Math.min(e.clientX, window.innerWidth - rect.width - MENU_MARGIN),
-    );
-    const clampedTop = Math.max(
-      MENU_MARGIN,
-      Math.min(e.clientY, window.innerHeight - rect.height - MENU_MARGIN),
-    );
-    contextMenu.style.left = `${clampedLeft}px`;
-    contextMenu.style.top = `${clampedTop}px`;
-    scheduleContextMenuAutoHide();
+    beginExclusivePointerInteraction();
+    showContextMenuAt(e.clientX, e.clientY);
   });
 
   // Click anywhere else to close menu
@@ -859,21 +873,12 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   window.addEventListener("focus", () => {
     windowFocused = true;
     animator.setFocused(true);
-    armNormalHitTestPolling();
     if (isDragging) {
       console.log("[Drag] Reset stuck drag state on window focus");
       jsLog("warn", "Drag", "Reset stuck drag state on window focus");
-      animator.handleDrag(0);
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      clearTimeout(dragTimerId);
-      dragStart = null;
-      isDragging = false;
-      hitTestEnabled = true;
-      armNormalHitTestPolling();
+      resetDragState();
     }
+    armNormalHitTestPolling();
   });
 
   window.addEventListener("blur", () => {
@@ -904,15 +909,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       // hitTestEnabled should be false during any drag/click sequence
       // If it's true while dragStart is set, the mouseup was lost
       console.warn("[HealthCheck] Inconsistent drag/hitTest state — resetting drag");
-      if (isDragging) {
-        animator.handleDrag(0);
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId);
-          rafId = null;
-        }
-      }
-      dragStart = null;
-      isDragging = false;
+      resetDragState({ reenableHitTest: true });
     }
   }, HEALTH_CHECK_MS);
 }

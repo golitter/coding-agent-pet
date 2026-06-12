@@ -74,7 +74,7 @@ async function handleEvent(
   debug("handleEvent", { eventName, sessionId, state: payload.state, sessionFile });
 
   await writeSession(sessionFile, payload);
-  setTimeout(() => pushSocket(socketPath, payload), 0);
+  pushSocket(socketPath, payload);
 }
 
 type PluginFn = (ctx: {

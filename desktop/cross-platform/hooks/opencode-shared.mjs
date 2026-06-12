@@ -7,6 +7,11 @@ export const DEFAULT_STATE = { state: "idle", dialogue: "" };
 export const POST_TOOL_STATE = { state: "running", dialogue: "处理中..." };
 export const DEFAULT_TERMINAL_EVENTS = ["StopFailure"];
 
+function isDebugEnabled() {
+  const raw = process.env.KOTORI_PET_OPENCODE_DEBUG;
+  return raw === "1" || raw === "true";
+}
+
 export const OPENCODE_TO_PET = {
   "session.created": "SessionStart",
   "session.idle": "Stop",
@@ -19,6 +24,7 @@ export const OPENCODE_TO_PET = {
 };
 
 export function debug(message, data) {
+  if (!isDebugEnabled()) return;
   try {
     const suffix = data ? ` ${JSON.stringify(data)}` : "";
     const line = `[${new Date().toISOString()}] ${message}${suffix}\n`;

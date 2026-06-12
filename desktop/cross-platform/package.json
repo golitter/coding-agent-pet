@@ -19,7 +19,7 @@
     "src/**/*.{js,html,css}": "prettier --write",
     "src/**/*.js": "eslint --fix",
     "hooks/**/*.{ts,mjs}": "prettier --write",
-    "*.{json,md,mjs,toml,yml,yaml}": "prettier --write"
+    "*.{json,md,mjs,yml,yaml}": "prettier --write"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
