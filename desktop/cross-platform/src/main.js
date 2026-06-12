@@ -35,10 +35,12 @@ const RECOVERY_POLL_MS = 500; // recovery polling interval when normal exit fail
 const DRAG_TIMEOUT_MS = 5000; // max drag duration before force-reset
 const HEALTH_CHECK_MS = 3000; // periodic state consistency check
 const MAX_CONSECUTIVE_POLL_ERRORS = 10; // poll error threshold to force exit
+const CONTEXT_MENU_AUTO_HIDE_MS = 3000; // hide menu if untouched for 3s
 
 // Module-level hit-test flag — shared between setupInteractions and hideAllMenus.
 // Disabled during drag / right-click menu to prevent pass-through interference.
 let hitTestEnabled = true;
+let contextMenuHideTimer = null;
 
 async function main() {
   // 1. Fetch config from Rust backend. Fall back to safe defaults so the
@@ -252,10 +254,23 @@ function createMenuItem(title, onClick, options = {}) {
 function hideAllMenus() {
   const menus = document.querySelectorAll(".context-menu");
   menus.forEach((m) => m.classList.add("hidden"));
+  if (contextMenuHideTimer !== null) {
+    clearTimeout(contextMenuHideTimer);
+    contextMenuHideTimer = null;
+  }
   // Re-enable hit-test when menu closes. Menu items use click (not mouseup),
   // so this can't rely on the mouseup handler alone. The guard in enterPassThrough
   // prevents re-entering pass-through before the current click completes.
   hitTestEnabled = true;
+}
+
+function scheduleContextMenuAutoHide() {
+  if (contextMenuHideTimer !== null) {
+    clearTimeout(contextMenuHideTimer);
+  }
+  contextMenuHideTimer = setTimeout(() => {
+    hideAllMenus();
+  }, CONTEXT_MENU_AUTO_HIDE_MS);
 }
 
 function isMacPlatform() {
@@ -747,6 +762,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     );
     contextMenu.style.left = `${clampedLeft}px`;
     contextMenu.style.top = `${clampedTop}px`;
+    scheduleContextMenuAutoHide();
   });
 
   // Click anywhere else to close menu
