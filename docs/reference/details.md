@@ -82,7 +82,7 @@
 |---|---|
 | [pet-hook.sh](../../desktop/cross-platform/hooks/pet-hook.sh) | Shell 入口（claude-code / codex 参数分派） |
 | [opencode-plugin.ts](../../desktop/cross-platform/hooks/opencode-plugin.ts) | OpenCode 插件（TS，进程内运行，`setup-hooks.sh` 部署到 `~/.config/opencode/plugins/`） |
-| [opencode-shared.mjs](../../desktop/cross-platform/hooks/opencode-shared.mjs) | OpenCode 共享逻辑：配置加载、事件映射、payload 构建、session/socket IO |
+| [opencode-shared.mjs](../../desktop/cross-platform/hooks/opencode-shared.mjs) | OpenCode 共享逻辑：配置加载、repo root 检测、事件映射、payload 构建、session/socket IO |
 | [scripts/common.py](../../desktop/cross-platform/hooks/scripts/common.py) | 共享逻辑：写 session 文件 + 推 socket |
 | [scripts/claude_hook.py](../../desktop/cross-platform/hooks/scripts/claude_hook.py) | Claude Code 事件解析 |
 | [scripts/codex_hook.py](../../desktop/cross-platform/hooks/scripts/codex_hook.py) | Codex 事件解析（snake_case → PascalCase） |
@@ -145,7 +145,8 @@
 ./setup.sh             # 全流程：依赖 → 配置 → hooks → 编译 → 启动
 ./setup-hooks.sh       # 单独配置 Claude Code + Codex + OpenCode hooks
 ./build-and-run.sh     # 单独编译并重启渲染器
-npm run test:hooks     # hooks 轻量测试（Python unittest + Node --test）
+npm test               # hooks 轻量测试（别名 → test:hooks）
+npm run test:hooks     # hooks 轻量测试（Python unittest + Node --test，uv 缓存至 .uv-cache）
 npx tauri dev          # 开发热重载
 npx tauri build        # 生产构建
 npm run lint           # eslint + prettier 检查

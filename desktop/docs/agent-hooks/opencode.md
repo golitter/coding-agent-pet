@@ -381,9 +381,11 @@ export const MyPlugin = async ({ client }) => {
 OpenCode 的插件在进程内运行（Bun 运行时），采用与 Claude Code/Codex 等价的文件系统 + Unix socket 方案：
 
 1. **Config 加载**：从同伴文件 `~/.config/opencode/plugins/.kotori-pet-config-dir` 读取 `desktop/cross-platform/` 路径，加载 `config.json` 获取 `state_map`、`sessions_dir`、`socket_path`、`terminal_events`
-2. **异步写入 session 文件**：`fs.promises.writeFile(.tmp)` + `fs.promises.rename(.tmp, target)` 原子写入，格式与 `common.py` 完全一致
-3. **Unix socket 推送**：`node:net` 的 `createConnection()`，fire-and-forget（不 await），100ms 超时，失败静默
-4. **错误隔离**：所有逻辑包裹在 try/catch 中，插件异常不影响 OpenCode 运行
+2. **Repo Root 检测**：`detectRepoRoot()` 从 platform dir 向上推导仓库根目录（识别 `desktop/cross-platform` 双层结构 → 向上两级），供路径解析使用
+3. **路径解析**：`resolvePath()` 以 repo root（非 platform dir）为基准解析相对路径和 fallback 路径（fallback 为 `{repoRoot}/desktop/cross-platform/runtime/sessions`），与 Rust 后端的 `pet_base_dir` 检测逻辑保持一致
+4. **异步写入 session 文件**：`fs.promises.writeFile(.tmp)` + `fs.promises.rename(.tmp, target)` 原子写入，格式与 `common.py` 完全一致
+5. **Unix socket 推送**：`node:net` 的 `createConnection()`，fire-and-forget（不 await），100ms 超时，失败静默
+6. **错误隔离**：所有逻辑包裹在 try/catch 中，插件异常不影响 OpenCode 运行
 
 ### 部署
 

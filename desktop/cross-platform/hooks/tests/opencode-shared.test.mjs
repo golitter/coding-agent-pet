@@ -7,6 +7,7 @@ import fs from "node:fs";
 import {
   OPENCODE_TO_PET,
   buildPayload,
+  detectRepoRoot,
   findConfigPath,
   loadPluginRuntime,
   resolvePath,
@@ -58,12 +59,23 @@ test("buildPayload carries terminal state and context", () => {
 
 test("resolvePath uses platform dir for relative values and fallback paths", () => {
   assert.equal(
-    resolvePath("runtime/custom", "/repo/platform", ["runtime", "sessions"]),
-    "/repo/platform/runtime/custom",
+    resolvePath("runtime/custom", "/repo/root", ["desktop", "cross-platform", "runtime", "sessions"]),
+    "/repo/root/runtime/custom",
   );
   assert.equal(
-    resolvePath(null, "/repo/platform", ["runtime", "sessions"]),
-    "/repo/platform/runtime/sessions",
+    resolvePath(null, "/repo/root", ["desktop", "cross-platform", "runtime", "sessions"]),
+    "/repo/root/desktop/cross-platform/runtime/sessions",
+  );
+});
+
+test("detectRepoRoot handles real app layout and flat test fixtures", () => {
+  assert.equal(
+    detectRepoRoot("/repo/desktop/cross-platform"),
+    "/repo",
+  );
+  assert.equal(
+    detectRepoRoot("/tmp/kotori-plugin/platform"),
+    "/tmp/kotori-plugin",
   );
 });
 
@@ -79,7 +91,7 @@ test("resolveSessionId prefers nested event properties", () => {
 test("loadPluginRuntime prefers config.json and falls back to example config", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kotori-plugin-"));
   const deployedDir = path.join(tempDir, "plugins");
-  const platformDir = path.join(tempDir, "platform");
+  const platformDir = path.join(tempDir, "desktop", "cross-platform");
   fs.mkdirSync(deployedDir, { recursive: true });
   fs.mkdirSync(platformDir, { recursive: true });
 
@@ -92,11 +104,13 @@ test("loadPluginRuntime prefers config.json and falls back to example config", (
 
   let runtime = loadPluginRuntime(runtimeUrl.href);
   assert.equal(runtime?.config.pet_id, "example-pet");
+  assert.equal(runtime?.repoRoot, tempDir);
   assert.equal(findConfigPath(platformDir), path.join(platformDir, "config.example.json"));
 
   fs.writeFileSync(path.join(platformDir, "config.json"), JSON.stringify({ pet_id: "real-pet" }));
 
   runtime = loadPluginRuntime(runtimeUrl.href);
   assert.equal(runtime?.config.pet_id, "real-pet");
+  assert.equal(runtime?.repoRoot, tempDir);
   assert.equal(findConfigPath(platformDir), path.join(platformDir, "config.json"));
 });

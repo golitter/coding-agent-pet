@@ -123,8 +123,10 @@ OpenCode 的两种 hook 提供 session ID 的方式不同：
 生产版插件已实现完整集成：
 
 1. **读 `config.json`** — 通过同伴文件 `~/.config/opencode/plugins/.kotori-pet-config-dir` 定位 platform dir，加载 `state_map`、`terminal_events`、`socket_path`、`sessions_dir`
-2. **异步写 session 文件** — `fs.promises.writeFile(.tmp)` + `fs.promises.rename(.tmp, target)` 原子写入，格式与 Python hooks 一致
-3. **推 Unix socket** — `node:net.createConnection()`，fire-and-forget，100ms 超时
+2. **Repo Root 检测** — `detectRepoRoot()` 从 platform dir 推导仓库根目录：若路径以 `desktop/cross-platform` 结尾则向上两级，否则向上一级。返回值作为 `resolvePath()` 的基准目录
+3. **路径解析** — `resolvePath()` 以 repo root 为基准：相对路径基于 repo root 展开，fallback 路径为 `{repoRoot}/desktop/cross-platform/runtime/sessions`，与 Rust 后端 `config.rs` 的 `pet_base_dir` 逻辑一致
+4. **异步写 session 文件** — `fs.promises.writeFile(.tmp)` + `fs.promises.rename(.tmp, target)` 原子写入，格式与 Python hooks 一致
+5. **推 Unix socket** — `node:net.createConnection()`，fire-and-forget，100ms 超时
 
 插件已成为与 `claude_hook.py` / `codex_hook.py` 等价的事件源。Rust 后端无需任何修改（source-agnostic 设计）。
 

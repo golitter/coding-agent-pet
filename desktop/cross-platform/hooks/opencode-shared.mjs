@@ -44,6 +44,16 @@ export function findConfigPath(platformDir) {
   return fs.existsSync(examplePath) ? examplePath : null;
 }
 
+export function detectRepoRoot(platformDir) {
+  const normalized = path.resolve(platformDir);
+  const base = path.basename(normalized);
+  const parent = path.basename(path.dirname(normalized));
+  if (base === "cross-platform" && parent === "desktop") {
+    return path.resolve(normalized, "..", "..");
+  }
+  return path.dirname(normalized);
+}
+
 export function loadPluginRuntime(importMetaUrl) {
   try {
     const deployedDir = path.dirname(toNativeImportPath(importMetaUrl));
@@ -66,8 +76,11 @@ export function loadPluginRuntime(importMetaUrl) {
       return null;
     }
 
+    const repoRoot = detectRepoRoot(platformDir);
+
     return {
       platformDir,
+      repoRoot,
       config: readJson(configPath),
       configPath,
     };
@@ -77,15 +90,15 @@ export function loadPluginRuntime(importMetaUrl) {
   }
 }
 
-export function resolvePath(configValue, platformDir, fallbackParts) {
+export function resolvePath(configValue, baseDir, fallbackParts) {
   if (typeof configValue === "string" && configValue.trim()) {
     const expanded = configValue.startsWith("~")
       ? path.join(process.env.HOME || "/", configValue.slice(1))
       : configValue;
-    return path.isAbsolute(expanded) ? expanded : path.join(platformDir, expanded);
+    return path.isAbsolute(expanded) ? expanded : path.join(baseDir, expanded);
   }
 
-  return path.join(platformDir, ...fallbackParts);
+  return path.join(baseDir, ...fallbackParts);
 }
 
 export function resolveState(eventName, stateMap = {}) {

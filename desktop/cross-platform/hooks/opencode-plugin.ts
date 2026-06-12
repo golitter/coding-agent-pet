@@ -30,6 +30,7 @@ interface PetConfig {
 
 interface PluginRuntime {
   platformDir: string;
+  repoRoot: string;
   config: PetConfig;
   configPath: string;
 }
@@ -52,8 +53,13 @@ async function handleEvent(
   const runtime = getRuntime();
   if (!runtime) return;
 
-  const { config, platformDir } = runtime;
-  const sessionsDir = resolvePath(config.sessions_dir, platformDir, ["runtime", "sessions"]);
+  const { config, repoRoot } = runtime;
+  const sessionsDir = resolvePath(config.sessions_dir, repoRoot, [
+    "desktop",
+    "cross-platform",
+    "runtime",
+    "sessions",
+  ]);
   const socketPath = config.socket_path || "/tmp/kotori-pet.sock";
 
   try {

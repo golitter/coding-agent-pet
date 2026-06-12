@@ -19,7 +19,7 @@ desktop/
 │   ├── hooks/                  #   Hook 脚本
 │   │   ├── pet-hook.sh                 # shell wrapper (claude-code / codex)
 │   │   ├── opencode-plugin.ts          # OpenCode 插件（TS，进程内运行，由 setup-hooks.sh 部署到 ~/.config/opencode/plugins/）
-│   │   ├── opencode-shared.mjs         # OpenCode 共享逻辑（事件映射 / payload / IO）
+│   │   ├── opencode-shared.mjs         # OpenCode 共享逻辑（repo root 检测 / 事件映射 / payload / IO）
 │   │   └── scripts/            #   Python 实现 (common + claude_hook + codex_hook + setup_hooks + test_hooks)
 │   ├── runtime/sessions/       #   运行时会话状态（不入 git）
 │   ├── config.example.json     #   配置模板
