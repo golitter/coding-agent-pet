@@ -309,7 +309,7 @@ export class SpriteAnimator {
 
     let stateMaskCount = 0;
     let failCount = 0;
-    this.alphaMasks.set(state, new Array(paths.length));
+    const masks = new Array(paths.length);
 
     try {
       let bytesMap;
@@ -362,9 +362,11 @@ export class SpriteAnimator {
         for (let j = 0, k = 3; j < alpha.length; j++, k += 4) {
           alpha[j] = data[k];
         }
-        this.alphaMasks.get(state)[i] = alpha;
+        masks[i] = alpha;
         stateMaskCount++;
       }
+
+      this.alphaMasks.set(state, masks);
 
       console.log(
         `[Animator] ✓ Computed ${stateMaskCount} alpha masks for ${state} (${failCount} failed)`,
@@ -378,12 +380,15 @@ export class SpriteAnimator {
   hasCompleteAlphaMaskState(state) {
     const stateMasks = this.alphaMasks.get(state);
     const frameCount = this.framePaths[state]?.length ?? 0;
-    return (
-      Array.isArray(stateMasks) &&
-      frameCount > 0 &&
-      stateMasks.length === frameCount &&
-      stateMasks.every(Boolean)
-    );
+    if (!Array.isArray(stateMasks) || frameCount === 0) return false;
+    if (stateMasks.length !== frameCount) return false;
+    // Dense check: a plain index read treats sparse-array holes as undefined
+    // (falsy), so this rejects partially-filled arrays — which
+    // Array.prototype.every skips and would falsely accept as complete.
+    for (let i = 0; i < frameCount; i++) {
+      if (!stateMasks[i]) return false;
+    }
+    return true;
   }
 
   pruneAlphaMasks() {

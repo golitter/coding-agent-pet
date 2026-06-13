@@ -213,18 +213,11 @@ function buildContextMenu(menuEl, items) {
               console.error("[Menu] run_applescript failed:", e),
             );
           },
-          getMenuPresentation(item.title, item.action),
+          { variant: "app" },
         ),
       );
     }
   }
-}
-
-function getMenuPresentation(title, action) {
-  if (action === "quit") {
-    return { variant: "quit", shortcut: getQuitShortcut() };
-  }
-  return { variant: "app" };
 }
 
 function createMenuItem(title, onClick, options = {}) {

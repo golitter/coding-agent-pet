@@ -9,6 +9,7 @@ Kotori Pet 的 Tauri 窗口是矩形透明窗口。点击窗口内任意位置�
 **JS 侧像素级 hit-test + Tauri 窗口穿透开关 + Rust CGEvent 轮询恢复。**
 
 动态切换 `window.setIgnoreCursorEvents(true/false)`：
+
 - 光标在实体像素上 → 正常模式，窗口捕获事件
 - 光标在透明像素上 → 穿透模式，窗口忽略事件，点击落到桌面
 
@@ -48,6 +49,7 @@ WKWebView 里 `fetch("asset://localhost/...")` 抛 `TypeError: Load failed`。�
 ### 坑 3：穿透态下 cursor 坐标会过期/挂起
 
 进入穿透态后 `setIgnoreCursorEvents(true)`，窗口不再处理鼠标事件：
+
 - **tao 的 `cursorPosition()` IPC 挂起**，永远不返回 → JS 轮询死锁
 - **`NSEvent.mouseLocation` 返回过期位置**（停在最后一个被处理的事件处）
 
@@ -102,6 +104,8 @@ extern "C" {
   - **单次批量 IPC** `invoke("read_frames_batch")` 读取所有帧字节，替代逐帧 `read_file_bytes`
   - **两阶段处理**：Phase 1 并行加载所有 Image（`Promise.all`，消除串行 await 瓶颈）；Phase 2 顺序在离屏 canvas（`willReadFrequently`）上 drawImage → 提取 alpha 通道为 `Uint8Array`
   - 数据结构：`Map<stateName, Uint8Array[]>`，按帧索引直接查找，热路径零字符串拼接
+  - **先本地构建再提交**：蒙版写入局部数组，循环结束后才 `alphaMasks.set`；批量读取失败时**不缓存任何内容**，下次请求会重试（避免半成品被误判为完成）
+  - **完整性校验** `hasCompleteAlphaMaskState` 用密集索引遍历（稀疏空洞读作 `undefined`），而非 `Array.every`（会跳过空洞）——部分加载能被正确识别并重试
   - try-catch 包裹，失败时 `hitTestReady = false`
 - `getAlphaAt(state, frame, x, y)` — 查 `alphaMasks.get(state)?.[frame]`；**mask 缺失/unready 返回 255**（fail-safe，宠物不会失联）
 
@@ -112,6 +116,7 @@ extern "C" {
 **状态：** `isPassThrough`、`applyingPassThrough`（async 防抖锁）、`hitTestEnabled`、`solidHitCount`、`lastExitTime`
 
 **关键函数：**
+
 - `enterPassThrough()` — 幂等 + 防抖锁 + 重入冷却；`setIgnoreCursorEvents(true)` + startPolling
 - `exitPassThrough()` — 幂等 + 防抖锁；stopPolling + `setIgnoreCursorEvents(false)` + 记录 lastExitTime
 - `pollCursor()` — `invoke("cursor_in_window")` → 用缓存的 `getBoundingClientRect()` 算精灵坐标（resize 时失效）→ 查 alpha → 双阈值+连续确认决定退出
