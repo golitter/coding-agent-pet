@@ -9,3 +9,4 @@
 | [active-count-undercount.md](active-count-undercount.md) | 同时开 3 个会话，宠物气泡只显示 ×2 | 已实施 |
 | [idle-blink-too-fast.md](idle-blink-too-fast.md) | idle 状态眨眼太快、像抽搐；引擎只支持匀速轮播 | 已实施 |
 | [pet-unresponsive-stuck-state.md](pet-unresponsive-stuck-state.md) | 宠物无法点击/拖动（穿透态轮询链断裂） | 已实施 |
+| [stuck-jumping-after-stop.md](stuck-jumping-after-stop.md) | Stop 后宠物卡在 jumping、session 文件一直不删（5s 窗口缺时钟驱动） | 已实施 |

@@ -71,7 +71,8 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
     │   └── bugfix/                    #   Bugfix 计划
     │       ├── idle-blink-too-fast.md #     idle 眨眼太快
     │       ├── active-count-undercount.md  # 多会话计数 N-1
-    │       └── pet-unresponsive-stuck-state.md  # 宠物无响应/卡死
+    │       ├── pet-unresponsive-stuck-state.md  # 宠物无响应/卡死
+    │       └── stuck-jumping-after-stop.md  # Stop 后卡 jumping、文件不删
     └── cross-platform/                # 主实现 (Tauri)
         ├── config.example.json        #   配置模板（提交到 git）
         ├── config.json                #   用户配置（自动生成，.gitignore）
@@ -169,5 +170,5 @@ cd ~/pet
 | **RAII 清理** | `SocketGuard` 在应用退出（Drop）时自动移除 socket 文件 |
 | **最小权限** | capabilities 仅声明实际需要的窗口操作和事件权限，不含 `shell:allow-execute` |
 | **Payload 限制** | socket 接收上限 64KB，防止恶意超大 payload |
-| **无 shell 拼接** | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除）由 Rust 后端经 Unix socket 管理，无注入面 |
+| **无 shell 拼接** | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除与 5s 一次性窗口兜底）由 Rust 后端统一管理（socket 通道 + 文件扫描），无注入面 |
 | **Mutex 安全** | ActivityAggregator 所有可变状态合并为单个 `Mutex<Inner>`，消除死锁风险 |

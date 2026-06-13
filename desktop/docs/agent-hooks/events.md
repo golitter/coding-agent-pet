@@ -16,7 +16,7 @@
 | `UserPromptSubmit` | `user_prompt_submit` | — | ✓ | ✓ | ✗ | `running` | 收到！开始工作～ | 循环动画 |
 | `PreToolUse` | `pre_tool_use` | `tool.execute.before` | ✓ | ✓ | ✓ | `running` | 执行中... | 循环动画 |
 | `PostToolUse` | `post_tool_use` | `tool.execute.after` | ✓ | ✓ | ✓ | `running` * | 处理中... * | *硬编码，不查 state_map |
-| `Stop` | `stop` | `session.idle` | ✓ | ✓ | ✓ | `jumping` | 搞定啦！✨ | 一次性动画，**2s 延迟删除** |
+| `Stop` | `stop` | `session.idle` | ✓ | ✓ | ✓ | `jumping` | 搞定啦！✨ | 一次性动画，**2s 延迟删除**（socket 漏发则 5s 窗口兜底，见第三节） |
 | `StopFailure` | `stop_failure` | `session.error` | ✓ | ✓ | ✓ | `failed` | 呜...出了点问题 | **terminal，立即删除** |
 | `Notification` | `notification` | — | ✓ | ✓ | ✗ | `waving` | 注意哦～ | 一次性动画 |
 | `PermissionRequest` | `permission_request` | `permission.asked` | ✓ | ✓ | ✓ | `waiting` | 需要你的授权～ | 黄色警告气泡 |
@@ -84,13 +84,16 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 
 | 触发 | 删除时机 | 取消条件 | 覆盖场景 |
 |---|---|---|---|
-| `Stop` | **2s 后删除** | 期间收到新事件（state 不再是 `jumping`）→ 取消 | 正常完成一轮对话 |
+| `Stop` | **2s 后删除**（socket 通道） | 期间收到新事件（state 不再是 `jumping`）→ 取消 | 正常完成一轮对话 |
 | `StopFailure` | **立即删除** | 不可取消 | 响应失败 |
 | `SessionEnd`（Claude 独有） | **立即删除** | 不可取消 | Claude Code 会话退出 |
+| 一次性庆祝（`jumping`/`waving`）残留 | **`ONESHOT_DISPLAY_WINDOW_SEC`（5s）窗口过期后清理** | 文件被新事件改写为非一次性状态 → 跳过 | socket 漏发 `Stop`（app 当时未运行）等残留 |
 | (无 terminal 事件) | **stale_timeout_sec 后清理**（默认 1h） | — | 进程崩溃 / kill -9 / UI 删对话 / 用户中断 |
 | (Codex 崩溃) | 同上：`stale_timeout_sec` 后清理 | — | Codex 异常退出 |
 
 > **关键**：hook 脚本本身不做延迟删除（短生命周期进程的 timer 会被 kill），所有清理逻辑都在长生命周期的 Rust 后端。
+>
+> **5s 窗口的三层执行**：`Stop` 的 2s 删除（socket 通道的 `remove_if_state`）是主路径，**需应用在 `Stop` 发生时在线**；若 socket 未送达（app 当时未运行 / 推送失败），`jumping`/`waving` 文件不会像其它状态那样等 `stale_timeout_sec`（1h），而是由两条**时钟驱动**路径在 5s 窗口过期后兜底——`cleanup_stale` 每 `cleanup_interval_sec`（默认 30s）扫描一次、`load_from_disk` 在（重）启动时删除并跳过过期文件；`reconcile_paths` 在文件被改动时也会被动清理。否则这类残留会在重启时被当作活动状态重新加载，宠物卡在"搞定啦！✨"。详见 [../bugfix/stuck-jumping-after-stop.md](../bugfix/stuck-jumping-after-stop.md)。
 
 ---
 
@@ -117,6 +120,7 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 | [../../cross-platform/hooks/scripts/common.py](../../cross-platform/hooks/scripts/common.py) | 共享处理逻辑（state_map 查表、socket 推送） |
 | [../../cross-platform/hooks/opencode-plugin.ts](../../cross-platform/hooks/opencode-plugin.ts) | OpenCode 插件实现 |
 | [../../cross-platform/config.example.json](../../cross-platform/config.example.json) | `state_map` + `terminal_events` 配置 |
-| [../../cross-platform/src-tauri/src/aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) | Rust 后端：terminal 删除、cleanup_stale、Stop 延迟取消 |
+| [../../cross-platform/src-tauri/src/aggregator.rs](../../cross-platform/src-tauri/src/aggregator.rs) | Rust 后端：terminal 删除、cleanup_stale、Stop 2s 延迟取消、oneshot 5s 窗口兜底 |
 | [../../cross-platform/src-tauri/src/watcher.rs](../../cross-platform/src-tauri/src/watcher.rs) | Socket 服务端 + Stop 2s 延迟调度 |
 | [../bugfix/active-count-undercount.md](../bugfix/active-count-undercount.md) | `stale_timeout_sec` 默认值改为 1h 的根因与方案 |
+| [../bugfix/stuck-jumping-after-stop.md](../bugfix/stuck-jumping-after-stop.md) | 5s 一次性窗口改由时钟驱动（`cleanup_stale` + `load_from_disk`）的根因与方案 |

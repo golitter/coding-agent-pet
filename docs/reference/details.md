@@ -129,7 +129,7 @@
 | `socket_path` | `/tmp/kotori-pet.sock` | Unix socket 路径 |
 | `sessions_dir` | `null` | session 文件目录，`null` 自动检测（`{pet_base_dir}/desktop/cross-platform/runtime/sessions`） |
 | `stale_timeout_sec` | `3600` | session 文件过期阈值（秒），1h 覆盖长工具调用 |
-| `renderer.cleanup_interval_sec` | `30` | 定时清理间隔（秒），扫描过期文件和孤儿内存会话 |
+| `renderer.cleanup_interval_sec` | `30` | 定时清理间隔（秒）：扫描过期文件、孤儿内存会话、过期的一次性庆祝（`jumping`/`waving`）文件 |
 | `renderer.scale` | `0.6` | 精灵缩放因子 |
 | `renderer.fps` | `10` | 动画帧率 |
 | `renderer.corner_margin` | `20` | 屏幕右下角边距 (px) |
