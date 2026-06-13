@@ -138,7 +138,7 @@ cd ~/pet
 | `renderer.scale` | 缩放因子 | `0.6` |
 | `renderer.fps` | 帧率 | `10` |
 | `state_map` | 事件→动画+台词映射 | 见配置文件 |
-| `menu.items` | 右键菜单项 | Codex, VS Code, 关闭宠物 |
+| `menu.items` | 右键菜单项 | 默认仅关闭宠物 |
 
 ## 脚本说明
 

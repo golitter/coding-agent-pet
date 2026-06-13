@@ -35,13 +35,13 @@ bash setup.sh                        # 正式推荐：一键安装 & 启动
 
 ## 使用
 
-| 操作                                    | 效果                                  |
-| --------------------------------------- | ------------------------------------- |
-| 点击宠物                                | 触发跳跃动画 🎉                       |
-| 三连击宠物（800ms 内）                  | 清空所有会话，气泡反馈清理数量 🧹     |
-| 拖动宠物                                | 移动位置，宠物会跑起来                |
-| 右键宠物                                | 菜单：打开 Codex / VS Code / 关闭宠物 |
-| 正常使用 Claude Code、Codex 或 OpenCode | 宠物自动反应工作状态                  |
+| 操作                                    | 效果                              |
+| --------------------------------------- | --------------------------------- |
+| 点击宠物                                | 触发跳跃动画 🎉                   |
+| 三连击宠物（800ms 内）                  | 清空所有会话，气泡反馈清理数量 🧹 |
+| 拖动宠物                                | 移动位置，宠物会跑起来            |
+| 右键宠物                                | 菜单：关闭宠物                    |
+| 正常使用 Claude Code、Codex 或 OpenCode | 宠物自动反应工作状态              |
 
 ## 动画状态
 
@@ -140,15 +140,7 @@ desktop/cross-platform/
   },
   "terminal_events": ["StopFailure", "SessionEnd"],
   "menu": {
-    "items": [
-      {
-        "title": "Codex",
-        "action": "applescript",
-        "script": "tell application \"Codex\"\nactivate\nend tell"
-      },
-      { "type": "separator" },
-      { "title": "关闭宠物", "action": "quit" }
-    ]
+    "items": [{ "title": "关闭宠物", "action": "quit" }]
   }
 }
 ```

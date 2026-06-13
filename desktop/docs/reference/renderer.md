@@ -323,7 +323,7 @@ Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标�
 | `quit` | 退出应用 (`invoke('quit_app')` → `app.exit(0)`) |
 | `separator` | 分隔线 |
 
-默认菜单：打开 Codex、打开 VS Code、分隔线、关闭宠物。
+默认菜单：关闭宠物。仍可通过配置添加 `applescript` 项和分隔线。
 
 所有 `invoke` 调用都带有 `.catch()` 错误处理。
 
@@ -338,7 +338,7 @@ Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标�
 
 #### 定位
 
-菜单定位使用 clamp 算法，以右键点击位置为基准，通过 `Math.max/Math.min` 将菜单完全限制在窗口内部（`MENU_MARGIN = 4px`），适配小窗口场景。菜单设置 `max-width: calc(100vw - 8px)` 确保不超出视口。
+菜单定位使用 clamp 算法，以宠物主体左下角为锚点，通过 `Math.max/Math.min` 将菜单完全限制在窗口内部（`MENU_MARGIN = 4px`），适配小窗口场景。菜单设置 `max-width: calc(100vw - 8px)` 确保不超出视口。
 
 #### 视觉
 

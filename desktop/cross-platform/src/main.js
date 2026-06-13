@@ -402,22 +402,27 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     return true;
   }
 
-  function showContextMenuAt(clientX, clientY) {
+  function showContextMenuAtPetBottomLeft() {
     contextMenu.classList.remove("hidden");
     const MENU_MARGIN = 4;
     contextMenu.style.left = `${MENU_MARGIN}px`;
     contextMenu.style.top = `${MENU_MARGIN}px`;
 
-    // Clamp menu fully inside the pet window, including the small-window case
-    // where the menu must shrink to fit available width.
-    const rect = contextMenu.getBoundingClientRect();
+    // Anchor the menu to the rendered pet body, not the click position. This
+    // keeps the menu spatially tied to Kotori even when users right-click
+    // different opaque pixels in the sprite.
+    const spriteRect = petSprite.getBoundingClientRect();
+    const menuRect = contextMenu.getBoundingClientRect();
     const clampedLeft = Math.max(
       MENU_MARGIN,
-      Math.min(clientX, window.innerWidth - rect.width - MENU_MARGIN),
+      Math.min(spriteRect.left, window.innerWidth - menuRect.width - MENU_MARGIN),
     );
     const clampedTop = Math.max(
       MENU_MARGIN,
-      Math.min(clientY, window.innerHeight - rect.height - MENU_MARGIN),
+      Math.min(
+        spriteRect.bottom - menuRect.height,
+        window.innerHeight - menuRect.height - MENU_MARGIN,
+      ),
     );
     contextMenu.style.left = `${clampedLeft}px`;
     contextMenu.style.top = `${clampedTop}px`;
@@ -840,7 +845,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     e.preventDefault();
     // Disable hit-test while menu is visible
     beginExclusivePointerInteraction();
-    showContextMenuAt(e.clientX, e.clientY);
+    showContextMenuAtPetBottomLeft();
   });
 
   // Click anywhere else to close menu

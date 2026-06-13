@@ -48,19 +48,6 @@
     "QuestionAsked": { "state": "waiting", "dialogue": "需要你的选择～" }
   },
   "menu": {
-    "items": [
-      {
-        "title": "Codex",
-        "action": "applescript",
-        "script": "tell application \"Codex\"\nactivate\nend tell"
-      },
-      {
-        "title": "VS Code",
-        "action": "applescript",
-        "script": "tell application \"Visual Studio Code\"\nactivate\nend tell"
-      },
-      { "type": "separator" },
-      { "title": "关闭宠物", "action": "quit" }
-    ]
+    "items": [{ "title": "关闭宠物", "action": "quit" }]
   }
 }

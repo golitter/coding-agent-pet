@@ -143,7 +143,7 @@
 | `hooks.opencode_plugins_dir` | `~/.config/opencode/plugins` | OpenCode 插件部署目录 |
 | `terminal_events` | `["StopFailure", "SessionEnd"]` | terminal 事件列表（触发立即删除 session 文件） |
 | `state_map` | (见文件) | 事件 → `{state, dialogue}` 映射 |
-| `menu.items` | (见文件) | 右键菜单项（Codex / VS Code / 关闭） |
+| `menu.items` | (见文件) | 右键菜单项（默认仅关闭宠物） |
 
 完整模板见 [config.example.json](../../desktop/cross-platform/config.example.json)。
 

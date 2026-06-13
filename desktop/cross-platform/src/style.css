@@ -156,11 +156,17 @@ body {
 }
 
 .context-menu-item[data-variant="quit"] {
-  color: rgba(126, 28, 39, 0.96);
+  color: rgba(180, 38, 55, 1);
+  font-weight: 650;
 }
 
 .context-menu-item[data-variant="quit"]:hover {
   background: rgba(255, 235, 238, 0.72);
+  color: rgba(155, 24, 42, 1);
+}
+
+.context-menu-item[data-variant="quit"] .context-menu-shortcut {
+  color: rgba(180, 38, 55, 0.42);
 }
 
 .context-menu-label {
