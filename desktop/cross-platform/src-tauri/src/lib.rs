@@ -49,7 +49,13 @@ fn make_window_transparent(window: &tauri::WebviewWindow) {
 }
 
 /// RAII guard that removes the Unix socket file on Drop.
-/// Ensures cleanup on both graceful shutdown and panic.
+///
+/// Note: the normal exit path is `quit_app` → `app.exit()` → `process::exit()`,
+/// which skips Drop, so this guard does NOT fire on graceful shutdown — `quit_app`
+/// removes the socket explicitly. This guard covers the remaining case: a panic
+/// that unwinds the stack (Drop runs during unwinding). The startup connect-probe
+/// in `watcher::start_socket_server` is the final backstop for a crash/kill that
+/// leaves the file behind, reclaiming it on the next launch.
 struct SocketGuard {
     path: String,
 }
@@ -153,7 +159,9 @@ pub fn run() {
             let socket_path_for_guard = config.socket_path.clone();
             app.manage(session_mgr.clone());
             app.manage(config);
-            // RAII guard — removes socket file when managed state is dropped on exit
+            // RAII backstop: removes the socket file if the process panics and
+            // unwinds (Drop runs during unwinding). The normal quit path cleans
+            // up explicitly in `quit_app`; see SocketGuard's doc comment.
             app.manage(SocketGuard {
                 path: socket_path_for_guard,
             });

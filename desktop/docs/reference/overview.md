@@ -167,7 +167,7 @@ cd ~/pet
 | **Socket 启动安全** | 先 connect 探活再 remove + bind，避免 `/tmp` 下 TOCTOU symlink 攻击 |
 | **路径校验** | `read_file_bytes` / `read_frames_batch` 校验请求路径在 `frames_dir` 内，防止 webview 任意文件读取 |
 | **AppleScript 沙箱** | `run_applescript` command 拒绝包含 `do shell script`、`do script` 或反引号的脚本，防止任意命令执行 |
-| **RAII 清理** | `SocketGuard` 在应用退出（Drop）时自动移除 socket 文件 |
+| **Socket 退出清理** | `quit_app` 在 `app.exit()` 前显式删除 socket 文件（`app.exit()` 走 `process::exit()`，会跳过 Rust 的 `Drop`）；`SocketGuard` 兜底 panic 解退路径；启动探活兜底 crash/kill 后的残留文件 |
 | **最小权限** | capabilities 仅声明实际需要的窗口操作和事件权限，不含 `shell:allow-execute` |
 | **Payload 限制** | socket 接收上限 64KB，防止恶意超大 payload |
 | **无 shell 拼接** | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除与 5s 一次性窗口兜底）由 Rust 后端统一管理（socket 通道 + 文件扫描），无注入面 |

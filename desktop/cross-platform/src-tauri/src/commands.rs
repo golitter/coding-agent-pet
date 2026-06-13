@@ -85,8 +85,14 @@ pub fn get_config(config: tauri::State<'_, PetConfig>) -> FrontendConfig {
 }
 
 #[tauri::command]
-pub fn quit_app(app: tauri::AppHandle) {
+pub fn quit_app(app: tauri::AppHandle, config: tauri::State<'_, PetConfig>) {
     info!("quit_app command invoked from frontend");
+    // app.exit() drives process::exit(), which skips Rust Drop impls — so the
+    // managed SocketGuard (lib.rs) never fires on this, the primary exit path.
+    // Remove the socket explicitly here. The startup connect-probe (covers a
+    // crash/kill between sessions) and SocketGuard (covers panic unwind) close
+    // the remaining gaps, so the socket is reclaimed in every termination case.
+    let _ = std::fs::remove_file(&config.socket_path);
     app.exit(0);
 }
 
@@ -155,9 +161,9 @@ pub fn read_file_bytes(
 /// original_path → bytes for each file successfully read and validated.
 /// Used by computeAlphaMasks to avoid 55+ individual IPC round trips.
 ///
-/// Uses a two-tier path validation: fast lexicle normalization (no syscall)
+/// Uses a two-tier path validation: fast lexical normalization (no syscall)
 /// for the common case (no symlinks), falling back to full canonicalize
-/// when lexicle check doesn't match. This reduces 55+ canonicalize syscalls
+/// when lexical check doesn't match. This reduces 55+ canonicalize syscalls
 /// to typically 1 (the base dir).
 #[tauri::command]
 pub fn read_frames_batch(
@@ -172,7 +178,7 @@ pub fn read_frames_batch(
     let mut results = HashMap::with_capacity(paths.len());
     for path in paths {
         let p = std::path::Path::new(&path);
-        // Fast path: lexicle normalization avoids per-file canonicalize syscall.
+        // Fast path: lexical normalization avoids per-file canonicalize syscall.
         // Correct when no symlinks are involved — the common case for asset dirs.
         let normalized = normalize_path(p);
         if normalized.starts_with(&frames_dir_norm) {
@@ -181,7 +187,7 @@ pub fn read_frames_batch(
             }
             continue;
         }
-        // Slow path: resolve symlinks for paths that don't lexicle match
+        // Slow path: resolve symlinks for paths that don't lexical match
         let canonical = match std::fs::canonicalize(&path) {
             Ok(c) => c,
             Err(_) => continue,

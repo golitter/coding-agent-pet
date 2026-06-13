@@ -76,7 +76,7 @@ WKWebView 里 `fetch("asset://localhost/...")` 抛 `TypeError: Load failed`。�
 
 **`read_file_bytes(path)`** — 读 PNG 原始字节（坑 1+2）。路径校验：只允许 `frames_dir` 内的文件，防止 webview 任意文件读取。
 
-**`read_frames_batch(paths)`** — 批量读取多帧 PNG 字节，单次 IPC 返回 `Map<path, bytes>`。替代 57 次 `read_file_bytes` 调用，启动速度显著提升。路径校验采用两级策略：lexicle 快路径（`normalize_path` 无 syscall）+ canonicalize 慢路径（含符号链接时降级）。
+**`read_frames_batch(paths)`** — 批量读取多帧 PNG 字节，单次 IPC 返回 `Map<path, bytes>`。替代 57 次 `read_file_bytes` 调用，启动速度显著提升。路径校验采用两级策略：lexical 快路径（`normalize_path` 无 syscall）+ canonicalize 慢路径（含符号链接时降级）。
 
 **`cursor_in_window(window)`** — 用 CGEvent 读实时光标，返回窗口内逻辑坐标（Y 从顶部）。坐标转换：
 
