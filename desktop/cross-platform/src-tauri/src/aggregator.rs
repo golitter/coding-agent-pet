@@ -726,7 +726,7 @@ mod tests {
         // File deleted from disk, and not loaded as a live activity.
         assert!(!path.exists());
         let inner = aggregator.inner.lock().unwrap();
-        assert!(inner.activities.get("stop-sess").is_none());
+        assert!(!inner.activities.contains_key("stop-sess"));
         assert_eq!(inner.aggregated.current_state, "idle");
 
         let _ = fs::remove_dir_all(dir);
