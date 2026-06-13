@@ -370,8 +370,17 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   const appWindow = getCurrentWindow();
   let dragStart = null;
   let isDragging = false;
+  let lastDragScreenX = null; // last consumed cursor X for incremental drag-delta
+  let dragMomX = 0; // low-pass-filtered horizontal velocity for stable direction
   let windowFocused = document.hasFocus();
   const DRAG_THRESHOLD = 3;
+  // Per-frame dx is jittery during the OS drag loop (sub-pixel noise, uneven
+  // mousemove delivery), so feeding its raw sign flickered the run animation
+  // left↔right and reset it on every flip (looked like stutter). dragMomX
+  // low-pass-filters dx: a committed direction needs sustained movement, a
+  // brief reversal can't overcome the accumulated momentum.
+  const DRAG_MOMENTUM_DECAY = 0.6; // fraction of previous momentum retained
+  const DRAG_DIR_THRESHOLD = 1.0; // |momentum| needed to commit a direction
 
   // --- Sprite rect cache (avoids layout thrashing on every mousemove) ---
   let cachedRect = null;
@@ -405,6 +414,8 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     }
     dragStart = null;
     isDragging = false;
+    lastDragScreenX = null;
+    dragMomX = 0;
     if (reenableHitTest) {
       hitTestEnabled = true;
     }
@@ -812,6 +823,8 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       const dy = e.screenY - dragStart.y;
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         isDragging = true;
+        lastDragScreenX = e.screenX; // seed incremental tracking at drag start
+        dragMomX = 0;
         jsLog("info", "Drag", "startDragging called");
         appWindow.startDragging().catch((error) => {
           console.warn("[Drag] startDragging failed:", error);
@@ -832,12 +845,21 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     if (pendingMove && isDragging) {
       const e = pendingMove;
       pendingMove = null;
-      const dx = e.screenX - dragStart.x;
-      // Direction animation only — once startDragging() ran, the OS owns the
-      // actual window movement (and may stop delivering further mousemove until
-      // release), so we just feed the last-known dx to the animator.
-      if (Math.abs(dx) > 0.5) {
-        animator.handleDrag(dx);
+      // Incremental delta since the last consumed frame (NOT cumulative from
+      // dragStart) — so reversing the mouse flips the run direction instead
+      // of waiting for the cumulative displacement to cross zero.
+      if (lastDragScreenX === null) lastDragScreenX = e.screenX;
+      const dx = e.screenX - lastDragScreenX;
+      lastDragScreenX = e.screenX;
+      // Smooth dx into a velocity (dragMomX) and only commit a direction once
+      // it exceeds threshold. Raw dx flickers sign during a drag, which made
+      // the animation flip and stutter; momentum filters that out while still
+      // switching within ~1 frame on a real, sustained reversal. Below
+      // threshold we don't call handleDrag, so the pet holds its last
+      // direction instead of resetting every frame.
+      dragMomX = dragMomX * DRAG_MOMENTUM_DECAY + dx;
+      if (dragMomX > DRAG_DIR_THRESHOLD || dragMomX < -DRAG_DIR_THRESHOLD) {
+        animator.handleDrag(dragMomX);
       }
     }
     if (isDragging) {
