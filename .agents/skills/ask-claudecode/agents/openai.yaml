@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ask ClaudeCode"
+  short_description: "Use Claude Code as a compact second opinion"
+  default_prompt: "Use $ask-claudecode to get a concise Claude Code review of the current diff."
