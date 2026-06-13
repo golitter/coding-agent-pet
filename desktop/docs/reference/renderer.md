@@ -344,6 +344,18 @@ Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标�
 
 菜单使用渐变背景 + `backdrop-filter: blur(28px)` 毛玻璃效果，入场动画 `context-menu-in`（0.16s ease-out 缩放+淡入）。各项使用圆角高亮 + `transform: translateY(-1px)` 微动效。
 
+#### 关闭
+
+菜单通过以下途径关闭：
+
+| 触发 | 机制 |
+|---|---|
+| 鼠标移出窗口 | `cursor_in_window` 轮询（`POLL_INTERVAL_MS = 80ms`）检测到坐标越界即隐藏 |
+| 3 秒未操作 | `CONTEXT_MENU_AUTO_HIDE_MS` 定时器兜底（鼠标停在窗口内不动时） |
+| 点击窗口任意处 / 菜单项 / 按 `Esc` | 立即隐藏 |
+
+> 鼠标移出检测用 Rust 命令 `cursor_in_window`（CGEvent 读实时硬件位置）轮询，**而非 DOM `mouseleave`**——透明无边框窗口在 `setIgnoreCursorEvents` 按像素切换时不会可靠派发该事件。诊断与方案见 [bugfix：右键菜单在鼠标移出窗口后仍停留满 3 秒](../bugfix/context-menu-lingers-on-mouse-leave.md)。
+
 ### 平台检测
 
 使用 `navigator.userAgentData?.platform`（现代 API）搭配 `navigator.userAgent` 降级检测 macOS，替代已废弃的 `navigator.platform`。
