@@ -72,6 +72,38 @@ fn is_oneshot_state(state: &str) -> bool {
 /// `remove_if_state` delay so the animation finishes even under load.
 const ONESHOT_DISPLAY_WINDOW_SEC: u64 = 5;
 
+/// Delete a one-shot celebration file (jumping/waving) iff its display window
+/// has already elapsed. Re-reads the file to inspect its `state`, so callers
+/// should only invoke it on paths whose mtime is plausibly past the window —
+/// the cheap mtime pre-check below skips the read for fresh files.
+///
+/// This is the *clock-driven* backstop for Stop / SessionEnd celebrations.
+/// The socket channel normally deletes these ~2s after the event, but if the
+/// app was down (or the socket push silently failed) at event time, nothing
+/// ever re-touches the file, so the *reactive* `reconcile_paths` check never
+/// fires. The periodic `cleanup_stale` sweep calls this so such residue is
+/// cleared within `cleanup_interval_sec` instead of lingering for
+/// `stale_timeout_sec` (1h).
+fn prune_expired_oneshot(path: &Path, now: u64) -> bool {
+    if now.saturating_sub(file_mtime_secs(path)) <= ONESHOT_DISPLAY_WINDOW_SEC {
+        return false;
+    }
+    let data = match std::fs::read_to_string(path) {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+    let json: serde_json::Value = match serde_json::from_str(&data) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let state = json["state"].as_str().unwrap_or("");
+    if is_oneshot_state(state) {
+        std::fs::remove_file(path).is_ok()
+    } else {
+        false
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AgentActivity {
     pub state: String,
@@ -283,6 +315,19 @@ impl ActivityAggregator {
                 continue;
             }
 
+            // One-shot celebration whose display window already elapsed.
+            // On (re)start these would otherwise resurrect as a live
+            // "jumping"/"waving" pet; delete the residue and skip loading.
+            // This covers the common cause of a lingering Stop file: the app
+            // was down when Stop fired, so the socket channel's ~2s removal
+            // never ran, and nothing has re-touched the file since.
+            if is_oneshot_state(&state)
+                && now.saturating_sub(file_mtime_secs(&path)) > ONESHOT_DISPLAY_WINDOW_SEC
+            {
+                let _ = std::fs::remove_file(&path);
+                continue;
+            }
+
             loaded.insert(
                 file_stem,
                 AgentActivity {
@@ -357,6 +402,7 @@ impl ActivityAggregator {
 
         let mut file_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut stale_on_disk: usize = 0;
+        let mut oneshot_pruned: usize = 0;
 
         for entry in read_dir.flatten() {
             let path = entry.path();
@@ -377,6 +423,16 @@ impl ActivityAggregator {
                 continue;
             }
 
+            // One-shot celebration lingering past its display window — the
+            // clock-driven backstop that the reactive reconcile_paths check
+            // alone cannot provide (see `prune_expired_oneshot`). Without this,
+            // a Stop file left behind when the app was down at event time would
+            // survive until `stale_timeout_sec` (1h).
+            if prune_expired_oneshot(&path, now) {
+                oneshot_pruned += 1;
+                continue;
+            }
+
             file_ids.insert(file_stem);
         }
 
@@ -385,11 +441,12 @@ impl ActivityAggregator {
         // stale-on-disk cases.
         let orphaned = self.remove_orphaned_sessions(&file_ids);
 
-        if !orphaned.is_empty() || stale_on_disk > 0 {
+        if !orphaned.is_empty() || stale_on_disk > 0 || oneshot_pruned > 0 {
             info!(
-                "Cleaned up {} memory-orphans, {} disk-orphans",
+                "Cleaned up {} memory-orphans, {} disk-orphans, {} expired oneshot files",
                 orphaned.len(),
-                stale_on_disk
+                stale_on_disk,
+                oneshot_pruned
             );
             self.aggregate_and_notify();
         }
@@ -598,7 +655,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::Path;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     fn temp_dir(label: &str) -> PathBuf {
         let unique = SystemTime::now()
@@ -638,6 +695,60 @@ mod tests {
         assert_eq!(inner.aggregated.current_state, "waiting");
         assert_eq!(inner.aggregated.current_dialogue, "需要你的授权～");
         assert_eq!(inner.aggregated.active_count, 1);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Backdate a file's mtime by `secs` seconds so it looks past a window.
+    fn backdate_mtime(path: &Path, secs: u64) {
+        let past = SystemTime::now() - Duration::from_secs(secs);
+        let times = std::fs::FileTimes::new().set_modified(past);
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_times(times)
+            .unwrap();
+    }
+
+    #[test]
+    fn load_from_disk_prunes_expired_oneshot_file() {
+        let dir = temp_dir("oneshot-load");
+        fs::create_dir_all(&dir).unwrap();
+
+        // A "jumping" (Stop celebration) file whose mtime is past the window.
+        let path = write_session_file(&dir, "stop-sess", "jumping", "搞定啦！✨");
+        backdate_mtime(&path, ONESHOT_DISPLAY_WINDOW_SEC + 5);
+
+        let aggregator = ActivityAggregator::new(dir.to_string_lossy().to_string(), 3600);
+        aggregator.load_from_disk();
+
+        // File deleted from disk, and not loaded as a live activity.
+        assert!(!path.exists());
+        let inner = aggregator.inner.lock().unwrap();
+        assert!(inner.activities.get("stop-sess").is_none());
+        assert_eq!(inner.aggregated.current_state, "idle");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cleanup_stale_prunes_expired_oneshot_but_keeps_others() {
+        let dir = temp_dir("oneshot-cleanup");
+        fs::create_dir_all(&dir).unwrap();
+
+        let aggregator = ActivityAggregator::new(dir.to_string_lossy().to_string(), 3600);
+
+        // Expired "jumping" file → must be pruned.
+        let stop_path = write_session_file(&dir, "stop-sess", "jumping", "搞定啦！");
+        backdate_mtime(&stop_path, ONESHOT_DISPLAY_WINDOW_SEC + 5);
+        // Non-oneshot "running" file → must survive (stale_timeout is 1h).
+        let run_path = write_session_file(&dir, "run-sess", "running", "处理中...");
+
+        aggregator.cleanup_stale();
+
+        assert!(!stop_path.exists(), "expired oneshot file should be pruned");
+        assert!(run_path.exists(), "non-oneshot file should survive");
 
         let _ = fs::remove_dir_all(dir);
     }
