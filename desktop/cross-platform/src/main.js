@@ -42,6 +42,7 @@ const CONTEXT_MENU_AUTO_HIDE_MS = 3000; // hide menu if untouched for 3s
 // Disabled during drag / right-click menu to prevent pass-through interference.
 let hitTestEnabled = true;
 let contextMenuHideTimer = null;
+let contextMenuLeaveTimerId = null;
 
 async function main() {
   // 1. Fetch config from Rust backend. Fall back to safe defaults so the
@@ -266,6 +267,7 @@ function hideAllMenus() {
     clearTimeout(contextMenuHideTimer);
     contextMenuHideTimer = null;
   }
+  stopContextMenuLeavePoll();
   // Re-enable hit-test when menu closes. Menu items use click (not mouseup),
   // so this can't rely on the mouseup handler alone. The guard in enterPassThrough
   // prevents re-entering pass-through before the current click completes.
@@ -279,6 +281,57 @@ function scheduleContextMenuAutoHide() {
   contextMenuHideTimer = setTimeout(() => {
     hideAllMenus();
   }, CONTEXT_MENU_AUTO_HIDE_MS);
+  startContextMenuLeavePoll();
+}
+
+/**
+ * Poll cursor position via the Rust `cursor_in_window` command while the menu
+ * is open, and hide it the instant the cursor leaves the window bounds.
+ *
+ * Why a poll instead of a DOM `mouseleave`: this is a transparent window
+ * whose `setIgnoreCursorEvents` toggles per-pixel for click pass-through.
+ * WKWebView does not deliver a reliable `mouseleave` when the cursor exits a
+ * borderless transparent Tauri window (or when ignore-cursor-events flips).
+ * `cursor_in_window` reads the live hardware position via CGEvent regardless,
+ * so it is the only dependable "did the mouse leave?" signal — the same one
+ * pollCursor() relies on for pass-through exit.
+ */
+function contextMenuIsVisible() {
+  return Array.from(document.querySelectorAll(".context-menu")).some(
+    (m) => !m.classList.contains("hidden"),
+  );
+}
+
+function startContextMenuLeavePoll() {
+  stopContextMenuLeavePoll();
+  const tick = async () => {
+    // Menu may have been closed externally (click / Escape / item) while this
+    // tick was awaiting the IPC — bail before rescheduling to avoid polling
+    // a hidden menu forever.
+    if (!contextMenuIsVisible()) return;
+    try {
+      const [winX, winY] = await invoke("cursor_in_window");
+      if (winX < 0 || winY < 0 || winX >= window.innerWidth || winY >= window.innerHeight) {
+        // Cursor left the window → hide immediately.
+        hideAllMenus();
+        return;
+      }
+    } catch (e) {
+      // cursor_in_window is macOS-only; on other platforms or on IPC error,
+      // stop polling and let the CONTEXT_MENU_AUTO_HIDE_MS timer handle it.
+      console.warn("[ContextMenu] leave-poll stopping, falling back to auto-hide:", e);
+      return;
+    }
+    contextMenuLeaveTimerId = setTimeout(tick, POLL_INTERVAL_MS);
+  };
+  contextMenuLeaveTimerId = setTimeout(tick, POLL_INTERVAL_MS);
+}
+
+function stopContextMenuLeavePoll() {
+  if (contextMenuLeaveTimerId !== null) {
+    clearTimeout(contextMenuLeaveTimerId);
+    contextMenuLeaveTimerId = null;
+  }
 }
 
 function isMacPlatform() {
