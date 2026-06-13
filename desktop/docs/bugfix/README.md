@@ -11,3 +11,4 @@
 | [pet-unresponsive-stuck-state.md](pet-unresponsive-stuck-state.md) | 宠物无法点击/拖动（穿透态轮询链断裂） | 已实施 |
 | [stuck-jumping-after-stop.md](stuck-jumping-after-stop.md) | Stop 后宠物卡在 jumping、session 文件一直不删（5s 窗口缺时钟驱动） | 已实施 |
 | [context-menu-lingers-on-mouse-leave.md](context-menu-lingers-on-mouse-leave.md) | 右键菜单在鼠标移出窗口后仍停留满 3 秒（DOM mouseleave 在透明窗口不可靠） | 已实施 |
+| [drag-direction-stuck-or-flicker.md](drag-direction-stuck-or-flicker.md) | 拖动方向不跟随反向 / 单方向拖动也左右闪烁卡顿（累计 dx + 单帧抖动） | 已实施 |

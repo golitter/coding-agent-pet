@@ -308,8 +308,8 @@ Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标�
 
 ### 拖动动画
 
-- 拖动时实时计算水平位移 dx（3px 阈值防误触）
-- `animator.handleDrag(dx)` 通知动画器
+- 拖动时按帧计算**增量**水平位移 dx（相对上一帧，而非累计自拖拽起点），再经低通滤波成动量 `dragMomX`（衰减 `DRAG_MOMENTUM_DECAY=0.6`）后用符号决定方向——避免单帧抖动造成左右闪烁/卡顿；拖拽启动阈值 3px（防误触）
+- `animator.handleDrag(dx)` 通知动画器（仅看 dx 符号）
 - 保存拖动前状态 (`preDragState`)，松手时恢复
 - 方向切换时不会覆盖 `preDragState`
 
