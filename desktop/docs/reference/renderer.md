@@ -250,8 +250,8 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 7. 初始对话                ← "准备好了～"
 8. listen('state-change')  ← 监听 Rust 状态推送
 9. 右键菜单构建            ← 从 config.menu_items 动态生成
-10. 鼠标交互绑定           ← 点击/拖动/右键/三连击清空
-11. focus/blur 监听         ← 窗口聚焦/失焦时切换 `animator.setFocused()` + normal polling 状态
+10. 鼠标交互绑定           ← 悬停/拖动/右键/三连击清空
+11. focus/blur 监听         ← 切换 `animator.setFocused()` 帧率；失焦时离开悬停并重新 arm 轮询
 12. pagehide 监听           ← 输出诊断日志（页面卸载前）
 ```
 
@@ -284,28 +284,37 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 | 操作        | 行为                                                                                                                                                                                                                                          |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **单击**    | 触发跳跃动画（一次性），播完后恢复之前状态                                                                                                                                                                                                    |
+| **悬停**    | 光标悬停宠物身体 → 触发跳跃动画（`HOVER_JUMP_CYCLES` 轮），跳完回到 idle                                                                                                                                                                                                    |
 | 单击 + 拖动 | 使用 `appWindow.startDragging()` 移动窗口，按方向播放 running-left/right（按需 rAF 仅在拖动时运行）                                                                                                                                           |
 | 松开鼠标    | 停止拖动，取消 rAF，恢复之前状态                                                                                                                                                                                                              |
 | **三连击**  | 800ms 窗口内连续 3 次左键 → 调用 `purge_all_sessions` 清空所有会话文件，气泡反馈清理数量（`清理了 N 个会话～` / `没有可清理的会话～`），3s 后自动淡出（成功 `waving`、失败 `failed` 均传 `forceAutoHide`，机制见下文「对话气泡 → 显示逻辑」） |
 | **右键**    | 弹出自定义上下文菜单                                                                                                                                                                                                                          |
 
-> 三连击窗口收紧为 800ms（原 3s 过宽，正常交互 3s 内易误触）；刻意的 triple-tap 仍能从容落在窗口内。前两次点击仍播放跳跃动画，第三次切换为清理。
+> 单击/双击不再有效果——悬停才是本地跳跃触发；三连击窗口收紧为 800ms（原 3s 过宽，正常交互 3s 内易误触），刻意的 triple-tap 仍能从容落在窗口内，第三次点击切换为清空。
 
-### Focus/Blur 与 Normal Polling
+#### 悬停跳跃（Hover Jump）
 
-窗口聚焦/失焦通过 `focus` / `blur` 事件追踪 `windowFocused` 状态：
+光标悬停在宠物身体上时触发跳跃，播放固定 `HOVER_JUMP_CYCLES = 2` 轮后自动回到 idle：
+
+- 身体范围**始终用 idle 帧 0 的 alpha 判定**（`checkHoverBodyAlphaAtCss`），与当前动画帧解耦——避免跳跃过程中 alpha 随帧变化导致悬停判定抖动
+- `triggerHoverJump(cycles)` 只在 `idle` 态可触发；`stopHoverJump()` 立即打断并回 idle
+- 收到非 `idle` 的 `state-change`、开始拖拽、拖动方向变化、触发一次性动画、打开右键菜单时都会 `stopHoverJump` 打断
+
+> `jumping` 状态有两个来源：**Stop 事件**走 `triggerOneShot("jumping")`（一次性，播完恢复之前状态）；**悬停**走 `triggerHoverJump`（固定轮数后回 idle）。
+
+### Focus/Blur 与轮询
+
+窗口聚焦/失焦通过 `focus` / `blur` 事件切换帧率（不再追踪 `windowFocused` 标志——失焦时 hit-test 与悬停轮询仍持续运行）：
 
 | 事件    | 行为                                                                                                            |
 | ------- | --------------------------------------------------------------------------------------------------------------- |
-| `focus` | `windowFocused = true`；`animator.setFocused(true)` 恢复帧率；`armNormalHitTestPolling()` 恢复 hit-test 轮询    |
-| `blur`  | `windowFocused = false`；`animator.setFocused(false)` 降帧率；`disarmNormalHitTestPolling()` 停止 hit-test 轮询 |
+| `focus` | `animator.setFocused(true)` 恢复帧率；若拖动卡死则重置    |
+| `blur`  | `animator.setFocused(false)` 降帧率；`leavePetBodyHover()` 退出悬停跳跃；`armNormalHitTestPolling()` 恢复轮询 |
 
-Normal hit-test polling 不再永久运行，改为 **活动窗口模式**：
+两类轮询常驻运行（受各自 `shouldRun*` 门控），失焦时也不停止——桌面透明窗口失焦后 WKWebView 不再派发 `mousemove`，必须靠 `cursor_in_window` 轮询保持悬停与穿透判定：
 
-- `armNormalHitTestPolling(durationMs=2500)` 在鼠标/点击/拖动结束/退出穿透态等交互时刻触发，持续 `NORMAL_HIT_TEST_POLL_MS = 2500`
-- `disarmNormalHitTestPolling()` 在进入穿透态/拖动/右键菜单/blur 时停止
-- `shouldRunNormalHitTestPolling()` 检查 `windowFocused && hitTestEnabled && !dragStart && !isPassThrough && now < normalPollingUntil`
+- **Normal hit-test polling**（穿透恢复）：`armNormalHitTestPolling(durationMs=2500)` 在鼠标/点击/拖动结束/退出穿透态/blur 等时刻触发，持续 `NORMAL_HIT_TEST_POLL_MS = 2500`；`shouldRunNormalHitTestPolling()` 检查 `hitTestEnabled && !dragStart && !isPassThrough && !applyingPassThrough && (now < normalPollingUntil || 当前 idle/悬停跳跃/正在悬停)`——宠物处于 idle/悬停态时即使过了 armed 窗口也继续轮询
+- **Hover polling**（悬停跳跃）：`startHoverPolling()` 初始化时常驻；`pollHoverTarget()` 用 `cursor_in_window` 查 idle 帧 alpha（`checkHoverBodyAlphaAtCss`），按 ENTER/EXIT 阈值进入/离开悬停并触发/停止跳跃；DOM `mousemove` 在聚焦时即时响应，轮询在失焦时兜底，`document` `mouseleave` 作为 best-effort 退出通道
 
 Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标记和 `pollRecentlyActive`（4× POLL_INTERVAL 内有成功 poll）两个条件，避免误判正在进行的轮询为卡死。
 
@@ -442,7 +451,9 @@ Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标�
 
 ```js
 animator.transitionTo("running"); // 切换到 running 动画
-animator.triggerOneShot("jumping"); // 触发跳跃动画，播完后恢复之前状态
+animator.triggerOneShot("jumping"); // Stop 事件触发的庆祝跳跃，播完后恢复之前状态
+animator.triggerHoverJump(2); // 光标悬停触发的跳跃，固定 2 圈后回到 idle
+animator.stopHoverJump(); // 离开悬停 / 收到非 idle 状态时打断悬停跳跃
 animator.handleDrag(5.0); // 向右拖动 → running-right
 animator.handleDrag(-3.0); // 向左拖动 → running-left
 animator.handleDrag(0); // 松手 → 恢复 preDragState
