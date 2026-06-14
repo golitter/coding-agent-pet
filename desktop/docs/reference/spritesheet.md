@@ -49,7 +49,11 @@ assets/kotori-minami/frames/
 | 缩放因子 | 0.6 |
 | 显示尺寸 | ~115×125px |
 | 缩放方式 | `image-rendering: pixelated` (CSS) |
-| 帧率 | 10 FPS |
+| 基础帧率 | `renderer.fps` = 10 FPS（tick 频率基准） |
+| 实际帧率 | 按状态覆盖 `STATE_FPS`（idle/waiting/failed=7、review/waving=8、jumping/running/running-left/running-right=10），失焦时 × 0.6 |
+| 逐帧停留 | `renderer.frame_timing` 的 `holds` 数组（1 tick = `1/fps` 秒）；`idle:[10,4,4,1,4,12]` 让闭眼帧仅停 1 tick、睁眼帧拉长 |
+
+> 帧率与逐帧停留的完整机制见 [renderer.md](renderer.md) 的「逐状态帧率」与「逐帧停留」小节。
 
 ## 关联文件
 

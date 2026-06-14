@@ -69,10 +69,13 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
     │   │   ├── codex.md               #     Codex Hooks → 宠物渲染
     │   │   └── opencode.md            #     OpenCode 插件系统参考
     │   └── bugfix/                    #   Bugfix 计划
-    │       ├── idle-blink-too-fast.md #     idle 眨眼太快
+    │       ├── README.md              #     索引
     │       ├── active-count-undercount.md  # 多会话计数 N-1
+    │       ├── idle-blink-too-fast.md #     idle 眨眼太快（引入 frame_timing）
     │       ├── pet-unresponsive-stuck-state.md  # 宠物无响应/卡死
-    │       └── stuck-jumping-after-stop.md  # Stop 后卡 jumping、文件不删
+    │       ├── stuck-jumping-after-stop.md  # Stop 后卡 jumping、文件不删
+    │       ├── context-menu-lingers-on-mouse-leave.md  # 右键菜单鼠标移出后滞留
+    │       └── drag-direction-stuck-or-flicker.md  # 拖动方向卡顿/闪烁
     └── cross-platform/                # 主实现 (Tauri)
         ├── config.example.json        #   配置模板（提交到 git）
         ├── config.json                #   用户配置（自动生成，.gitignore）

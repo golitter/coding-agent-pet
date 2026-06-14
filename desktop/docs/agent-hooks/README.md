@@ -31,8 +31,8 @@ Claude Code 和 Codex 的事件机制不同，但宠物端通过 `common.py` 统
 | **配置文件** | `~/.claude/settings.json` | `~/.codex/hooks.json` 或 `config.toml` | `.opencode/plugins/` 目录或 `opencode.json` |
 | **Hook 入口** | `pet-hook.sh claude-code` → `claude_hook.py` | `pet-hook.sh codex` → `codex_hook.py` | `opencode-plugin.ts` → 导出 Plugin 函数 |
 | **事件字段名** | `hook_event_name` (PascalCase) | `hook_event_name` / `event` / `codex_event_type` (snake_case) | 事件名即对象键名（如 `session.idle`） |
-| **注册事件数** | 11 个 | 9 个 | 20+ 个事件类别 |
-| **独有事件** | `PreCompact`, `SessionEnd` | — | `session.compacted`, 自定义工具, `shell.env` |
+| **注册事件数** | 11 个 | 9 个 | 8 个（6 个 event 型 + 2 个 `tool.execute.*`） |
+| **独有事件** | `PreCompact`, `SessionEnd` | — | `QuestionAsked`（via `question` 工具） |
 | **信任机制** | 启动时快照，修改需在 `/hooks` 审查 | 非托管 hook 需 review & trust，按 hash 校验 | — |
 | **输出格式** | exit 0 静默；exit 2 阻断 | 期望 stdout 返回 `{}` | 函数参数 `(input, output)`，throw 阻断 |
 | **自定义工具** | ❌ | ❌ | ✅ `tool()` API |

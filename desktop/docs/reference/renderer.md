@@ -240,7 +240,9 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 ```
 1. invoke('get_config')    ← 从 Rust 获取配置
-2. SpriteAnimator          ← 创建动画器，加载精灵帧
+2. SpriteAnimator          ← 创建动画器
+2b. setFrameTiming()       ← 灌入 `config.frame_timing`（逐帧停留表）
+2c. loadFrames()           ← 通过 manifest 加载精灵帧（57 帧）
 3. 窗口设置                ← 尺寸 + 定位（右下角，`primaryMonitor()` API 支持多显示器）
 4. onFrame 回调            ← 动画器 → 更新 <img> src
 5. DialogueBubble          ← 创建对话气泡
@@ -401,6 +403,22 @@ Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标�
 
 **后台节流**：窗口失焦时 `setFocused(false)` → `BACKGROUND_FPS_FACTOR = 0.6` 降帧（最低 `MIN_BACKGROUND_FPS = 4`），聚焦时恢复。`updatePlaybackRate()` 在每次状态切换/拖动/焦点变化时调用。
 
+### 逐帧停留 (frame_timing)
+
+`STATE_FPS` 决定 `tick()` 的触发频率（每 `1000/fps` ms 一次），但**不**决定每一帧停留多久。帧停留由 `renderer.frame_timing`（config 灌入，`setFrameTiming()`）的 `holds` 数组控制——它与某状态的帧一一对应，单位是「tick」(1 tick = `1/STATE_FPS` 秒)。
+
+| 配置 key | holds | 含义 |
+| -------- | ----- | ---- |
+| `default` | `[1]` | 兜底：每帧停 1 tick（匀速轮播，旧行为） |
+| `idle` | `[10, 4, 4, 1, 4, 12]` | 长睁眼 + 快眨眼：第 3 帧（闭眼）仅 1 tick，其余睁眼帧拉长；一圈 35 tick |
+
+- `holdFor(state, frameIndex)` 查表取 hold，`holds` 缺失或越界时回退 `default`，再不行回退 `1`（宁可匀速也不崩）
+- `tick()` 每次把 `holdRemaining` 减 1，归零才前进到下一帧并 `resetHold()` 重置为下一帧的 hold
+- 实际可见时长 = `holds[i] / STATE_FPS[state]` 秒。例：`idle` 在 7 FPS 下，闭眼帧 `[3]=1` → ~0.14s，第 0 帧 `[0]=10` → ~1.4s；整圈 35 / 7 ≈ 5s
+- 所有切状态入口（`transitionTo` / `triggerOneShot` / `handleDrag`）切完后都 `resetHold()`，避免进新状态多停一拍
+
+> 动机与设计取舍见 [bugfix/idle-blink-too-fast.md](../bugfix/idle-blink-too-fast.md)：匀速轮播无法表达「长时间睁眼、偶尔一瞬」的自然眨眼，hold 表在不重做素材的前提下压住节奏。
+
 ### Alpha Mask 懒加载
 
 不再启动时一次性预计算全部 57 帧的 alpha mask，改为 **按需懒加载 + 剪枝**：
@@ -412,12 +430,13 @@ Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标�
 
 ### 可配置参数
 
-| 参数            | 配置项                   | 默认值                 |
-| --------------- | ------------------------ | ---------------------- |
-| 基础帧率        | `renderer.fps`           | 10 FPS                 |
-| 实际帧率        | `STATE_FPS[state]`       | 见上表（失焦时 × 0.6） |
-| 精灵尺寸        | —                        | 192×208px              |
-| Alpha mask 缓存 | `ALPHA_MASK_CACHE_LIMIT` | 4 个状态               |
+| 参数            | 配置项                   | 默认值                               |
+| --------------- | ------------------------ | ------------------------------------ |
+| 基础帧率        | `renderer.fps`           | 10 FPS                               |
+| 实际帧率        | `STATE_FPS[state]`       | 见上表（失焦时 × 0.6）               |
+| 逐帧停留        | `renderer.frame_timing`  | `default:[1]`，`idle:[10,4,4,1,4,12]` |
+| 精灵尺寸        | —                        | 192×208px                            |
+| Alpha mask 缓存 | `ALPHA_MASK_CACHE_LIMIT` | 4 个状态                             |
 
 ### 状态切换
 

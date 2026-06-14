@@ -102,7 +102,7 @@ session 文件的生命周期由事件的 `isTerminal` 标志和事件类型共�
 | 维度 | Claude Code | Codex | OpenCode |
 |---|---|---|---|
 | 独有事件 | `PreCompact`, `SessionEnd` | — | `QuestionAsked`（via `question` 工具） |
-| 缺失事件 | — | `PreCompact`, `SessionEnd`, `Notification`, `SubagentStop` | `UserPromptSubmit`, `Notification`, `SubagentStop` |
+| 缺失事件 | — | `PreCompact`, `SessionEnd` | `UserPromptSubmit`, `Notification`, `SubagentStop` |
 | 事件名格式 | PascalCase 直接读 | snake_case → `EVENT_ALIASES` 归一化 | dot.case → `OPENCODE_TO_PET` 映射 |
 | 字段名 | 固定 `hook_event_name` | 多种（`hook_event_name` / `event` / `codex_event_type`） | 事件名即对象键名 |
 | Session ID 字段 | `session_id` | `session_id` / `sessionId` / `conversation_id` / `thread_id` | `sessionID`（大写 D） |

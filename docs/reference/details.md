@@ -58,8 +58,11 @@
 |---|---|---|
 | [README.md](../../desktop/docs/bugfix/README.md) | Bugfix 计划索引 | — |
 | [active-count-undercount.md](../../desktop/docs/bugfix/active-count-undercount.md) | 多会话计数 N-1 问题 | 已实施 |
-| [idle-blink-too-fast.md](../../desktop/docs/bugfix/idle-blink-too-fast.md) | idle 状态眨眼太快 | 已实施 |
-| [pet-unresponsive-stuck-state.md](../../desktop/docs/bugfix/pet-unresponsive-stuck-state.md) | 宠物无响应/拖动卡死 | 已实施 |
+| [idle-blink-too-fast.md](../../desktop/docs/bugfix/idle-blink-too-fast.md) | idle 状态眨眼太快（引入 `frame_timing` 逐帧停留） | 已实施 |
+| [pet-unresponsive-stuck-state.md](../../desktop/docs/bugfix/pet-unresponsive-stuck-state.md) | 宠物无响应/拖动卡死（穿透态轮询链断裂） | 已实施 |
+| [stuck-jumping-after-stop.md](../../desktop/docs/bugfix/stuck-jumping-after-stop.md) | Stop 后卡 jumping、session 文件不删（5s 窗口缺时钟驱动） | 已实施 |
+| [context-menu-lingers-on-mouse-leave.md](../../desktop/docs/bugfix/context-menu-lingers-on-mouse-leave.md) | 右键菜单在鼠标移出窗口后仍停留满 3 秒（DOM `mouseleave` 不可靠） | 已实施 |
+| [drag-direction-stuck-or-flicker.md](../../desktop/docs/bugfix/drag-direction-stuck-or-flicker.md) | 拖动方向不跟随反向 / 单方向也左右闪烁（累计 dx + 单帧抖动） | 已实施 |
 
 ---
 
@@ -128,10 +131,11 @@
 | `frames_dir` | `null` | 精灵帧目录，`null` 自动检测（`{pet_base_dir}/assets/{pet_id}/frames`） |
 | `socket_path` | `/tmp/kotori-pet.sock` | Unix socket 路径 |
 | `sessions_dir` | `null` | session 文件目录，`null` 自动检测（`{pet_base_dir}/desktop/cross-platform/runtime/sessions`） |
-| `stale_timeout_sec` | `3600` | session 文件过期阈值（秒），1h 覆盖长工具调用 |
+| `renderer.stale_timeout_sec` | `3600` | session 文件过期阈值（秒），1h 覆盖长工具调用 |
 | `renderer.cleanup_interval_sec` | `30` | 定时清理间隔（秒）：扫描过期文件、孤儿内存会话、过期的一次性庆祝（`jumping`/`waving`）文件 |
 | `renderer.scale` | `0.6` | 精灵缩放因子 |
-| `renderer.fps` | `10` | 动画帧率 |
+| `renderer.fps` | `10` | 基础动画帧率（tick 频率）；各状态实际帧率由 `STATE_FPS` 覆盖 |
+| `renderer.frame_timing` | `{default:{holds:[1]}, idle:{holds:[10,4,4,1,4,12]}}` | 逐帧停留 tick 数（`holds` 数组与帧一一对应，1 tick = `1/fps` 秒）；`default` 兜底为 `[1]`（匀速），`idle` 用 `[10,4,4,1,4,12]` 实现「长睁眼 + 快眨眼」（一圈 35 tick = 3.5s）。详见 [renderer.md](../../desktop/docs/reference/renderer.md) 与 [bugfix/idle-blink-too-fast.md](../../desktop/docs/bugfix/idle-blink-too-fast.md) |
 | `renderer.corner_margin` | `20` | 屏幕右下角边距 (px) |
 | `dialogue.font_size` | `10` | 气泡字号 |
 | `dialogue.max_width` | `160` | 气泡最大宽度 (px) |
