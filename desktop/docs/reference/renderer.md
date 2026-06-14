@@ -77,7 +77,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 | Command              | 说明                                                                                                                                                  |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `get_config`         | 返回前端所需的配置子集（frames*dir, scale, fps, dialogue*\*, menu_items）                                                                             |
-| `run_applescript`    | 执行 AppleScript 命令（**仅 macOS**，含安全检查）                                                                                                     |
+| `run_applescript`    | 执行 AppleScript 命令（**仅 macOS**，含安全检查；`async` + `tokio::process`，慢脚本不阻塞主线程）                                                                                                     |
 | `quit_app`           | 退出应用：先显式删除 socket 文件，再 `app.exit(0)`（`process::exit` 跳过 `Drop`，故 socket 不能依赖 `SocketGuard` 清理）；前端调用时记录 `info!` 日志 |
 | `purge_all_sessions` | 手动清空：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除文件数                                                                      |
 | `read_file_bytes`    | 读 PNG 原始字节（hit-test alpha 蒙版），**路径校验限制在 `frames_dir` 内**                                                                            |
@@ -91,6 +91,7 @@ src-tauri/    → cross-platform/    (config 所在目录)
 
 - **平台守卫**: 非 macOS 平台直接返回错误 `"AppleScript is only available on macOS"`
 - **内容过滤**: 拒绝包含 `do shell script`、`do script` 或反引号的脚本，防止通过 AppleScript 执行任意 shell 命令
+- **非阻塞执行**: `#[tauri::command] async fn`，osascript 子进程用 `tokio::process::Command::output().await` 等待。Tauri 的同步 command 跑在主线程；改为 `async` 后调度到 tokio 运行时，await 子进程期间不占线程——带延迟的慢脚本（如菜单项）不会卡住 UI / webview 事件循环。tokio 需启用 `process` feature
 - **错误处理**: 前端 `invoke` 调用均带有 `.catch()` 处理
 
 ---
@@ -311,10 +312,12 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | `focus` | `animator.setFocused(true)` 恢复帧率；若拖动卡死则重置    |
 | `blur`  | `animator.setFocused(false)` 降帧率；`leavePetBodyHover()` 退出悬停跳跃；`armNormalHitTestPolling()` 恢复轮询 |
 
-两类轮询常驻运行（受各自 `shouldRun*` 门控），失焦时也不停止——桌面透明窗口失焦后 WKWebView 不再派发 `mousemove`，必须靠 `cursor_in_window` 轮询保持悬停与穿透判定：
+单一交互轮询常驻运行，失焦时也不停止——桌面透明窗口失焦后 WKWebView 不再派发 `mousemove`，必须靠 `cursor_in_window` 轮询同时维持悬停与穿透判定。它合并了原来的两条独立轮询（normal hit-test + hover），消除每 tick 重复的 `cursor_in_window` IPC：
 
-- **Normal hit-test polling**（穿透恢复）：`armNormalHitTestPolling(durationMs=2500)` 在鼠标/点击/拖动结束/退出穿透态/blur 等时刻触发，持续 `NORMAL_HIT_TEST_POLL_MS = 2500`；`shouldRunNormalHitTestPolling()` 检查 `hitTestEnabled && !dragStart && !isPassThrough && !applyingPassThrough && (now < normalPollingUntil || 当前 idle/悬停跳跃/正在悬停)`——宠物处于 idle/悬停态时即使过了 armed 窗口也继续轮询
-- **Hover polling**（悬停跳跃）：`startHoverPolling()` 初始化时常驻；`pollHoverTarget()` 用 `cursor_in_window` 查 idle 帧 alpha（`checkHoverBodyAlphaAtCss`），按 ENTER/EXIT 阈值进入/离开悬停并触发/停止跳跃；DOM `mousemove` 在聚焦时即时响应，轮询在失焦时兜底，`document` `mouseleave` 作为 best-effort 退出通道
+- **启动/停止**：`startNormalHitTestPolling()` 初始化时常驻；`normalPollingActive` 标志门控链式 `setTimeout` 自续调度——`stopNormalHitTestPolling()` / `disarmNormalHitTestPolling()` 置 false 终止。即便当前不满足门控也继续 `setTimeout` 续命（不活跃的一轮只是廉价的空 tick），等门控翻转（如 agent 停止 → 宠物回 idle）后自动恢复轮询——这是原常驻 hover-poll 提供、合并后保留的特性
+- **门控** `shouldRunNormalHitTestPolling()`：`hitTestEnabled && !dragStart && !applyingPassThrough && !contextMenuIsVisible() && (now < normalPollingUntil || 当前 idle/悬停跳跃/正在悬停)`。**有意不再检查 `!isPassThrough`**——worker 内部按 `isPassThrough` 分支处理
+- **worker** `pollNormalHitTest()`：`cursor_in_window` 取光标 → `checkHoverBodyAlphaAtCss`（idle 帧 alpha）→ `updatePetBodyHover` 维持悬停/触发跳跃；随后按 `isPassThrough` 分支——穿透态 `alpha >= EXIT_THRESHOLD` 退出穿透（原 hover-poll 的恢复职责），正常态 `alpha < ENTER_THRESHOLD` 进入穿透
+- **armed 窗口**：`armNormalHitTestPolling(durationMs = NORMAL_HIT_TEST_ACTIVE_MS = 2500)` 在鼠标/点击/拖动结束/退出穿透态/blur 等时刻抬起 `normalPollingUntil`；轮询间隔 `NORMAL_HIT_TEST_POLL_MS = 120`。DOM `mousemove` 在聚焦时即时响应，轮询在失焦时兜底，`document` `mouseleave` 作为 best-effort 退出通道
 
 Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标记和 `pollRecentlyActive`（4× POLL_INTERVAL 内有成功 poll）两个条件，避免误判正在进行的轮询为卡死。
 
@@ -490,6 +493,8 @@ animator.setFocused(true); // 窗口聚焦 → 恢复帧率
 | 淡入/淡出过渡      | `dialogue.fade_duration_sec`                      | 0.3s   |
 | 瞬时态自动淡出延时 | `AUTO_HIDE_MS`（`bubble.js` 源码常量，非 config） | 3000ms |
 
+> 这些值经 Rust `get_config` 翻译为扁平化 key（`dialogue_font_size` / `dialogue_max_width` / `dialogue_corner_radius` / `dialogue_fade_duration`）下发前端，`DialogueBubble` 构造时 `applyConfigStyles()` 直接写入 `el.style`（`fontSize`/`maxWidth`/`borderRadius`/`transition`），与 `.bubble` CSS 默认值一一对应——shipped 默认值复刻内置外观，改 `config.json` 即可覆盖。任一 key 缺省则跳过该项，沿用 CSS 默认。
+
 ### 显示逻辑
 
 - 有文字或多会话时显示，否则隐藏
@@ -534,11 +539,11 @@ animator.setFocused(true); // 窗口聚焦 → 恢复帧率
 | ---------------------- | -------------------------------------------------------------------------------- |
 | `tauri` v2             | 桌面应用框架（启用 `protocol-asset`、`macos-private-api`、`tray-icon` features） |
 | `serde` / `serde_json` | 序列化                                                                           |
-| `tokio`                | 异步运行时 (socket, broadcast, timer)                                            |
+| `tokio`                | 异步运行时 (socket, broadcast, timer, process)                                   |
 | `notify` v7            | 跨平台文件系统监控                                                               |
 | `chrono`               | 时间解析                                                                         |
 | `objc` (macOS)         | NSWindow/WKWebView 透明化                                                        |
 | `tracing`              | 结构化日志框架                                                                   |
 | `tracing-subscriber`   | 日志输出（支持 `RUST_LOG` 环境变量过滤）                                         |
 
-> **已移除**：`tauri-plugin-shell` —— 之前虽然注册了插件，但 capabilities 从未授予任何 `shell:*` 权限，前端也未使用。AppleScript 通过 `commands::run_applescript` 直接调用 `std::process::Command::new("osascript")` 实现，无需 shell plugin。详见 [Cargo.toml](../cross-platform/src-tauri/Cargo.toml) 注释。
+> **已移除**：`tauri-plugin-shell` —— 之前虽然注册了插件，但 capabilities 从未授予任何 `shell:*` 权限，前端也未使用。AppleScript 通过 `commands::run_applescript` 直接调用 `tokio::process::Command::new("osascript")` 实现（`async` command，避免慢脚本阻塞主线程），无需 shell plugin。详见 [Cargo.toml](../cross-platform/src-tauri/Cargo.toml) 注释。
