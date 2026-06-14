@@ -37,6 +37,7 @@ const DRAG_TIMEOUT_MS = 5000; // max drag duration before force-reset
 const HEALTH_CHECK_MS = 3000; // periodic state consistency check
 const MAX_CONSECUTIVE_POLL_ERRORS = 10; // poll error threshold to force exit
 const CONTEXT_MENU_AUTO_HIDE_MS = 3000; // hide menu if untouched for 3s
+const HOVER_JUMP_CYCLES = 2;
 
 // Module-level hit-test flag — shared between setupInteractions and hideAllMenus.
 // Disabled during drag / right-click menu to prevent pass-through interference.
@@ -106,6 +107,9 @@ async function main() {
   // 10. Listen for state changes from backend
   await listen("state-change", (event) => {
     const { state, dialogue, active_count } = event.payload;
+    if (state !== "idle") {
+      animator.stopHoverJump({ showFrame: false });
+    }
     // One-shot states (jumping on Stop, waving on SessionStart/Notification)
     // must go through triggerOneShot: it saves the prior state and restores it
     // after the animation plays once. transitionTo would skip them via its
@@ -365,7 +369,6 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let isDragging = false;
   let lastDragScreenX = null; // last consumed cursor X for incremental drag-delta
   let dragMomX = 0; // low-pass-filtered horizontal velocity for stable direction
-  let windowFocused = document.hasFocus();
   const DRAG_THRESHOLD = 3;
   // Per-frame dx is jittery during the OS drag loop (sub-pixel noise, uneven
   // mousemove delivery), so feeding its raw sign flickered the run animation
@@ -389,12 +392,15 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let pollTimerId = null;
   let recoveryPollTimerId = null; // recovery polling when normal exit fails
   let normalPollTimerId = null; // normal-mode helper polling (non-overlapping)
+  let hoverPollTimerId = null;
+  let hoverPollInFlight = false;
   let passThroughPollInFlight = false;
   let lastPassThroughPollAt = 0;
   let normalPollingUntil = 0;
   let solidHitCount = 0;
   let consecutivePollErrors = 0; // tracks consecutive IPC errors in pollCursor
   let dragTimerId = null; // drag safety timeout
+  let isHoveringPetBody = false;
 
   function resetDragState({ restoreAnimation = true, reenableHitTest = true } = {}) {
     clearTimeout(dragTimerId);
@@ -425,20 +431,110 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
   function beginExclusivePointerInteraction() {
     hitTestEnabled = false;
+    animator.stopHoverJump();
     disarmNormalHitTestPolling();
     if (isPassThrough) {
       exitPassThrough(); // async, fire-and-forget
     }
   }
 
+  function canTriggerHoverJump() {
+    return (
+      hitTestEnabled &&
+      !dragStart &&
+      !isDragging &&
+      !contextMenuIsVisible() &&
+      animator.currentState === "idle"
+    );
+  }
+
+  function enterPetBodyHover() {
+    if (isHoveringPetBody) return;
+    isHoveringPetBody = true;
+    if (canTriggerHoverJump()) {
+      animator.triggerHoverJump(HOVER_JUMP_CYCLES);
+    }
+  }
+
+  function leavePetBodyHover() {
+    if (!isHoveringPetBody && !animator.isHoverJumping()) return;
+    isHoveringPetBody = false;
+    animator.stopHoverJump();
+  }
+
+  function updatePetBodyHover(alpha) {
+    if (alpha >= EXIT_THRESHOLD) {
+      enterPetBodyHover();
+    } else if (alpha < ENTER_THRESHOLD) {
+      leavePetBodyHover();
+    }
+  }
+
+  function getInteractionAlphaAtCss(cssX, cssY) {
+    return Math.max(checkAlphaAtCss(cssX, cssY), checkHoverBodyAlphaAtCss(cssX, cssY));
+  }
+
+  function shouldRunHoverPolling() {
+    return (
+      hitTestEnabled &&
+      !dragStart &&
+      !applyingPassThrough &&
+      !contextMenuIsVisible() &&
+      (animator.currentState === "idle" || animator.isHoverJumping() || isHoveringPetBody)
+    );
+  }
+
+  async function pollHoverTarget() {
+    if (!shouldRunHoverPolling()) return;
+    try {
+      const [winX, winY] = await invoke("cursor_in_window");
+      if (!isPointInsideWindow(winX, winY)) {
+        leavePetBodyHover();
+        return;
+      }
+
+      const bodyAlpha = checkHoverBodyAlphaAtCss(winX, winY);
+      updatePetBodyHover(bodyAlpha);
+      if (bodyAlpha >= EXIT_THRESHOLD && isPassThrough) {
+        exitPassThrough();
+      }
+    } catch {
+      // Hover is best-effort; DOM mousemove and click guards remain as backup.
+    }
+  }
+
+  function startHoverPolling() {
+    if (hoverPollTimerId !== null) return;
+    const tick = async () => {
+      hoverPollTimerId = null;
+      if (hoverPollInFlight) return;
+      hoverPollInFlight = true;
+      try {
+        await pollHoverTarget();
+      } finally {
+        hoverPollInFlight = false;
+        hoverPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
+      }
+    };
+    hoverPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
+  }
+
   function tryEnterPassThroughAt(
     clientX,
     clientY,
-    { event = null, resetDrag = false, resetClickCounter = false, logMessage = "" } = {},
+    {
+      event = null,
+      resetDrag = false,
+      resetClickCounter = false,
+      logMessage = "",
+      alpha = null,
+    } = {},
   ) {
     if (isPassThrough || !hitTestEnabled) return false;
-    const alpha = checkAlphaAtCss(clientX, clientY);
-    if (alpha >= ENTER_THRESHOLD) return false;
+    const hitAlpha = alpha ?? checkAlphaAtCss(clientX, clientY);
+    if (hitAlpha >= ENTER_THRESHOLD) return false;
+
+    leavePetBodyHover();
 
     if (event) {
       event.preventDefault();
@@ -454,7 +550,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
     enterPassThrough(); // async, non-blocking
     if (logMessage) {
-      jsLog("info", "HitTest", `${logMessage} alpha=${alpha}`);
+      jsLog("info", "HitTest", `${logMessage} alpha=${hitAlpha}`);
     }
     return true;
   }
@@ -494,13 +590,21 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
    *  not edge pixels of the sprite.
    */
   function checkAlphaAtCss(cssX, cssY) {
+    return checkAlphaAtCssForState(cssX, cssY, animator.currentState, animator.currentFrameIndex);
+  }
+
+  function checkHoverBodyAlphaAtCss(cssX, cssY) {
+    return checkAlphaAtCssForState(cssX, cssY, "idle", 0);
+  }
+
+  function checkAlphaAtCssForState(cssX, cssY, state, frameIndex) {
     const rect = cachedRect ?? (cachedRect = petSprite.getBoundingClientRect());
     const spriteX = (cssX - rect.left) * (SPRITE_W / rect.width);
     const spriteY = (cssY - rect.top) * (SPRITE_H / rect.height);
     if (spriteX < 0 || spriteY < 0 || spriteX >= SPRITE_W || spriteY >= SPRITE_H) {
       return 0;
     }
-    return animator.getAlphaAt(animator.currentState, animator.currentFrameIndex, spriteX, spriteY);
+    return animator.getAlphaAt(state, frameIndex, spriteX, spriteY);
   }
 
   function isPointInsideWindow(winX, winY) {
@@ -509,12 +613,14 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
   function shouldRunNormalHitTestPolling() {
     return (
-      windowFocused &&
       hitTestEnabled &&
       !dragStart &&
       !isPassThrough &&
       !applyingPassThrough &&
-      performance.now() < normalPollingUntil
+      (performance.now() < normalPollingUntil ||
+        animator.currentState === "idle" ||
+        animator.isHoverJumping() ||
+        isHoveringPetBody)
     );
   }
 
@@ -688,16 +794,18 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       // the next entry. Transparent padding inside the window remains
       // pass-through.
       if (!isPointInsideWindow(winX, winY)) {
+        leavePetBodyHover();
         exitPassThrough();
         return;
       }
 
-      const alpha = checkAlphaAtCss(winX, winY);
+      const alpha = getInteractionAlphaAtCss(winX, winY);
 
       // Hysteresis: require EXIT_THRESHOLD + consecutive solid frames
       if (alpha >= EXIT_THRESHOLD) {
         solidHitCount++;
         if (solidHitCount >= SOLID_CONFIRM_COUNT) {
+          enterPetBodyHover();
           exitPassThrough();
         }
       } else {
@@ -713,15 +821,24 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     }
   }
 
-  /** Normal-mode polling covers the edge case where the cursor is already on
-   *  a transparent pixel before the first click, so no mousemove fires to arm
-   *  pass-through. */
+  /** Normal-mode polling keeps hover responsive even when the transparent
+   *  desktop window is unfocused and WKWebView does not deliver mousemove. */
   async function pollNormalHitTest() {
     if (!shouldRunNormalHitTestPolling()) return;
     try {
       const [winX, winY] = await invoke("cursor_in_window");
-      if (!isPointInsideWindow(winX, winY)) return;
-      tryEnterPassThroughAt(winX, winY);
+      if (!isPointInsideWindow(winX, winY)) {
+        leavePetBodyHover();
+        return;
+      }
+
+      const bodyAlpha = checkHoverBodyAlphaAtCss(winX, winY);
+      updatePetBodyHover(bodyAlpha);
+      if (bodyAlpha < ENTER_THRESHOLD) {
+        leavePetBodyHover();
+        const alpha = checkAlphaAtCss(winX, winY);
+        tryEnterPassThroughAt(winX, winY, { alpha });
+      }
     } catch {
       // Best-effort helper only. Mousemove and mousedown guards still protect
       // interactions if the polling IPC is temporarily unavailable.
@@ -742,21 +859,21 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   }
 
   armNormalHitTestPolling();
+  startHoverPolling();
   pollNormalHitTest();
 
   // Triple-click detection: 3 left-clicks within TRIPLE_CLICK_WINDOW_MS
   // triggers a full purge of the sessions directory (see `purge_all` in
-  // aggregator.rs). Below 3 clicks the counter simply biases toward the
-  // regular jump animation — clicks 1 and 2 still fire jumps, click 3 swaps
-  // in the purge. Window kept tight (800ms) on purpose: a purge wipes ALL
-  // live sessions, so the cost of a stray trigger is high. A deliberate
-  // triple-tap still lands comfortably inside 800ms; the previous 3s window
-  // fired on ordinary interaction within 3s.
+  // aggregator.rs). Single/double clicks are intentionally inert; hover is
+  // now the only local jump trigger. Window kept tight (800ms) on purpose:
+  // a purge wipes ALL live sessions, so the cost of a stray trigger is high.
+  // A deliberate triple-tap still lands comfortably inside 800ms; the
+  // previous 3s window fired on ordinary interaction within 3s.
   let clickCount = 0;
   let lastClickTime = 0;
   const TRIPLE_CLICK_WINDOW_MS = 800;
 
-  // Left click: mousedown → mouseup without drag = click → trigger jump
+  // Left click: mousedown → mouseup without drag = click counter only
   // Drag: mousedown → mousemove with threshold → drag window + directional anim
   document.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return; // left button only
@@ -773,6 +890,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
         resetDrag: true,
         resetClickCounter: true,
         logMessage: "transparent mousedown ignored",
+        alpha: getInteractionAlphaAtCss(e.clientX, e.clientY),
       })
     ) {
       return;
@@ -804,8 +922,12 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // now only throttles the directional *animation*, not the drag itself.
   let pendingMove = null;
   document.addEventListener("mousemove", (e) => {
+    const bodyAlpha = checkHoverBodyAlphaAtCss(e.clientX, e.clientY);
+    updatePetBodyHover(bodyAlpha);
+    const alpha = bodyAlpha >= ENTER_THRESHOLD ? getInteractionAlphaAtCss(e.clientX, e.clientY) : 0;
+
     // --- Hit-test: check alpha on every move (normal mode only) ---
-    if (!dragStart && tryEnterPassThroughAt(e.clientX, e.clientY)) {
+    if (!dragStart && tryEnterPassThroughAt(e.clientX, e.clientY, { alpha })) {
       return;
     }
 
@@ -888,9 +1010,6 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
         // doesn't chain into another purge.
         clickCount = 0;
         triggerRedundantCleanup(bubble);
-      } else {
-        // Single click → trigger jump
-        animator.triggerOneShot("jumping");
       }
     }
 
@@ -905,6 +1024,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       tryEnterPassThroughAt(e.clientX, e.clientY, {
         event: e,
         logMessage: "transparent contextmenu ignored",
+        alpha: getInteractionAlphaAtCss(e.clientX, e.clientY),
       })
     ) {
       return;
@@ -944,7 +1064,6 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // checked dragStart too, every first click on an unfocused window would be
   // swallowed — dragStart is set on every mousedown, not just actual drags.
   window.addEventListener("focus", () => {
-    windowFocused = true;
     animator.setFocused(true);
     if (isDragging) {
       console.log("[Drag] Reset stuck drag state on window focus");
@@ -955,9 +1074,13 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   });
 
   window.addEventListener("blur", () => {
-    windowFocused = false;
     animator.setFocused(false);
-    disarmNormalHitTestPolling();
+    leavePetBodyHover();
+    armNormalHitTestPolling();
+  });
+
+  document.addEventListener("mouseleave", () => {
+    leavePetBodyHover();
   });
 
   // --- Fix 5: Global health check (catch-all safety net) ---

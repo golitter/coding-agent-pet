@@ -59,6 +59,7 @@ export class SpriteAnimator {
     this.baseHeight = SPRITE_H;
     this.hitTestReady = false;
     this.pendingOneShot = null; // queued one-shot to fire after current finishes
+    this.hoverJumpCyclesRemaining = 0;
   }
 
   async loadImage(nativePath) {
@@ -189,6 +190,10 @@ export class SpriteAnimator {
 
   /** Transition to a new animation state */
   transitionTo(state) {
+    if (this.isHoverJumping()) {
+      if (state === "idle") return;
+      this.stopHoverJump({ showFrame: false });
+    }
     if (state === this.currentState) return;
     if (!this.frames[state]) {
       console.warn(`[Animator] ⚠️ Unknown state: ${state}`);
@@ -214,6 +219,9 @@ export class SpriteAnimator {
   triggerOneShot(state) {
     if (!ONE_SHOT_STATES.has(state)) return;
     if (!this.frames[state]) return;
+    if (this.isHoverJumping()) {
+      this.stopHoverJump({ showFrame: false });
+    }
     // Queue if a one-shot is already playing
     if (ONE_SHOT_STATES.has(this.currentState)) {
       this.pendingOneShot = state;
@@ -229,8 +237,47 @@ export class SpriteAnimator {
     this.updatePlaybackRate();
   }
 
+  /** Play the idle-only hover jump for a fixed number of full cycles. */
+  triggerHoverJump(cycles = 2) {
+    const cycleCount = Math.max(1, Math.floor(Number(cycles) || 0));
+    if (!this.frames.jumping || this.currentState !== "idle") return false;
+
+    this.hoverJumpCyclesRemaining = cycleCount;
+    this.currentState = "jumping";
+    this.currentFrameIndex = 0;
+    this.resetHold();
+    this.showCurrentFrame();
+    this.ensureAlphaMasksForStates(["jumping"]).catch(() => {});
+    this.pruneAlphaMasks();
+    this.updatePlaybackRate();
+    return true;
+  }
+
+  stopHoverJump({ showFrame = true } = {}) {
+    if (!this.isHoverJumping()) return false;
+
+    this.hoverJumpCyclesRemaining = 0;
+    this.currentState = "idle";
+    this.currentFrameIndex = 0;
+    this.resetHold();
+    if (showFrame) {
+      this.showCurrentFrame();
+    }
+    this.ensureAlphaMasksForStates(["idle"]).catch(() => {});
+    this.pruneAlphaMasks();
+    this.updatePlaybackRate();
+    return true;
+  }
+
+  isHoverJumping() {
+    return this.hoverJumpCyclesRemaining > 0;
+  }
+
   /** Handle drag direction for running animation */
   handleDrag(dx) {
+    if (dx !== 0 && this.isHoverJumping()) {
+      this.stopHoverJump({ showFrame: false });
+    }
     if (dx > 0.5) {
       if (this.currentState !== "running-right" && this.currentState !== "running-left") {
         this.preDragState = this.currentState;
@@ -454,8 +501,25 @@ export class SpriteAnimator {
 
     this.currentFrameIndex++;
 
-    // One-shot: play full cycle then return to previous state (or fire queued one-shot)
-    if (ONE_SHOT_STATES.has(this.currentState) && this.currentFrameIndex >= frames.length) {
+    if (
+      this.isHoverJumping() &&
+      this.currentState === "jumping" &&
+      this.currentFrameIndex >= frames.length
+    ) {
+      this.hoverJumpCyclesRemaining--;
+      if (this.hoverJumpCyclesRemaining > 0) {
+        this.currentFrameIndex = 0;
+        this.resetHold();
+      } else {
+        this.currentState = "idle";
+        this.currentFrameIndex = 0;
+        this.resetHold();
+        this.ensureAlphaMasksForStates(["idle"]).catch(() => {});
+        this.pruneAlphaMasks();
+        this.updatePlaybackRate();
+      }
+      // One-shot: play full cycle then return to previous state (or fire queued one-shot)
+    } else if (ONE_SHOT_STATES.has(this.currentState) && this.currentFrameIndex >= frames.length) {
       if (this.pendingOneShot) {
         const next = this.pendingOneShot;
         this.pendingOneShot = null;
