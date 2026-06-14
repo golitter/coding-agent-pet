@@ -25,6 +25,7 @@ const SOLID_CONFIRM_COUNT = 2; // consecutive solid frames before exiting
 const POLL_INTERVAL_MS = 80; // polling rate while in pass-through mode (80ms ≈ 12Hz)
 const NORMAL_HIT_TEST_POLL_MS = 120; // helper-only polling during recent activity windows
 const NORMAL_HIT_TEST_ACTIVE_MS = 2500; // keep helper polling alive briefly after interaction
+const IDLE_HIT_TEST_POLL_MS = 1000; // idle 兜底频率:失焦时仍能发现 hover,但空闲时省电
 
 /** Bridge JS → Rust log for diagnostics. Appears in RUST_LOG output. */
 function jsLog(level, tag, msg) {
@@ -582,6 +583,24 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     );
   }
 
+  /** Whether the current state needs the original fast (8.3Hz) polling rate.
+   *  Active states — recent interaction, hover jumping, cursor on the pet body,
+   *  pass-through — keep the fast cadence; only the pure idle steady state drops
+   *  to IDLE_HIT_TEST_POLL_MS. This is what stops the pet from polling
+   *  cursor_in_window at 8.3Hz forever when nothing is happening. */
+  function needsHighFreqHitTestPolling() {
+    return (
+      performance.now() < normalPollingUntil ||
+      animator.isHoverJumping() ||
+      isHoveringPetBody ||
+      isPassThrough
+    );
+  }
+
+  function nextHitTestIntervalMs() {
+    return needsHighFreqHitTestPolling() ? NORMAL_HIT_TEST_POLL_MS : IDLE_HIT_TEST_POLL_MS;
+  }
+
   function stopNormalHitTestPolling() {
     normalPollingActive = false;
     if (normalPollTimerId !== null) {
@@ -831,10 +850,10 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
         await pollNormalHitTest();
       }
       if (normalPollingActive) {
-        normalPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
+        normalPollTimerId = setTimeout(tick, nextHitTestIntervalMs());
       }
     };
-    normalPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
+    normalPollTimerId = setTimeout(tick, nextHitTestIntervalMs());
   }
 
   armNormalHitTestPolling();

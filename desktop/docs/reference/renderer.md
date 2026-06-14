@@ -317,7 +317,8 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 - **启动/停止**：`startNormalHitTestPolling()` 初始化时常驻；`normalPollingActive` 标志门控链式 `setTimeout` 自续调度——`stopNormalHitTestPolling()` / `disarmNormalHitTestPolling()` 置 false 终止。即便当前不满足门控也继续 `setTimeout` 续命（不活跃的一轮只是廉价的空 tick），等门控翻转（如 agent 停止 → 宠物回 idle）后自动恢复轮询——这是原常驻 hover-poll 提供、合并后保留的特性
 - **门控** `shouldRunNormalHitTestPolling()`：`hitTestEnabled && !dragStart && !applyingPassThrough && !contextMenuIsVisible() && (now < normalPollingUntil || 当前 idle/悬停跳跃/正在悬停)`。**有意不再检查 `!isPassThrough`**——worker 内部按 `isPassThrough` 分支处理
 - **worker** `pollNormalHitTest()`：`cursor_in_window` 取光标 → `checkHoverBodyAlphaAtCss`（idle 帧 alpha）→ `updatePetBodyHover` 维持悬停/触发跳跃；随后按 `isPassThrough` 分支——穿透态 `alpha >= EXIT_THRESHOLD` 退出穿透（原 hover-poll 的恢复职责），正常态 `alpha < ENTER_THRESHOLD` 进入穿透
-- **armed 窗口**：`armNormalHitTestPolling(durationMs = NORMAL_HIT_TEST_ACTIVE_MS = 2500)` 在鼠标/点击/拖动结束/退出穿透态/blur 等时刻抬起 `normalPollingUntil`；轮询间隔 `NORMAL_HIT_TEST_POLL_MS = 120`。DOM `mousemove` 在聚焦时即时响应，轮询在失焦时兜底，`document` `mouseleave` 作为 best-effort 退出通道
+- **armed 窗口**：`armNormalHitTestPolling(durationMs = NORMAL_HIT_TEST_ACTIVE_MS = 2500)` 在鼠标/点击/拖动结束/退出穿透态/blur 等时刻抬起 `normalPollingUntil`。DOM `mousemove` 在聚焦时即时响应，轮询在失焦时兜底，`document` `mouseleave` 作为 best-effort 退出通道
+- **动态频率（省电）**：轮询间隔由 `nextHitTestIntervalMs()` 按状态选取——活跃态（armed 窗口未过期 / 悬停跳跃中 / 光标在 pet body 上 / 穿透态）用 `NORMAL_HIT_TEST_POLL_MS = 120`（8.3Hz，原行为）；**纯 idle 稳态降到 `IDLE_HIT_TEST_POLL_MS = 1000`（1Hz）**，消除后台常驻 `cursor_in_window` IPC（由 `needsHighFreqHitTestPolling()` 判定）。代价：失焦态鼠标移入触发悬停跳跃的延迟从 ≤120ms 变为 ≤1s（焦点态走 `mousemove` 不受影响）
 
 Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标记和 `pollRecentlyActive`（4× POLL_INTERVAL 内有成功 poll）两个条件，避免误判正在进行的轮询为卡死。
 
