@@ -391,9 +391,8 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let pendingExit = false; // deferred exit flag for race conditions
   let pollTimerId = null;
   let recoveryPollTimerId = null; // recovery polling when normal exit fails
-  let normalPollTimerId = null; // normal-mode helper polling (non-overlapping)
-  let hoverPollTimerId = null;
-  let hoverPollInFlight = false;
+  let normalPollTimerId = null; // single interactive hit-test poll timer
+  let normalPollingActive = false; // false after stop(); gates self-sustaining reschedule
   let passThroughPollInFlight = false;
   let lastPassThroughPollAt = 0;
   let normalPollingUntil = 0;
@@ -472,51 +471,6 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
   function getInteractionAlphaAtCss(cssX, cssY) {
     return Math.max(checkAlphaAtCss(cssX, cssY), checkHoverBodyAlphaAtCss(cssX, cssY));
-  }
-
-  function shouldRunHoverPolling() {
-    return (
-      hitTestEnabled &&
-      !dragStart &&
-      !applyingPassThrough &&
-      !contextMenuIsVisible() &&
-      (animator.currentState === "idle" || animator.isHoverJumping() || isHoveringPetBody)
-    );
-  }
-
-  async function pollHoverTarget() {
-    if (!shouldRunHoverPolling()) return;
-    try {
-      const [winX, winY] = await invoke("cursor_in_window");
-      if (!isPointInsideWindow(winX, winY)) {
-        leavePetBodyHover();
-        return;
-      }
-
-      const bodyAlpha = checkHoverBodyAlphaAtCss(winX, winY);
-      updatePetBodyHover(bodyAlpha);
-      if (bodyAlpha >= EXIT_THRESHOLD && isPassThrough) {
-        exitPassThrough();
-      }
-    } catch {
-      // Hover is best-effort; DOM mousemove and click guards remain as backup.
-    }
-  }
-
-  function startHoverPolling() {
-    if (hoverPollTimerId !== null) return;
-    const tick = async () => {
-      hoverPollTimerId = null;
-      if (hoverPollInFlight) return;
-      hoverPollInFlight = true;
-      try {
-        await pollHoverTarget();
-      } finally {
-        hoverPollInFlight = false;
-        hoverPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
-      }
-    };
-    hoverPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
   }
 
   function tryEnterPassThroughAt(
@@ -611,12 +565,16 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     return winX >= 0 && winY >= 0 && winX < window.innerWidth && winY < window.innerHeight;
   }
 
+  // Union of the former hover-poll and normal-poll guards so the single merged
+  // loop runs at least as often as either did. !isPassThrough is intentionally
+  // dropped: the worker branches on isPassThrough to run the exit path while in
+  // pass-through (formerly the hover-poll's job) and the enter path otherwise.
   function shouldRunNormalHitTestPolling() {
     return (
       hitTestEnabled &&
       !dragStart &&
-      !isPassThrough &&
       !applyingPassThrough &&
+      !contextMenuIsVisible() &&
       (performance.now() < normalPollingUntil ||
         animator.currentState === "idle" ||
         animator.isHoverJumping() ||
@@ -625,6 +583,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   }
 
   function stopNormalHitTestPolling() {
+    normalPollingActive = false;
     if (normalPollTimerId !== null) {
       clearTimeout(normalPollTimerId);
       normalPollTimerId = null;
@@ -668,7 +627,10 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       solidHitCount = 0;
       consecutivePollErrors = 0;
       lastPassThroughPollAt = performance.now();
-      disarmNormalHitTestPolling();
+      // Note: do NOT disarm the interactive poll here. The merged loop branches
+      // on isPassThrough, so its enter path is skipped automatically while the
+      // exit path (cursor returning to the pet body) keeps working — matching
+      // the former hover-poll, which stayed alive during pass-through.
       startPolling();
       jsLog("info", "HitTest", "ENTER pass-through");
     } finally {
@@ -821,8 +783,11 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     }
   }
 
-  /** Normal-mode polling keeps hover responsive even when the transparent
-   *  desktop window is unfocused and WKWebView does not deliver mousemove. */
+  /** Interactive hit-test polling — keeps hover responsive even when the
+   *  transparent desktop window is unfocused and WKWebView does not deliver
+   *  mousemove, and recovers from pass-through when the cursor returns to the
+   *  pet body. Replaces the former separate hover-poll + normal-poll loops,
+   *  which duplicated the cursor_in_window IPC on every tick. */
   async function pollNormalHitTest() {
     if (!shouldRunNormalHitTestPolling()) return;
     try {
@@ -834,8 +799,15 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
       const bodyAlpha = checkHoverBodyAlphaAtCss(winX, winY);
       updatePetBodyHover(bodyAlpha);
-      if (bodyAlpha < ENTER_THRESHOLD) {
-        leavePetBodyHover();
+      if (isPassThrough) {
+        // Cursor landed back on the pet body while pass-through was active —
+        // hand interaction back to the window (formerly the hover-poll's job).
+        if (bodyAlpha >= EXIT_THRESHOLD) {
+          exitPassThrough();
+        }
+      } else if (bodyAlpha < ENTER_THRESHOLD) {
+        // Cursor over a transparent area in normal mode — hand it to the OS.
+        // (updatePetBodyHover above already called leavePetBodyHover.)
         const alpha = checkAlphaAtCss(winX, winY);
         tryEnterPassThroughAt(winX, winY, { alpha });
       }
@@ -847,11 +819,18 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
   function startNormalHitTestPolling() {
     if (normalPollTimerId !== null) return;
+    normalPollingActive = true;
     const tick = async () => {
       normalPollTimerId = null;
-      if (!shouldRunNormalHitTestPolling()) return;
-      await pollNormalHitTest();
+      if (!normalPollingActive) return;
+      // Gate the IPC by the guard; keep ticking otherwise so polling resumes
+      // when the guard flips back (e.g. agent stops → pet returns to idle) even
+      // without a mouse event to arm it — the property the former always-on
+      // hover-poll gave us. An inactive tick is just a cheap setTimeout.
       if (shouldRunNormalHitTestPolling()) {
+        await pollNormalHitTest();
+      }
+      if (normalPollingActive) {
         normalPollTimerId = setTimeout(tick, NORMAL_HIT_TEST_POLL_MS);
       }
     };
@@ -859,7 +838,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   }
 
   armNormalHitTestPolling();
-  startHoverPolling();
+  startNormalHitTestPolling();
   pollNormalHitTest();
 
   // Triple-click detection: 3 left-clicks within TRIPLE_CLICK_WINDOW_MS

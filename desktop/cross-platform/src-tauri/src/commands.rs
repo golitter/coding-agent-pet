@@ -107,7 +107,7 @@ pub fn purge_all_sessions(
 }
 
 #[tauri::command]
-pub fn run_applescript(script: String) -> Result<String, String> {
+pub async fn run_applescript(script: String) -> Result<String, String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = script;
@@ -127,10 +127,16 @@ pub fn run_applescript(script: String) -> Result<String, String> {
             return Err("Script contains disallowed patterns".into());
         }
 
-        let output = std::process::Command::new("osascript")
+        // Spawn osascript asynchronously so a slow user-supplied script does not
+        // block the main thread / webview event loop. `#[tauri::command]` sync
+        // commands run on the main thread; making this `async` moves it onto the
+        // Tauri tokio runtime, and `tokio::process::Command` awaits the child
+        // without holding a thread.
+        let output = tokio::process::Command::new("osascript")
             .arg("-e")
             .arg(&script)
             .output()
+            .await
             .map_err(|e| format!("Failed to run osascript: {}", e))?;
 
         if output.status.success() {

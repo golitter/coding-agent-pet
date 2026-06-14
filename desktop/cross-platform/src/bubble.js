@@ -26,6 +26,31 @@ export class DialogueBubble {
     this.config = config;
     this.currentStyle = "normal";
     this.hideTimer = null;
+    this.applyConfigStyles();
+  }
+
+  /** Apply configurable dialogue dimensions/timing from config.
+   *
+   * These mirror the .bubble CSS defaults (pt for font, px for sizes, s for
+   * fade) so the shipped config values reproduce the built-in look while
+   * letting config.json override them. Previously the Rust → frontend plumbing
+   * landed these fields in `config` but nothing ever read them, so customizing
+   * font_size / max_width / corner_radius / fade_duration in config.json had
+   * no effect. */
+  applyConfigStyles() {
+    const c = this.config || {};
+    if (c.dialogue_font_size != null) {
+      this.el.style.fontSize = `${c.dialogue_font_size}pt`;
+    }
+    if (c.dialogue_max_width != null) {
+      this.el.style.maxWidth = `${c.dialogue_max_width}px`;
+    }
+    if (c.dialogue_corner_radius != null) {
+      this.el.style.borderRadius = `${c.dialogue_corner_radius}px`;
+    }
+    if (c.dialogue_fade_duration != null) {
+      this.el.style.transition = `opacity ${c.dialogue_fade_duration}s ease`;
+    }
   }
 
   /** Show the bubble with text, session count, and state-based style.
