@@ -63,7 +63,6 @@ export class SpriteAnimator {
   }
 
   async loadImage(nativePath) {
-    const { convertFileSrc } = window.__TAURI__.core;
     const loadFromUrl = async (url) => {
       const img = new Image();
       const loaded = await new Promise((resolve) => {
@@ -91,12 +90,11 @@ export class SpriteAnimator {
         return img;
       }
       URL.revokeObjectURL(blobUrl);
-    } catch {
-      // Fall back to the Tauri asset protocol for older builds/configs where
-      // the byte-read IPC is unavailable.
+    } catch (e) {
+      console.warn("[Animator] image byte load failed:", nativePath, e);
     }
 
-    return loadFromUrl(convertFileSrc(nativePath));
+    return null;
   }
 
   setFrameTiming(timing) {

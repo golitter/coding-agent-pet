@@ -1,5 +1,6 @@
 use crate::aggregator::ActivityAggregator;
 use notify::Watcher;
+use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 #[cfg(unix)]
@@ -171,6 +172,17 @@ fn schedule_oneshot_cleanup_from_paths(
     }
 }
 
+fn dedupe_paths(paths: Vec<std::path::PathBuf>) -> Vec<std::path::PathBuf> {
+    let mut seen = HashSet::with_capacity(paths.len());
+    let mut deduped = Vec::with_capacity(paths.len());
+    for path in paths {
+        if seen.insert(path.clone()) {
+            deduped.push(path);
+        }
+    }
+    deduped
+}
+
 async fn start_tcp_server(addr: &str, session_mgr: Arc<ActivityAggregator>) {
     if !is_loopback_endpoint(addr) {
         warn!(
@@ -324,6 +336,8 @@ pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<ActivityAggregato
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
             }
         }
+
+        let changed_paths = dedupe_paths(changed_paths);
 
         session_mgr.reconcile_paths(changed_paths.clone());
         schedule_oneshot_cleanup_from_paths(&changed_paths, &session_mgr);

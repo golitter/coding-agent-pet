@@ -26,14 +26,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src asset: blob: https://asset.localhost data:; style-src 'self' 'unsafe-inline'",
-      "assetProtocol": {
-        "enable": true,
-        "scope": {
-          "allow": ["**/*"],
-          "requireLiteralLeadingDot": false
-        }
-      }
+      "csp": "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'"
     }
   }
 }

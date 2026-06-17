@@ -42,23 +42,6 @@ fn validate_path_in_frames(path: &str, frames_dir: &str) -> Result<PathBuf, Stri
     Ok(canonical)
 }
 
-/// Lexicle path normalization without filesystem access.
-/// Resolves `.` and `..` components to produce a canonical-form path string.
-/// Used as a fast path to avoid per-file `canonicalize()` syscalls.
-fn normalize_path(path: &std::path::Path) -> PathBuf {
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
-            }
-            c => normalized.push(c),
-        }
-    }
-    normalized
-}
-
 #[tauri::command]
 pub fn get_config(config: tauri::State<'_, PetConfig>) -> FrontendConfig {
     FrontendConfig {
@@ -177,17 +160,15 @@ pub async fn read_file_bytes(
 /// original_path → bytes for each file successfully read and validated.
 /// Used by computeAlphaMasks to avoid 55+ individual IPC round trips.
 ///
-/// Uses a two-tier path validation: fast lexical normalization (no syscall)
-/// for the common case (no symlinks), falling back to full canonicalize
-/// when lexical check doesn't match. This reduces 55+ canonicalize syscalls
-/// to typically 1 (the base dir).
+/// Each requested path is canonicalized before reading, then checked against
+/// the canonical frames_dir. This avoids symlink escapes from the asset
+/// directory while keeping the actual file I/O on the blocking pool.
 #[tauri::command]
 pub async fn read_frames_batch(
     paths: Vec<String>,
     config: tauri::State<'_, PetConfig>,
 ) -> Result<HashMap<String, Vec<u8>>, String> {
     let frames_dir_path = std::path::Path::new(&config.frames_dir);
-    let frames_dir_norm = normalize_path(frames_dir_path);
     let frames_canonical = std::fs::canonicalize(frames_dir_path)
         .map_err(|e| format!("Cannot resolve frames_dir: {}", e))?;
 
@@ -198,17 +179,6 @@ pub async fn read_frames_batch(
     tauri::async_runtime::spawn_blocking(move || {
         let mut results = HashMap::with_capacity(paths.len());
         for path in paths {
-            let p = std::path::Path::new(&path);
-            // Fast path: lexical normalization avoids per-file canonicalize syscall.
-            // Correct when no symlinks are involved — the common case for asset dirs.
-            let normalized = normalize_path(p);
-            if normalized.starts_with(&frames_dir_norm) {
-                if let Ok(bytes) = std::fs::read(&normalized) {
-                    results.insert(path, bytes);
-                }
-                continue;
-            }
-            // Slow path: resolve symlinks for paths that don't lexical match
             let canonical = match std::fs::canonicalize(&path) {
                 Ok(c) => c,
                 Err(_) => continue,

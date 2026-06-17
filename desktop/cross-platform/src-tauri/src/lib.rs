@@ -151,6 +151,10 @@ pub fn run() {
             let interval = config.cleanup_interval_sec;
             tauri::async_runtime::spawn(async move {
                 let mut ticker = tokio::time::interval(Duration::from_secs(interval));
+                // The first tokio interval tick fires immediately. `load_from_disk`
+                // just scanned the same directory, so consume that tick and wait
+                // for the first real cleanup period before scanning again.
+                ticker.tick().await;
                 loop {
                     ticker.tick().await;
                     mgr_cleanup.cleanup_stale();

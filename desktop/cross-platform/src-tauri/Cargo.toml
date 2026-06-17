@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "tray-icon", "macos-private-api"] }
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 # NOTE: tauri-plugin-shell was removed — it was registered but never granted
 # any `shell:*` capability permission, and no frontend code used it (AppleScript
 # goes through `std::process::Command` in commands::run_applescript directly).

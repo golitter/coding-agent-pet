@@ -410,7 +410,51 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let solidHitCount = 0;
   let consecutivePollErrors = 0; // tracks consecutive IPC errors in pollCursor
   let dragTimerId = null; // drag safety timeout
+  let healthCheckTimerId = null;
   let isHoveringPetBody = false;
+
+  function needsHealthCheck() {
+    return isPassThrough || applyingPassThrough || isDragging || !!dragStart;
+  }
+
+  function stopHealthCheckIfIdle() {
+    if (!needsHealthCheck() && healthCheckTimerId !== null) {
+      clearTimeout(healthCheckTimerId);
+      healthCheckTimerId = null;
+    }
+  }
+
+  function runHealthCheck() {
+    healthCheckTimerId = null;
+
+    if (isPassThrough && !applyingPassThrough) {
+      const pollRecentlyActive = performance.now() - lastPassThroughPollAt < POLL_INTERVAL_MS * 4;
+      if (
+        pollTimerId === null &&
+        recoveryPollTimerId === null &&
+        !passThroughPollInFlight &&
+        !pollRecentlyActive
+      ) {
+        console.warn("[HealthCheck] Pass-through with no active polling - forcing exit");
+        jsLog("warn", "HealthCheck", "pass-through stuck with no polling - forcing exit");
+        exitPassThrough();
+      }
+    }
+
+    if ((isDragging || dragStart) && hitTestEnabled) {
+      console.warn("[HealthCheck] Inconsistent drag/hitTest state - resetting drag");
+      resetDragState({ reenableHitTest: true });
+    }
+
+    if (needsHealthCheck()) {
+      healthCheckTimerId = setTimeout(runHealthCheck, HEALTH_CHECK_MS);
+    }
+  }
+
+  function armHealthCheck() {
+    if (healthCheckTimerId !== null) return;
+    healthCheckTimerId = setTimeout(runHealthCheck, HEALTH_CHECK_MS);
+  }
 
   function resetDragState({ restoreAnimation = true, reenableHitTest = true } = {}) {
     clearTimeout(dragTimerId);
@@ -429,6 +473,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     if (reenableHitTest) {
       hitTestEnabled = true;
     }
+    stopHealthCheckIfIdle();
   }
 
   function finishPassThroughExit({ logMessage = "EXIT pass-through", debugTag = "info" } = {}) {
@@ -437,6 +482,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     consecutivePollErrors = 0;
     lastExitTime = performance.now();
     armNormalHitTestPolling();
+    stopHealthCheckIfIdle();
     jsLog(debugTag, "HitTest", logMessage);
   }
 
@@ -642,6 +688,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     // Re-entry cooldown: prevent rapid enter/exit flicker at sprite edges
     if (performance.now() - lastExitTime < REENTRY_COOLDOWN_MS) return;
     applyingPassThrough = true;
+    armHealthCheck();
     try {
       await appWindow.setIgnoreCursorEvents(true);
       // If exit was requested while we were awaiting, undo the enter immediately
@@ -665,6 +712,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       jsLog("info", "HitTest", "ENTER pass-through");
     } finally {
       applyingPassThrough = false;
+      stopHealthCheckIfIdle();
     }
   }
 
@@ -676,6 +724,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       return;
     }
     applyingPassThrough = true;
+    armHealthCheck();
     try {
       stopPolling();
       // Retry with backoff: the IPC call can fail transiently.
@@ -702,6 +751,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
         pendingExit = false;
         exitPassThrough();
       }
+      stopHealthCheckIfIdle();
     }
   }
 
@@ -909,6 +959,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     beginExclusivePointerInteraction();
     dragStart = { x: e.screenX, y: e.screenY };
     isDragging = false;
+    armHealthCheck();
     // Safety timeout: if drag state persists beyond DRAG_TIMEOUT_MS (e.g.
     // mouseup lost after OS-level startDragging), force-reset it.
     clearTimeout(dragTimerId);
@@ -1133,31 +1184,8 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     leavePetBodyHover();
   });
 
-  // --- Fix 5: Global health check (catch-all safety net) ---
-  // Periodically verify state consistency and force-recover from any stuck state.
-  setInterval(() => {
-    // Pass-through stuck: isPassThrough=true but no polling running
-    if (isPassThrough && !applyingPassThrough) {
-      const pollRecentlyActive = performance.now() - lastPassThroughPollAt < POLL_INTERVAL_MS * 4;
-      if (
-        pollTimerId === null &&
-        recoveryPollTimerId === null &&
-        !passThroughPollInFlight &&
-        !pollRecentlyActive
-      ) {
-        console.warn("[HealthCheck] Pass-through with no active polling — forcing exit");
-        jsLog("warn", "HealthCheck", "pass-through stuck with no polling — forcing exit");
-        exitPassThrough();
-      }
-    }
-    // Inconsistent drag state (should never happen, but catch it)
-    if ((isDragging || dragStart) && hitTestEnabled) {
-      // hitTestEnabled should be false during any drag/click sequence
-      // If it's true while dragStart is set, the mouseup was lost
-      console.warn("[HealthCheck] Inconsistent drag/hitTest state — resetting drag");
-      resetDragState({ reenableHitTest: true });
-    }
-  }, HEALTH_CHECK_MS);
+  // Health checks are armed only during risky pointer transitions, so the pet
+  // does not keep a permanent timer alive while sitting idle.
 }
 
 // Start
