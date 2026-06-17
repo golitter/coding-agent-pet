@@ -248,9 +248,14 @@ pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), Stri
             return Err("GetCursorPos failed".into());
         }
 
+        // Use inner_position (client area origin), not outer_position (which
+        // includes the title bar / border). The window is configured with
+        // decorations:false so the two currently coincide, but inner_position
+        // is the semantically correct reference for a client-area hit test and
+        // stays correct if decorations are ever enabled.
         let window_pos = window
-            .outer_position()
-            .map_err(|e| format!("outer_position: {}", e))?;
+            .inner_position()
+            .map_err(|e| format!("inner_position: {}", e))?;
         let scale = window
             .scale_factor()
             .map_err(|e| format!("scale_factor: {}", e))?;

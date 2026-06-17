@@ -1,5 +1,6 @@
 use crate::aggregator::ActivityAggregator;
 use notify::Watcher;
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -10,6 +11,50 @@ use tracing::{info, warn};
 
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+
+/// Best-effort loopback check for a TCP bind address.
+///
+/// TCP replaces the Unix socket's file-permission (0o600) protection, so this
+/// is the compensating safeguard that warns when an endpoint could accept
+/// connections from other hosts. Parses the host out of `host:port` /
+/// `[ipv6]:port` shapes and tests it with [`IpAddr::is_loopback`]. A bare
+/// hostname is trusted only when it is the literal `localhost` — anything else
+/// (which could resolve off-box via hosts/DNS) is treated as non-loopback.
+fn is_loopback_endpoint(addr: &str) -> bool {
+    // SocketAddr::parse covers `127.0.0.1:port` and `[::1]:port` directly.
+    if let Ok(socket) = addr.parse::<SocketAddr>() {
+        return socket.ip().is_loopback();
+    }
+
+    // Fall back to splitting host/port for shapes SocketAddr rejects (e.g. a
+    // bare `::1:port` without brackets) and test the host as an IpAddr.
+    if let Some((host, _port)) = split_host_port(addr) {
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            return ip.is_loopback();
+        }
+        // Hostname: trust only the literal localhost.
+        return host == "localhost";
+    }
+
+    false
+}
+
+/// Split `host:port` / `[host]:port` into (host, port) without DNS resolution.
+/// Returns None when no port separator can be found.
+fn split_host_port(addr: &str) -> Option<(&str, &str)> {
+    if let Some(rest) = addr.strip_prefix('[') {
+        // `[ipv6]:port`
+        let end = rest.find(']')?;
+        let host = &rest[..end];
+        let after = &rest[end + 1..];
+        let port = after.strip_prefix(':')?;
+        return Some((host, port));
+    }
+    // For a plain `host:port`, split on the last ':' (handles bare IPv6 poorly,
+    // but those are already covered by the SocketAddr::parse path above).
+    let idx = addr.rfind(':')?;
+    Some((&addr[..idx], &addr[idx + 1..]))
+}
 
 #[cfg(unix)]
 fn is_replaceable_socket_path(path: &Path) -> Result<bool, std::io::Error> {
@@ -127,7 +172,7 @@ fn schedule_oneshot_cleanup_from_paths(
 }
 
 async fn start_tcp_server(addr: &str, session_mgr: Arc<ActivityAggregator>) {
-    if !(addr.starts_with("127.") || addr.starts_with("localhost:") || addr.starts_with("[::1]:")) {
+    if !is_loopback_endpoint(addr) {
         warn!(
             "TCP event endpoint {} is not loopback; local event injection protection is reduced",
             addr
