@@ -85,15 +85,15 @@
 
 这是「装在哪」决策的中枢：
 
-- **Python 探测** `detect_python_command`：Windows 候选 `python` → `py -3` → `python3`。**不是直接返回裸字符串 `"python"`**——每个候选过一层 `resolve_command`，用 `shutil.which` 把解释器名解析成 **`python.exe` 的绝对路径**，再 `quote_command_part` 在路径含空格/引号时套双引号。所以最终 `python_command` 形如 `"C:\Users\...\Python314\python.exe"`，不依赖 hook runner 当前的 PATH 顺序（Windows 上 `python` 可能指向 Store 占位符 / Anaconda 等），**从不硬编码 `python`**。
-- **WSL 特例**：Windows 上若 Claude Code 在 WSL/bash 里跑，把 `C:\...` 转成 `/mnt/c/...` 并验证 WSL 里有 `python3`。
-- **hook 命令三分支**（[setup_hooks.py:403-411](../../cross-platform/hooks/scripts/setup_hooks.py#L403-L411)，优先级从上到下）：
-  1. Windows + WSL python → WSL 风格：`python3 "/mnt/d/.../claude_hook.py"`
-  2. Windows + 原生 python → 原生风格：`"<绝对路径>\python.exe" "<绝对路径>\claude_hook.py"`（即 `f'{python_command} {quote_command_part(claude_script)}'`，`python_command` 与脚本路径都是解析后的绝对路径并加引号）
-  3. macOS / Linux → 沿用 `pet-hook.sh claude-code` / `pet-hook.sh codex`
+- **Python 探测** `detect_python_command`：Windows 候选顺序 `python` → `py -3` → `python3`，逐个用 `shutil.which(parts[0])` 验证存在，**返回裸命令名**（如 `python`），不解析成绝对路径。macOS/Linux 顺序为 `python3` → `python`。
+- **裸命令名而非绝对路径**（迭代教训）：早期实现用 `shutil.which` 解析成 `python.exe` 的绝对路径写入 settings.json，结果路径里出现 `miniconda`/`Python314` 等特定环境名，python 升级/重装即失效。改为裸命令名后，hook 脚本仅依赖标准库（json/os/socket/sys/datetime/pathlib/urllib），任何 PATH 上的 python 都能跑，可随环境迁移。
+- **hook 命令二分支**（[setup_hooks.py build_targets](../../cross-platform/hooks/scripts/setup_hooks.py)）：
+  1. Windows + 原生 python → `python <脚本路径>`，如 `python D:/Graduate/.../claude_hook.py`
+  2. macOS / Linux → 沿用 `pet-hook.sh claude-code` / `pet-hook.sh codex`
 
-  判定顺序的关键：`detect_wsl_python_for_path`（[L152-157](../../cross-platform/hooks/scripts/setup_hooks.py#L152-L157)）先于原生分支——只要 Windows 宿主上有 `bash` 且 WSL 里有 `python3`，就优先生成 WSL 命令（推断用户在用 WSL 版 agent）。这个推断偏武断（装了 WSL ≠ agent 在 WSL 里），但覆盖了 WSL2 路径。
-- **Codex 多平台字段**：除 `command` 外，`command_windows` 有值时额外写 `commandWindows`（Codex schema 区分平台的 key）。清理时同时匹配 `command`/`commandWindows`/`command_windows` 三种历史写法。
+  > **已删除 WSL 分支**：早期版本会探测 WSL bash + python3 并优先生成 `python3 /mnt/d/...` 命令。但 Claude Code 是原生 Windows 进程，无法执行该命令串；即便在 WSL 内跑，文件事件与 TCP 也穿透不了子系统边界，导致宠物收不到消息。纯 Windows 方案下该分支已彻底移除（含 `detect_wsl_python_for_path` / `windows_path_to_wsl` / `build_wsl_hook_command` / `command_succeeds` 四个辅助函数）。
+- **脚本路径必须用正斜杠**（`to_forward_slash`）：Claude Code/Codex 在 Windows 上通过 **sh（Git Bash）** 执行 hook 命令。若脚本路径含反斜杠（`D:\...\claude_hook.py`），sh 会把反斜杠当转义符吞掉，路径被破坏成 `D:...claude_hook.py` → 找不到文件 → hook 静默失败 → 宠物收不到任何事件。`to_forward_slash` 统一转为 `/`，sh 与 cmd 均可正确解析。详见 [§ 已知坑：sh 反斜杠转义](#已知坑sh-反斜杠转义)。
+- **Codex 多平台字段**：除 `command` 外，`command_windows` 有值时额外写 `commandWindows`（Codex schema 区分平台的 key），同样用裸 python + 正斜杠脚本路径。清理时同时匹配 `command`/`commandWindows`/`command_windows` 三种历史写法。
 - **配置路径**：**不是** `~/.claude` → `%USERPROFILE%\.claude` 的字符串替换，而是依赖 `Path.expanduser()` 跨平台解析，并支持 `CLAUDE_CONFIG_DIR`/`CODEX_HOME`/`OPENCODE_CONFIG_DIR` 环境变量覆盖。
 - **缺工具不报错**：`is_tool_available` 探测 Claude/Codex 是否安装，缺失则 skip 并打印清单。
 
@@ -164,7 +164,9 @@ TS 侧与 Python 同构：`defaultEventEndpoint` / `pushEvent` / `pushTcp` / `re
 
 两套测试共同模式：写死的 `/repo/...` 断言过一层 `norm()`（Python）/ `path.normalize()`（JS），让 Windows 反斜杠/盘符路径仍通过。
 
-新增覆盖：UTF-8 中文 dialogue 读取、`commandWindows` 写入、Windows 路径加引号、WSL 路径转换（`skipTest` 限 Windows）、`default_event_endpoint` 显式值优先、`loadPluginRuntime` 处理带空格盘符的 `file://` URL。
+新增覆盖：UTF-8 中文 dialogue 读取、`commandWindows` 写入、Windows 路径加引号、`default_event_endpoint` 显式值优先、`loadPluginRuntime` 处理带空格盘符的 `file://` URL。
+
+> 注：早期版本含 WSL 路径转换（`windows_path_to_wsl`/`build_wsl_hook_command`）测试用例，纯 Windows 方案下已随实现一并删除。
 
 ---
 
@@ -190,11 +192,35 @@ TS 侧与 Python 同构：`defaultEventEndpoint` / `pushEvent` / `pushTcp` / `re
 
 ## 10. 验证矩阵（建议）
 
-| 项 | macOS | Windows 原生 | Windows+WSL |
-|---|---|---|---|
-| Unix socket / TCP 事件通道 | socket | tcp://17361 | tcp://17361 |
-| 悬停跳跃（cursor_in_window） | ✅ | ✅ GetCursorPos | ✅ |
-| 精灵帧加载 | asset 协议 | blob URL | blob URL |
-| hook 安装（Claude/Codex/OpenCode） | pet-hook.sh | python / WSL | WSL 风格 |
-| `npm test` | ✅ | ✅（去 uv） | ✅ |
-| husky pre-commit | sh | ps1 | ps1 |
+| 项 | macOS | Windows 原生 |
+|---|---|---|
+| Unix socket / TCP 事件通道 | socket | tcp://17361 |
+| 悬停跳跃（cursor_in_window） | ✅ | ✅ GetCursorPos |
+| 精灵帧加载 | asset 协议 | blob URL |
+| hook 安装（Claude/Codex/OpenCode） | pet-hook.sh | python（裸名 + 正斜杠） |
+| `npm test` | ✅ | ✅（去 uv） |
+| husky pre-commit | sh | ps1 |
+
+> 说明：纯 Windows 方案下不再支持/测试 WSL 链路，相关列已移除。
+
+---
+
+## 11. 已知坑：sh 反斜杠转义（实战排错记录）
+
+Windows 支持落地后，曾出现「发消息但宠物始终收不到」的顽固故障。根因不在 hook 脚本逻辑，而在 **hook 命令的路径分隔符**：
+
+- **现象**：`runtime/hook-events.log` 无新记录，App 日志只有 hit-test，`runtime/sessions/` 一直为空——hook 根本没被执行。
+- **根因**：Claude Code/Codex 在 Windows 上用 **sh（Git Bash）** 执行 settings.json 里的 hook 命令。`setup_hooks.py` 早期写入的脚本路径是反斜杠 `D:\...\claude_hook.py`，sh 把反斜杠当转义符逐个吞掉，路径变成 `D:...claude_hook.py`，sh 报 `command not found`，hook 静默失败。
+- **复现**：`echo '{...}' | sh -c 'D:\path\python.exe D:\path\hook.py'` → `sh: D:pathpython.exe: command not found`。
+- **修复**：所有写入 settings.json 的路径统一用正斜杠（`to_forward_slash`）。正斜杠在 sh 与 cmd 下都能正确解析。
+- **教训**：Windows 原生进程 ≠ 它的 hook runner 用 cmd。agent CLI（Claude Code/Codex）跨平台用 sh 执行 hook，因此 Windows 下任何写入 hook 配置的路径都必须 sh-safe（正斜杠）。
+
+## 12. 已知坑：python 绝对路径写死（实战排错记录）
+
+紧接上一个坑修复后的迭代：
+
+- **现象**：路径改正斜杠后链路通了，但 settings.json 里写的是 `C:/Python314/python.EXE D:/.../claude_hook.py`——硬编码到具体 python 安装位置。
+- **问题**：用户换 miniconda、升级到 Python 3.15、或重装到别处，绝对路径立即失效，需重跑 setup-hooks。且不同机器路径不同，配置不可移植。
+- **修复**：`detect_python_command` 改为返回**裸命令名**（Windows 顺序 `python` → `py -3` → `python3`，仅用 `shutil.which` 验证存在）。最终命令形如 `python D:/.../claude_hook.py`。
+- **前提**：hook 脚本（`claude_hook.py`/`codex_hook.py`/`common.py`）**仅依赖 Python 标准库**（json/os/socket/sys/datetime/pathlib/urllib），零第三方依赖，故任何 PATH 上的 python 均可执行，无需虚拟环境或绝对路径。
+- **取舍**：裸命令名依赖 hook runner 的 PATH 含 python。Windows 上从 GUI/精简环境启动 Claude Code 时 PATH 可能缺 python，但这是少数场景且安装文档会提示装 python；权衡后裸名的可移植性优势更大。
