@@ -190,18 +190,6 @@ class SetupHooksTests(unittest.TestCase):
             r'"C:\Program Files\Python\python.exe" "C:\repo with spaces\hooks\scripts\codex_hook.py"',
         )
 
-    def test_windows_path_to_wsl_converts_drive_paths(self):
-        if os.name != 'nt':
-            self.skipTest('Windows path conversion only')
-        converted = setup_hooks.windows_path_to_wsl(r'D:\repo with spaces\hook.py')
-        self.assertEqual(converted, '/mnt/d/repo with spaces/hook.py')
-
-    def test_build_wsl_hook_command_uses_forward_slash_paths(self):
-        if os.name != 'nt':
-            self.skipTest('Windows path conversion only')
-        command = setup_hooks.build_wsl_hook_command(r'D:\repo with spaces\hook.py')
-        self.assertEqual(command, 'python3 "/mnt/d/repo with spaces/hook.py"')
-
     def test_config_path_or_default_treats_null_as_auto_detect(self):
         self.assertEqual(
             setup_hooks.config_path_or_default(None, '/default/path'),

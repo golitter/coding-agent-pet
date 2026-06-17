@@ -3,7 +3,6 @@
 import json
 import os
 import re
-import subprocess
 import shutil
 import sys
 from dataclasses import dataclass
@@ -124,44 +123,6 @@ def detect_python_command():
 
 def build_command(parts):
     return ' '.join(quote_command_part(part) for part in parts)
-
-
-def windows_path_to_wsl(path):
-    """Convert C:\\path to /mnt/c/path for WSL bash hook runners."""
-    resolved = Path(path).resolve()
-    drive = resolved.drive.rstrip(':').lower()
-    if not drive:
-        return str(resolved).replace('\\', '/')
-    rest = str(resolved)[len(resolved.drive):].replace('\\', '/').lstrip('/')
-    return f'/mnt/{drive}/{rest}'
-
-
-def command_succeeds(args, timeout=5):
-    try:
-        return subprocess.run(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=timeout,
-            check=False,
-        ).returncode == 0
-    except Exception:
-        return False
-
-
-def detect_wsl_python_for_path(path):
-    """Return python command usable by Claude's WSL/bash hook runner, if present."""
-    if not is_windows() or not shutil.which('bash'):
-        return None
-    wsl_path = windows_path_to_wsl(path)
-    script = f'command -v python3 >/dev/null 2>&1 && test -f {quote_command_part(wsl_path)}'
-    if command_succeeds(['bash', '-lc', script]):
-        return 'python3'
-    return None
-
-
-def build_wsl_hook_command(script_path, python_command='python3'):
-    return build_command([python_command, windows_path_to_wsl(script_path)])
 
 
 def default_claude_settings():
@@ -398,12 +359,8 @@ def build_targets(platform_dir, config):
 
     claude_script = platform_dir / 'hooks' / 'scripts' / 'claude_hook.py'
     codex_script = platform_dir / 'hooks' / 'scripts' / 'codex_hook.py'
-    wsl_python = detect_wsl_python_for_path(claude_script)
 
-    if is_windows() and wsl_python:
-        claude_hook = build_wsl_hook_command(claude_script, wsl_python)
-        codex_hook = build_wsl_hook_command(codex_script, wsl_python)
-    elif is_windows() and python_command:
+    if is_windows() and python_command:
         claude_hook = f'{python_command} {quote_command_part(claude_script)}'
         codex_hook = f'{python_command} {quote_command_part(codex_script)}'
     else:
