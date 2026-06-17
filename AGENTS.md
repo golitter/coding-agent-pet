@@ -23,21 +23,15 @@
 ## 核心命令
 
 ```bash
+python setup.py                     # 顶层入口：自动识别平台，全流程（依赖→配置→hooks→编译→启动）
+
+# 手动指定平台脚本（在 desktop/cross-platform/ 内）
+bash scripts/macos/setup.sh         # macOS / Linux 全流程
+powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1   # Windows
+
 cd desktop/cross-platform
-cp config.example.json config.json   # 按需修改
-
-# macOS / Linux
-bash scripts/macos/setup.sh          # 正式推荐：依赖 → 配置 → hooks → 编译 → 启动
-./scripts/macos/build-and-run.sh     # 开发辅助：编译并重启
-./scripts/macos/setup-hooks.sh       # 单独配置 hooks
-
-# Windows (PowerShell)
-powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
-
-npm run lint                         # ESLint + Prettier 检查
-npm run lint:fix                     # 自动修复
-npm run format                       # Prettier 格式化
-npm test                             # hooks 单元测试
+npm run lint:fix                    # eslint + prettier 自动修复
+npm test                            # hooks 单元测试
 ```
 
 ## 交互
@@ -45,7 +39,6 @@ npm test                             # hooks 单元测试
 | 操作 | 效果 |
 |---|---|
 | 悬停宠物 | 跳跃 🎉 |
-| 三连击（800ms 内） | 清空所有会话 🧹 |
 | 拖动 | 移动位置（方向奔跑动画） |
 | 右键 | 菜单：关闭宠物 |
 

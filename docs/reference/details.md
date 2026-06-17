@@ -42,6 +42,8 @@
 | [hooks-refactor.md](../../desktop/docs/design/hooks-refactor.md)                       | Hook 重构设计（合并冗余 wrapper → 统一 pet-hook.sh） |
 | [opencode-plugin.md](../../desktop/docs/design/opencode-plugin.md)                     | OpenCode 插件设计（事件映射 + 独立调试）             |
 | [opencode-integration-plan.md](../../desktop/docs/design/opencode-integration-plan.md) | OpenCode 集成计划                                    |
+| [windows-support.md](../../desktop/docs/design/windows-support.md)                     | Windows 平台支持设计（socket/脚本/路径的 POSIX 假设排查） |
+| [windows-support-impl-report.md](../../desktop/docs/design/windows-support-impl-report.md) | Windows 支持实现报告（`feat/windows-support` 落地记录） |
 
 ### Hook 协议 (`desktop/docs/agent-hooks/`)
 
@@ -112,7 +114,7 @@
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `get_config`         | 返回前端使用的配置子集（`FrontendConfig`）                                                                                                                                    |
 | `quit_app`           | 退出宠物进程（删除 socket 文件后 `app.exit(0)`）                                                                                                                              |
-| `purge_all_sessions` | 清空所有 session 文件（三连击触发）                                                                                                                                           |
+| `purge_all_sessions` | 清空所有 session 文件（右键菜单触发）                                                                                                                                          |
 | `run_applescript`    | 执行 AppleScript（`async` + `tokio::process`，慢脚本不阻塞主线程；过滤 `do shell script`、`do script` 和反引号）                                                              |
 | `read_file_bytes`    | 读 PNG 原始字节，路径校验限制在 `frames_dir` 内（hit-test alpha 蒙版）。`async` + `spawn_blocking`，文件 I/O 不阻塞主线程                                                     |
 | `read_frames_batch`  | 批量读取多帧 PNG，单次 IPC 替代 57 次 `read_file_bytes`（两级路径校验：lexical 快路径 + canonicalize 慢路径）。`async` + `spawn_blocking`，55+ 次串行读取整体在阻塞线程池执行 |
@@ -131,6 +133,7 @@
 | `pet_base_dir`                  | `null`                                                | 项目根，`null` 自动检测                                                                                                                                                                                                                                                                                                          |
 | `frames_dir`                    | `null`                                                | 精灵帧目录，`null` 自动检测（`{pet_base_dir}/assets/{pet_id}/frames`）                                                                                                                                                                                                                                                           |
 | `socket_path`                   | `/tmp/kotori-pet.sock`                                | Unix socket 路径                                                                                                                                                                                                                                                                                                                 |
+| `event_endpoint`                | `null`                                                | 事件上报端点，`null` 走本地 socket；显式指定则改为 HTTP POST 推送                                                                                                                                                                                                                                                               |
 | `sessions_dir`                  | `null`                                                | session 文件目录，`null` 自动检测（`{pet_base_dir}/desktop/cross-platform/runtime/sessions`）                                                                                                                                                                                                                                    |
 | `renderer.stale_timeout_sec`    | `3600`                                                | session 文件过期阈值（秒），1h 覆盖长工具调用                                                                                                                                                                                                                                                                                    |
 | `renderer.cleanup_interval_sec` | `30`                                                  | 定时清理间隔（秒）：扫描过期文件、孤儿内存会话、过期的一次性庆祝（`jumping`/`waving`）文件                                                                                                                                                                                                                                       |
@@ -143,9 +146,10 @@
 | `dialogue.cornerRadius`         | `6`                                                   | 气泡圆角 (px)                                                                                                                                                                                                                                                                                                                    |
 | `dialogue.fade_duration_sec`    | `0.3`                                                 | 气泡淡入/淡出过渡时长 (秒)                                                                                                                                                                                                                                                                                                       |
 | `dialogue.style_map`            | `{waiting: warning, failed: error}`                   | 宠物状态 → 气泡 CSS 样式映射                                                                                                                                                                                                                                                                                                     |
-| `hooks.claude_code_settings`    | `~/.claude/settings.json`                             | Claude Code settings 路径                                                                                                                                                                                                                                                                                                        |
-| `hooks.codex_hooks`             | `~/.codex/hooks.json`                                 | Codex hooks 配置路径                                                                                                                                                                                                                                                                                                             |
-| `hooks.opencode_plugins_dir`    | `~/.config/opencode/plugins`                          | OpenCode 插件部署目录                                                                                                                                                                                                                                                                                                            |
+| `hooks.claude_code_settings`    | `null`                                                | Claude Code settings 路径，`null` 自动检测（`~/.claude/settings.json`）                                                                                                                                                                                                                                                          |
+| `hooks.codex_hooks`             | `null`                                                | Codex hooks 配置路径，`null` 自动检测（`~/.codex/hooks.json`）                                                                                                                                                                                                                                                                   |
+| `hooks.opencode_plugins_dir`    | `null`                                                | OpenCode 插件部署目录，`null` 自动检测（`~/.config/opencode/plugins`）                                                                                                                                                                                                                                                           |
+| `hooks.python_command`          | `null`                                                | Windows 上运行 hook 脚本的 Python 命令，`null` 自动探测（`python` / `py -3`）；写入前用 `<cmd> --version` 校验，失败则中止。可固定为 `C:/Python313/python.exe` 等避免 conda/PATH 漂移                                                                                                                                            |
 | `terminal_events`               | `["StopFailure", "SessionEnd"]`                       | terminal 事件列表（触发立即删除 session 文件）                                                                                                                                                                                                                                                                                   |
 | `state_map`                     | (见文件)                                              | 事件 → `{state, dialogue}` 映射                                                                                                                                                                                                                                                                                                  |
 | `menu.items`                    | (见文件)                                              | 右键菜单项（默认仅关闭宠物）                                                                                                                                                                                                                                                                                                     |
@@ -156,10 +160,16 @@
 
 ## 5. 脚本入口 (`desktop/cross-platform/`)
 
-入口脚本按平台分目录：`scripts/macos/`（`*.sh`）与 `scripts/windows/`（`*.ps1`），源码与配置保持单份共享。
+顶层一键入口（仓库根目录，自动识别平台分发）：
 
 ```bash
-# macOS / Linux
+python setup.py        # Windows → setup.ps1，macOS/Linux → setup.sh（全流程）
+```
+
+平台入口脚本按平台分目录：`scripts/macos/`（`*.sh`）与 `scripts/windows/`（`*.ps1`），源码与配置保持单份共享。
+
+```bash
+# macOS / Linux（在 desktop/cross-platform/ 内）
 bash scripts/macos/setup.sh          # 正式推荐：全流程 依赖 → 配置 → hooks → 编译 → 启动
 ./scripts/macos/setup-hooks.sh       # 单独配置 Claude Code + Codex + OpenCode hooks
 ./scripts/macos/build-and-run.sh     # 开发辅助：单独编译并重启渲染器
@@ -169,8 +179,8 @@ powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
 
 npm test               # hooks 轻量测试（别名 → test:hooks）
 npm run test:hooks     # hooks 轻量测试（Python unittest + Node --test，uv 缓存至 .uv-cache）
-npx tauri dev          # 开发热重载
-npx tauri build        # 生产构建
+npm run dev            # 开发热重载（tauri dev）
+npm run build          # 生产构建（tauri build）
 npm run lint           # eslint + prettier 检查
 npm run lint:fix       # 自动修复
 ```
@@ -229,10 +239,10 @@ assets/kotori-minami/
 
 ## 8. 环境要求
 
-- macOS 13+（当前已测试平台）
+- macOS 13+ · Windows 10/11（均已测试）
 - [Rust](https://rustup.rs/) + Cargo
 - Node.js + npm
-- Python 3（系统自带，hook 脚本使用）
+- Python 3（hook 脚本使用；Windows 上由 `hooks.python_command` 指定解释器，`null` 自动探测）
 
 ---
 

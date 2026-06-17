@@ -46,8 +46,8 @@ cd cross-platform
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
 
-npx tauri dev             # 开发热重载
-npx tauri build           # 生产构建
+npm run dev               # 开发热重载（tauri dev）
+npm run build             # 生产构建（tauri build）
 npm run lint:fix          # eslint + prettier 自动修复
 ```
 

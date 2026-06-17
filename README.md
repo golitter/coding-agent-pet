@@ -8,6 +8,10 @@
 当前默认角色是像素风南琴梨（Kotori Minami），会随着 AI 编程助手的生命周期事件切换动画与气泡台词。
 
 <p align="center">
+  <strong>支持平台：</strong>Windows · macOS
+</p>
+
+<p align="center">
   Claude Code (2.1.81) · OpenCode (1.17.3) · Codex CLI (0.139.0)
 </p>
 
@@ -21,24 +25,13 @@
 
 ## 快速开始
 
+在**仓库根目录**直接运行，脚本会自动识别平台（Windows → PowerShell，macOS/Linux → bash）：
+
 ```bash
-cd desktop/cross-platform
-cp config.example.json config.json   # 按需修改
-
-# macOS / Linux
-bash scripts/macos/setup.sh          # 正式推荐：一键完成依赖 → 配置 → hooks → 编译 → 启动
-
-# Windows (PowerShell)
-powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
+python setup.py                      # 自动识别平台，一键完成依赖 → 配置 → hooks → 编译 → 启动
 ```
 
-入口脚本按平台分目录：`scripts/macos/`（`setup.sh` / `setup-hooks.sh` / `build-and-run.sh`）、`scripts/windows/`（对应 `.ps1`）。源码 `src/`、`src-tauri/`、`hooks/`、配置等保持单份共享。
-
-`setup.sh` / `setup.ps1` 会自动安装 Claude Code / Codex / OpenCode 三套 hooks 集成；重复执行不会重复追加。
-其中 Codex 会自动写入 hook，并尽量启用已有 trust 记录的条目，但首次使用通常仍需要在 `/hooks` 里手动 `Trust/Enable` 一次。
-
-日常首次安装、换机、或者完整更新时，推荐始终使用 `setup.sh` / `setup.ps1`。
-`build-and-run.sh` / `build-and-run.ps1` 更适合已经完成初始化后的开发态增量重启。
+> 手动指定平台脚本、入口脚本目录结构、hooks 自动安装细节、`build-and-run` 用途等，详见 [desktop/README.md](desktop/README.md)。
 
 ## 交互
 
@@ -76,14 +69,13 @@ OpenCode           → TS 插件 (opencode-plugin.ts)┘     ├── Rust: 多
 ├── assets/kotori-minami/   # 资料包（frames/ 运行时 + imagegen/ 生成工件）
 ├── desktop/
 │   ├── cross-platform/     # Tauri 主实现（src/ + src-tauri/ + hooks/）
-│   │   └── hooks/          #   pet-hook.sh (Claude/Codex) + opencode-plugin.ts (OpenCode)
 │   └── docs/               # 跨平台 / Hook / 精灵图 / Bugfix
 └── docs/                   # 顶层文档（教程 + reference/details.md）
 ```
 
 ## 要求
 
-- macOS 13+ · [Rust](https://rustup.rs/) + Cargo · Node.js + npm · Python 3
+- Rust + Cargo · Node.js + npm · Python 3
 
 ## License
 
