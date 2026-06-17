@@ -82,6 +82,11 @@ export class SpriteAnimator {
       const blobUrl = URL.createObjectURL(blob);
       const img = await loadFromUrl(blobUrl);
       if (img) {
+        // NOTE: the object URL is intentionally kept for the Image's lifetime.
+        // Sprite frames are cached long-term and redrawn every animation tick,
+        // so revoking the blob URL after load (even after img.decode()) causes
+        // WebView2 to drop the decoded bitmap and the pet renders blank.
+        // The "leak" is bounded (one URL per frame, fixed count) and acceptable.
         img.dataset.objectUrl = blobUrl;
         return img;
       }

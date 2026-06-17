@@ -31,6 +31,8 @@
 - Python：`hooks/scripts/common.py` `default_event_endpoint`（含 WSL 检测）
 - TS：`hooks/opencode-shared.mjs` `defaultEventEndpoint`
 
+> ⚠️ **端口 `17361` 是三处独立硬编码字面量**（Rust / Python / TS 各一份），没有单一来源。改默认端口必须**同步修改三处**，否则发送端（hook）与接收端（Rust TCP server）端口不一致会导致事件全部丢失——表现与「sh 吞反斜杠」故障一样：宠物完全收不到消息。
+
 ### 传输分发
 
 - `tcp://` 前缀 → TCP loopback
@@ -85,8 +87,11 @@
 
 这是「装在哪」决策的中枢：
 
-- **Python 探测** `detect_python_command`：Windows 候选顺序 `python` → `py -3` → `python3`，逐个用 `shutil.which(parts[0])` 验证存在，**返回裸命令名**（如 `python`），不解析成绝对路径。macOS/Linux 顺序为 `python3` → `python`。
-- **裸命令名而非绝对路径**（迭代教训）：早期实现用 `shutil.which` 解析成 `python.exe` 的绝对路径写入 settings.json，结果路径里出现 `miniconda`/`Python314` 等特定环境名，python 升级/重装即失效。改为裸命令名后，hook 脚本仅依赖标准库（json/os/socket/sys/datetime/pathlib/urllib），任何 PATH 上的 python 都能跑，可随环境迁移。
+- **Python 命令：显式配置优先 + 构建前校验** `detect_python_command(config_value)`：
+  - **首选显式配置**：`config.json` 的 `hooks.python_command`（或环境变量 `KOTORI_PET_PYTHON`）非空时，**用户钉死**命令（如 `python` / `py -3` / 绝对路径）。这是 Windows 上的推荐姿势——它绕开 conda/PATH 漂移（在 conda base 激活时跑 setup，否则会把 conda 的 python 绝对路径写进 settings.json，下次换环境即失效）。**校验失败硬退出**：`validate_python_command` 实跑 `<cmd> --version`（而非只信 `shutil.which`/`Get-Command`，以拦截「存在但打开 Microsoft Store」的 App Execution Alias stub），返回非 Python 3 则打印明确错误并 `sys.exit(1)`，绝不把无效 hook 写进 settings.json。
+  - **回落自动探测**：配置为空时，按 `python` → `py -3` → `python3`（Windows）/ `python3` → `python`（Unix）顺序，逐个经 `validate_python_command` 实跑校验，返回首个通过的**裸命令名**。
+  - **与 setup-hooks.ps1 解耦**：PowerShell 仍会探测一个 python 来**引导运行** `setup_hooks.py`（先有鸡先有蛋），但写入 settings.json 的命令完全由 `setup_hooks.py` 基于 config 决定——这从根本上消除了「PowerShell 探测 vs Python 二次探测不一致」。
+- **裸命令名而非绝对路径**（迭代教训）：早期实现用 `shutil.which` 解析成 `python.exe` 的绝对路径写入 settings.json，结果路径里出现 `miniconda`/`Python314` 等特定环境名，python 升级/重装即失效。当前默认回落仍返回裸命令名，hook 脚本仅依赖标准库（json/os/socket/sys/datetime/pathlib/urllib），任何 PATH 上的 python 都能跑，可随环境迁移；需要钉死环境时改用显式 `python_command` 配置。
 - **hook 命令二分支**（[setup_hooks.py build_targets](../../cross-platform/hooks/scripts/setup_hooks.py)）：
   1. Windows + 原生 python → `python <脚本路径>`，如 `python D:/Graduate/.../claude_hook.py`
   2. macOS / Linux → 沿用 `pet-hook.sh claude-code` / `pet-hook.sh codex`
@@ -184,7 +189,7 @@ TS 侧与 Python 同构：`defaultEventEndpoint` / `pushEvent` / `pushTcp` / `re
 ## 9. 已知遗留 / 待办
 
 1. **`icon.ico` 是占位**：仅 105 字节，单帧 32×32 PNG-in-ICO。能让构建通过，但缺 16/48/128/256 等多分辨率，任务栏/ALT-TAB/高 DPI 下会糊。设计文档甚至没提图标工作——这是「让构建过」的临时产物，应替换为正规多分辨率 ICO。
-2. **animator blob URL 内存泄漏**：`loadImage` 生成的 object URL 未 revoke，长期运行/频繁换帧会累积。
+2. **animator blob URL 内存泄漏（已知限制，暂不修复）**：`loadImage` 生成的 object URL 故意**不 revoke**，与精灵帧 Image 同生命周期。曾尝试在 `img.decode()` 后立即 `revokeObjectURL` 来修复泄漏，但实测在 WebView2 上会导致后续 `drawImage` 重绘时位图失效——宠物窗口空白透明、精灵完全不显示（回归）。由于精灵帧是固定数量（约 57 个）的长期缓存，泄漏量有上界且进程退出即回收，权衡后保留 object URL 不释放。若将来要修，需改用非 blob 的加载路径（如让 asset 协议在 WebView2 上稳定工作），而非 revoke 现有 blob。
 3. **透明窗口未在文档外验证**：设计文档把「WebView2 是否真透明」「白色矩形时才加 Win32 窗口样式」列为待验证项，本次代码未见对应的 Win32 样式处理，需实机确认。
 4. **husky `_` 目录不入库**：husky 9 的 `.husky/_/` 被自身 `.gitignore` 屏蔽，新克隆需在 `desktop/cross-platform` 跑 `npm run prepare`（`husky` 初始化）才能生效——应在 Windows 安装文档里写明。
 
