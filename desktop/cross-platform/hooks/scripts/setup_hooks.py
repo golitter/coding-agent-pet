@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -110,20 +111,73 @@ def to_forward_slash(path):
     return str(path).replace('\\', '/')
 
 
-def detect_python_command():
-    """Return a bare python command name that exists on PATH.
+def validate_python_command(command):
+    """Return True if `command` launches a working Python 3 interpreter.
 
-    We deliberately keep the bare name (e.g. 'python') rather than the
-    resolved absolute path: Claude Code/Codex execute hooks via sh, and a
-    bare command lets the hook survive python upgrades/reinstalls without
-    rewriting settings.json. The hook scripts are stdlib-only, so any
-    python on PATH works. Windows order prefers 'python' (some installs
-    lack a 'python3' alias).
+    Actually runs `<command> --version` (rather than just trusting
+    shutil.which / Get-Command) so we catch App Execution Alias stubs that
+    'exist' on PATH but open the Microsoft Store instead of running python,
+    and broken absolute paths. This is the gate that lets us fail loudly
+    BEFORE writing an unusable hook into settings.json.
     """
+    parts = split_command(command)
+    if not parts:
+        return False
+    if not shutil.which(parts[0]) and not os.path.isabs(parts[0]):
+        # Bare name not on PATH and not an absolute path → can't resolve.
+        return False
+    if os.path.isabs(parts[0]) and not os.path.exists(parts[0]):
+        return False
+    try:
+        result = subprocess.run(
+            parts + ['--version'],
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode != 0:
+        return False
+    # python 2 prints to stderr; python 3 prints "Python 3.x" to stdout (or
+    # stderr on some builds). Accept either, but reject Python 2.
+    combined = (result.stdout + result.stderr).decode('utf-8', 'replace')
+    return 'Python 3' in combined or combined.strip().startswith('3.')
+
+
+def detect_python_command(config_value=None):
+    """Resolve and validate the python command to embed in hook configs.
+
+    Two modes, both validated via validate_python_command():
+
+    1. Explicit (``hooks.python_command`` in config.json, or the
+       KOTORI_PET_PYTHON env var): the user pins the exact command. This is
+       the recommended path on Windows — it sidesteps conda/PATH drift (a
+       hook written while conda base was active would otherwise hardcode the
+       conda python's absolute path and break on the next env switch). If the
+       pinned command fails validation, we exit with a clear error rather
+       than silently writing a dead hook.
+
+    2. Auto-detect (config value empty): probe candidate bare names and pick
+       the first that validates. Bare names are portable across python
+       upgrades, at the cost of depending on PATH containing python when the
+       hook runs.
+
+    Returns the validated command string (bare name or forward-slashed
+    path), or None when auto-detect finds nothing.
+    """
+    explicit = (config_value or os.environ.get('KOTORI_PET_PYTHON') or '').strip()
+    if explicit:
+        if not validate_python_command(explicit):
+            print(f'[setup-hooks] ERROR: configured python_command does not work: {explicit!r}', file=sys.stderr)
+            print('              `<command> --version` did not return Python 3.', file=sys.stderr)
+            print('              Fix hooks.python_command in config.json (or uninstall the bad', file=sys.stderr)
+            print('              python), then rerun setup.', file=sys.stderr)
+            sys.exit(1)
+        return to_forward_slash(explicit) if os.path.isabs(explicit) else explicit
+
     candidates = ('python', 'py -3', 'python3') if is_windows() else ('python3', 'python')
     for candidate in candidates:
-        parts = split_command(candidate)
-        if parts and shutil.which(parts[0]):
+        if validate_python_command(candidate):
             return candidate
     return None
 
@@ -358,18 +412,38 @@ def setup_opencode(platform_dir, hooks_config):
     return dst_plugin
 
 
+def build_python_hook_command(python_command, script_path):
+    """Build a Windows hook command: `<python> <script.py>` with both parts
+    quoted and the script path forward-slashed so sh (Git Bash, used by
+    Claude Code/Codex to run hooks) doesn't mangle backslashes.
+
+    python_command is either an absolute interpreter path (sys.executable,
+    possibly containing spaces like 'C:/Program Files/.../python.exe') or a
+    bare multi-token command ('py -3'). A path with spaces must stay a single
+    quoted token — splitting on whitespace would shatter it. We distinguish by
+    existence: an existing filesystem path is quoted whole; anything else
+    (e.g. 'py -3') is split into tokens and each token quoted.
+    """
+    if os.path.exists(python_command):
+        python_part = quote_command_part(to_forward_slash(python_command))
+    else:
+        python_part = build_command(split_command(python_command))
+    script_part = quote_command_part(to_forward_slash(script_path))
+    return f'{python_part} {script_part}'
+
+
 def build_targets(platform_dir, config):
     hooks_config = config.get('hooks', {})
     hook_dir = str(platform_dir / 'hooks')
     hook_script = os.path.join(hook_dir, 'pet-hook.sh')
-    python_command = detect_python_command()
+    python_command = detect_python_command(hooks_config.get('python_command'))
 
     claude_script = platform_dir / 'hooks' / 'scripts' / 'claude_hook.py'
     codex_script = platform_dir / 'hooks' / 'scripts' / 'codex_hook.py'
 
     if is_windows() and python_command:
-        claude_hook = f'{python_command} {quote_command_part(to_forward_slash(claude_script))}'
-        codex_hook = f'{python_command} {quote_command_part(to_forward_slash(codex_script))}'
+        claude_hook = build_python_hook_command(python_command, claude_script)
+        codex_hook = build_python_hook_command(python_command, codex_script)
     else:
         claude_hook = f'{hook_script} claude-code'
         codex_hook = f'{hook_script} codex'
@@ -392,7 +466,7 @@ def build_targets(platform_dir, config):
             CODEX_EVENTS,
             ['codex'],
             command_windows=(
-                f'{python_command} {quote_command_part(to_forward_slash(codex_script))}'
+                build_python_hook_command(python_command, codex_script)
                 if is_windows() and python_command else None
             ),
         ),
@@ -412,6 +486,8 @@ def main():
 
     if is_windows() and not python_command:
         print('[setup-hooks] Python 3 not found; Claude/Codex hooks will be skipped.')
+        print('              To pin a specific interpreter, set "python_command" under "hooks"')
+        print('              in config.json (e.g. "python", "py -3", or an absolute path).')
 
     for target in targets:
         if not is_tool_available(target.executable_names):

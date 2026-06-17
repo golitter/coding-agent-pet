@@ -1,11 +1,23 @@
 import * as fs from "node:fs";
 import * as net from "node:net";
+import * as os from "node:os";
 import * as path from "node:path";
 
-export const DEBUG_LOG = "/tmp/kotori-pet-opencode-debug.log";
 export const DEFAULT_STATE = { state: "idle", dialogue: "" };
 export const POST_TOOL_STATE = { state: "running", dialogue: "处理中..." };
 export const DEFAULT_TERMINAL_EVENTS = ["StopFailure"];
+
+// Debug log path. Default to the OS temp dir (os.tmpdir() is cross-platform:
+// returns %TEMP% on Windows, /tmp on Unix) so early logs written before the
+// platform dir is resolved still succeed — hardcoding /tmp would ENOENT on
+// Windows. Once loadPluginRuntime() resolves the platform dir it calls
+// setDebugLogPath() to pin the log to <platformDir>/runtime/, matching the
+// Python hooks' runtime/ convention.
+let debugLogPath = path.join(os.tmpdir(), "kotori-pet-opencode-debug.log");
+
+export function setDebugLogPath(filePath) {
+  debugLogPath = filePath;
+}
 
 function isDebugEnabled() {
   const raw = process.env.KOTORI_PET_OPENCODE_DEBUG;
@@ -28,7 +40,7 @@ export function debug(message, data) {
   try {
     const suffix = data ? ` ${JSON.stringify(data)}` : "";
     const line = `[${new Date().toISOString()}] ${message}${suffix}\n`;
-    fs.appendFileSync(DEBUG_LOG, line);
+    fs.appendFileSync(debugLogPath, line);
   } catch {
     // Best-effort only.
   }
@@ -83,6 +95,11 @@ export function loadPluginRuntime(importMetaUrl) {
     }
 
     const repoRoot = detectRepoRoot(platformDir);
+
+    // Pin the debug log to <platformDir>/runtime/, matching the Python hooks.
+    // (Earlier logs went to os.tmpdir(); from here on they land next to the
+    // hook-events.log written by claude_hook.py / codex_hook.py.)
+    setDebugLogPath(path.join(platformDir, "runtime", "kotori-pet-opencode-debug.log"));
 
     return {
       platformDir,
