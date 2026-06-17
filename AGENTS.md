@@ -11,7 +11,8 @@
 ├── assets/kotori-minami/   # 资料包：frames/ 运行时 + imagegen/ 生成工件
 ├── desktop/
 │   ├── cross-platform/     # Tauri 主实现（src/ + src-tauri/ + hooks/）
-│   │   └── hooks/          #   pet-hook.sh (Claude/Codex) + opencode-plugin.ts (OpenCode)
+│   │   ├── hooks/          #   pet-hook.sh (Claude/Codex) + opencode-plugin.ts (OpenCode)
+│   │   └── scripts/        #   平台入口脚本：macos/ (*.sh) + windows/ (*.ps1)
 │   └── docs/               # 跨平台 / Hook / 精灵图 / Bugfix 文档
 ├── docs/                   # 顶层文档（教程 + reference/details.md）
 ├── AGENTS.md               # 本文件
@@ -24,9 +25,15 @@
 ```bash
 cd desktop/cross-platform
 cp config.example.json config.json   # 按需修改
-bash setup.sh                        # 正式推荐：依赖 → 配置 → hooks → 编译 → 启动
-./build-and-run.sh                   # 开发辅助：编译并重启
-./setup-hooks.sh                     # 单独配置 hooks
+
+# macOS / Linux
+bash scripts/macos/setup.sh          # 正式推荐：依赖 → 配置 → hooks → 编译 → 启动
+./scripts/macos/build-and-run.sh     # 开发辅助：编译并重启
+./scripts/macos/setup-hooks.sh       # 单独配置 hooks
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
+
 npm run lint                         # ESLint + Prettier 检查
 npm run lint:fix                     # 自动修复
 npm run format                       # Prettier 格式化

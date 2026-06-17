@@ -24,14 +24,21 @@
 ```bash
 cd desktop/cross-platform
 cp config.example.json config.json   # 按需修改
-bash setup.sh                        # 正式推荐：一键完成依赖 → 配置 → hooks → 编译 → 启动
+
+# macOS / Linux
+bash scripts/macos/setup.sh          # 正式推荐：一键完成依赖 → 配置 → hooks → 编译 → 启动
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
 ```
 
-`setup.sh` 会自动安装 Claude Code / Codex / OpenCode 三套 hooks 集成；重复执行不会重复追加。
+入口脚本按平台分目录：`scripts/macos/`（`setup.sh` / `setup-hooks.sh` / `build-and-run.sh`）、`scripts/windows/`（对应 `.ps1`）。源码 `src/`、`src-tauri/`、`hooks/`、配置等保持单份共享。
+
+`setup.sh` / `setup.ps1` 会自动安装 Claude Code / Codex / OpenCode 三套 hooks 集成；重复执行不会重复追加。
 其中 Codex 会自动写入 hook，并尽量启用已有 trust 记录的条目，但首次使用通常仍需要在 `/hooks` 里手动 `Trust/Enable` 一次。
 
-日常首次安装、换机、或者完整更新时，推荐始终使用 `bash setup.sh`。
-`build-and-run.sh` 更适合已经完成初始化后的开发态增量重启。
+日常首次安装、换机、或者完整更新时，推荐始终使用 `setup.sh` / `setup.ps1`。
+`build-and-run.sh` / `build-and-run.ps1` 更适合已经完成初始化后的开发态增量重启。
 
 ## 交互
 

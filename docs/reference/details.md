@@ -155,10 +155,17 @@
 
 ## 5. 脚本入口 (`desktop/cross-platform/`)
 
+入口脚本按平台分目录：`scripts/macos/`（`*.sh`）与 `scripts/windows/`（`*.ps1`），源码与配置保持单份共享。
+
 ```bash
-bash setup.sh          # 正式推荐：全流程 依赖 → 配置 → hooks → 编译 → 启动
-./setup-hooks.sh       # 单独配置 Claude Code + Codex + OpenCode hooks
-./build-and-run.sh     # 开发辅助：单独编译并重启渲染器
+# macOS / Linux
+bash scripts/macos/setup.sh          # 正式推荐：全流程 依赖 → 配置 → hooks → 编译 → 启动
+./scripts/macos/setup-hooks.sh       # 单独配置 Claude Code + Codex + OpenCode hooks
+./scripts/macos/build-and-run.sh     # 开发辅助：单独编译并重启渲染器
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
+
 npm test               # hooks 轻量测试（别名 → test:hooks）
 npm run test:hooks     # hooks 轻量测试（Python unittest + Node --test，uv 缓存至 .uv-cache）
 npx tauri dev          # 开发热重载

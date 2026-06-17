@@ -79,9 +79,9 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
     └── cross-platform/                # 主实现 (Tauri)
         ├── config.example.json        #   配置模板（提交到 git）
         ├── config.json                #   用户配置（自动生成，.gitignore）
-        ├── setup.sh                   #   一键安装/更新脚本
-        ├── setup-hooks.sh             #   Hook 配置脚本（三平台）
-        ├── build-and-run.sh           #   编译并启动脚本
+        ├── scripts/                   #   平台入口脚本（按 OS 分目录）
+        │   ├── macos/                 #     setup.sh / setup-hooks.sh / build-and-run.sh
+        │   └── windows/               #     setup.ps1 / setup-hooks.ps1 / build-and-run.ps1
         ├── package.json               #   Node.js 前端依赖
         ├── hooks/                     #   Hook 脚本
         │   ├── pet-hook.sh            #     Shell 入口 (claude-code / codex)
@@ -120,11 +120,12 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
 
 ```bash
 git clone <repo> ~/pet
-cd ~/pet
-./desktop/cross-platform/setup.sh
+cd ~/pet/desktop/cross-platform
+bash scripts/macos/setup.sh
 ```
 
-`setup.sh` 自动完成：安装前端依赖 → 生成配置 → 配置 hooks → 编译 → 启动。
+`setup.sh`（macOS）/ `setup.ps1`（Windows）自动完成：安装前端依赖 → 生成配置 → 配置 hooks → 编译 → 启动。
+入口脚本按平台分目录：`scripts/macos/*.sh`、`scripts/windows/*.ps1`。
 
 ## 配置
 
@@ -146,11 +147,13 @@ cd ~/pet
 
 ## 脚本说明
 
-| 脚本 | 用途 |
+入口脚本按平台分目录：`scripts/macos/`（`*.sh`）与 `scripts/windows/`（`*.ps1`），两套一一对应。
+
+| 脚本（macOS / Windows） | 用途 |
 |---|---|
-| `setup.sh` | 全流程：安装依赖 → 生成配置 → 配置 hooks → 编译 → 启动 |
-| `setup-hooks.sh` | 单独配置 hooks（Claude Code + Codex + OpenCode）|
-| `build-and-run.sh` | 单独编译并重启渲染器 |
+| `setup.sh` / `setup.ps1` | 全流程：安装依赖 → 生成配置 → 配置 hooks → 编译 → 启动 |
+| `setup-hooks.sh` / `setup-hooks.ps1` | 单独配置 hooks（Claude Code + Codex + OpenCode）|
+| `build-and-run.sh` / `build-and-run.ps1` | 单独编译并重启渲染器 |
 
 ## 技术栈
 

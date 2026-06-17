@@ -3,7 +3,10 @@
 # 配置 hooks → 编译渲染器 → 启动宠物
 set -euo pipefail
 
-PLATFORM_DIR="$(cd "$(dirname "$0")" && pwd)"
+# 脚本所在目录（scripts/macos，用于定位同平台兄弟脚本）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# 项目根目录（cross-platform，共享源码 / 配置 / runtime 所在地）
+PLATFORM_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG="$PLATFORM_DIR/config.json"
 EXAMPLE="$PLATFORM_DIR/config.example.json"
 
@@ -39,12 +42,12 @@ fi
 # Step 2: 配置 hooks
 echo ""
 echo "📌 Step 2/4: 配置 Hook 脚本..."
-"$PLATFORM_DIR/setup-hooks.sh"
+"$SCRIPT_DIR/setup-hooks.sh"
 
 # Step 3: 编译 + 启动
 echo ""
 echo "📌 Step 3/4: 编译并启动渲染器..."
-"$PLATFORM_DIR/build-and-run.sh"
+"$SCRIPT_DIR/build-and-run.sh"
 
 echo ""
 echo "═══════════════════════════════════════"
