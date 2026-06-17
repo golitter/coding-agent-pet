@@ -67,9 +67,7 @@ jobs:
         run: |
           shellcheck \
             desktop/cross-platform/hooks/*.sh \
-            desktop/cross-platform/setup.sh \
-            desktop/cross-platform/setup-hooks.sh \
-            desktop/cross-platform/build-and-run.sh
+            desktop/cross-platform/scripts/macos/*.sh
       - uses: astral-sh/setup-uv@v3
       - name: ruff
         run: uvx ruff check desktop/cross-platform/hooks/scripts
