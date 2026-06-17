@@ -31,10 +31,18 @@ Add-RustToPath
 
 Write-Host "Building KotoriPet (Tauri)..."
 Push-Location $PlatformDir
+$buildFailed = $false
 try {
     npx tauri build --debug
+    if ($LASTEXITCODE -ne 0) {
+        $buildFailed = $true
+    }
 } finally {
     Pop-Location
+}
+
+if ($buildFailed) {
+    Write-Error "tauri build failed (exit code non-zero). Aborting before launching a stale binary. See output above."
 }
 
 New-Item -ItemType Directory -Force -Path $SessionsDir | Out-Null
