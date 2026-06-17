@@ -64,16 +64,34 @@ export class SpriteAnimator {
 
   async loadImage(nativePath) {
     const { convertFileSrc } = window.__TAURI__.core;
-    const url = convertFileSrc(nativePath);
-    const img = new Image();
+    const loadFromUrl = async (url) => {
+      const img = new Image();
+      const loaded = await new Promise((resolve) => {
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = url;
+      });
+      return loaded ? img : null;
+    };
 
-    const loaded = await new Promise((resolve) => {
-      img.onload = () => resolve(true);
-      img.onerror = () => resolve(false);
-      img.src = url;
-    });
+    try {
+      const bytes = await window.__TAURI__.core.invoke("read_file_bytes", {
+        path: nativePath,
+      });
+      const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
+      const blobUrl = URL.createObjectURL(blob);
+      const img = await loadFromUrl(blobUrl);
+      if (img) {
+        img.dataset.objectUrl = blobUrl;
+        return img;
+      }
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // Fall back to the Tauri asset protocol for older builds/configs where
+      // the byte-read IPC is unavailable.
+    }
 
-    return loaded ? img : null;
+    return loadFromUrl(convertFileSrc(nativePath));
   }
 
   setFrameTiming(timing) {
@@ -125,7 +143,7 @@ export class SpriteAnimator {
         // Load all frames in parallel — avoids sequential await on each image
         const loadResults = await Promise.all(
           row.frames.map(async (absPath) => {
-            const basename = String(absPath).split("/").pop();
+            const basename = String(absPath).split(/[\\/]/).pop();
             const nativePath = `${framesDir}/${state}/${basename}`;
             const img = await this.loadImage(nativePath);
             return img ? { img, nativePath } : null;
@@ -159,6 +177,13 @@ export class SpriteAnimator {
     console.log(
       `[Animator] ✓ Loaded ${total} frames across ${Object.keys(this.frames).length} states`,
     );
+    window.__TAURI__.core
+      .invoke("js_log", {
+        level: total > 0 ? "info" : "error",
+        tag: "Animator",
+        msg: `Loaded ${total} frames from ${framesDir}`,
+      })
+      .catch(() => {});
 
     // Warm the interactive states used most often at startup / drag time.
     await this.ensureAlphaMasksForStates(["idle", "running-left", "running-right"]);

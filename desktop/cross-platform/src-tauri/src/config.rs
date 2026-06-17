@@ -10,7 +10,7 @@ pub struct PetConfig {
     pub pet_id: String,
     pub frames_dir: String,
     pub sessions_dir: String,
-    pub socket_path: String,
+    pub event_endpoint: String,
     pub scale: f64,
     pub fps: f64,
     pub frame_timing: std::collections::HashMap<String, FrameTiming>,
@@ -51,6 +51,7 @@ struct RawConfig {
     pet_base_dir: Option<String>,
     frames_dir: Option<String>,
     socket_path: Option<String>,
+    event_endpoint: Option<String>,
     sessions_dir: Option<String>,
     renderer: Option<RawRenderer>,
     dialogue: Option<RawDialogue>,
@@ -123,9 +124,9 @@ impl PetConfig {
             .unwrap_or_else(|| detected_base.clone());
         let frames_dir_override = raw.frames_dir.map(|d| resolve_path(&d, &pet_base_dir));
         let sessions_dir_override = raw.sessions_dir.map(|d| resolve_path(&d, &pet_base_dir));
-        let socket_path = raw
-            .socket_path
-            .unwrap_or_else(|| "/tmp/kotori-pet.sock".to_string());
+        let event_endpoint = raw
+            .event_endpoint
+            .unwrap_or_else(|| default_event_endpoint(raw.socket_path));
 
         let renderer = raw.renderer.unwrap_or_default();
         let scale = renderer.scale.unwrap_or(0.6);
@@ -168,16 +169,20 @@ impl PetConfig {
             .unwrap_or_default();
 
         let frames_dir = frames_dir_override
-            .unwrap_or_else(|| format!("{}/assets/{}/frames", pet_base_dir, pet_id));
-        let sessions_dir = sessions_dir_override
-            .unwrap_or_else(|| format!("{}/desktop/cross-platform/runtime/sessions", pet_base_dir));
+            .unwrap_or_else(|| join_path_string(&pet_base_dir, &["assets", &pet_id, "frames"]));
+        let sessions_dir = sessions_dir_override.unwrap_or_else(|| {
+            join_path_string(
+                &pet_base_dir,
+                &["desktop", "cross-platform", "runtime", "sessions"],
+            )
+        });
 
         let config = Self {
             pet_base_dir,
             pet_id,
             frames_dir,
             sessions_dir,
-            socket_path,
+            event_endpoint,
             scale,
             fps,
             frame_timing,
@@ -196,6 +201,7 @@ impl PetConfig {
         info!("  petBaseDir: {}", config.pet_base_dir);
         info!("  framesDir: {}", config.frames_dir);
         info!("  sessionsDir: {}", config.sessions_dir);
+        info!("  eventEndpoint: {}", config.event_endpoint);
         info!("  scale: {}, fps: {}", config.scale, config.fps);
 
         config
@@ -238,7 +244,7 @@ fn find_config_path(start: &Path) -> Option<PathBuf> {
 /// Resolve a path: expand ~, resolve relative paths against a base.
 fn resolve_path(path: &str, base: &str) -> String {
     let expanded = if path.starts_with('~') {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
+        let home = home_dir_string().unwrap_or_else(|| "/".to_string());
         path.replacen('~', &home, 1)
     } else {
         path.to_string()
@@ -247,7 +253,51 @@ fn resolve_path(path: &str, base: &str) -> String {
     if Path::new(&expanded).is_absolute() {
         expanded
     } else {
-        format!("{}/{}", base.trim_end_matches('/'), expanded)
+        PathBuf::from(base)
+            .join(expanded)
+            .to_string_lossy()
+            .to_string()
+    }
+}
+
+fn join_path_string(base: &str, parts: &[&str]) -> String {
+    let mut path = PathBuf::from(base);
+    for part in parts {
+        path.push(part);
+    }
+    path.to_string_lossy().to_string()
+}
+
+fn home_dir_string() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            if !profile.trim().is_empty() {
+                return Some(profile);
+            }
+        }
+        let drive = std::env::var("HOMEDRIVE").ok();
+        let path = std::env::var("HOMEPATH").ok();
+        if let (Some(drive), Some(path)) = (drive, path) {
+            if !drive.trim().is_empty() && !path.trim().is_empty() {
+                return Some(format!("{}{}", drive, path));
+            }
+        }
+    }
+
+    std::env::var("HOME")
+        .ok()
+        .filter(|home| !home.trim().is_empty())
+}
+
+fn default_event_endpoint(_socket_path: Option<String>) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        "tcp://127.0.0.1:17361".to_string()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        _socket_path.unwrap_or_else(|| "/tmp/kotori-pet.sock".to_string())
     }
 }
 
@@ -274,7 +324,9 @@ fn detect_repo_root(start: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{detect_repo_root, find_config_path, find_cross_platform_dir, resolve_path};
+    use super::{
+        detect_repo_root, find_config_path, find_cross_platform_dir, join_path_string, resolve_path,
+    };
     use std::fs;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -289,8 +341,25 @@ mod tests {
 
     #[test]
     fn resolve_path_handles_relative_and_absolute_inputs() {
-        assert_eq!(resolve_path("frames", "/repo"), "/repo/frames");
+        assert_eq!(
+            Path::new(&resolve_path("frames", "/repo")),
+            Path::new("/repo").join("frames")
+        );
+        #[cfg(windows)]
+        assert_eq!(resolve_path("C:\\tmp\\frames", "/repo"), "C:\\tmp\\frames");
+        #[cfg(not(windows))]
         assert_eq!(resolve_path("/tmp/frames", "/repo"), "/tmp/frames");
+    }
+
+    #[test]
+    fn join_path_string_uses_native_separators() {
+        assert_eq!(
+            Path::new(&join_path_string("/repo", &["assets", "kotori", "frames"])),
+            Path::new("/repo")
+                .join("assets")
+                .join("kotori")
+                .join("frames")
+        );
     }
 
     #[test]

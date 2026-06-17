@@ -12,8 +12,9 @@ import {
   OPENCODE_TO_PET,
   buildPayload,
   debug,
+  defaultEventEndpoint,
   loadPluginRuntime,
-  pushSocket,
+  pushEvent,
   resolvePetBaseDir,
   resolvePath,
   resolveSessionId,
@@ -25,6 +26,7 @@ interface PetConfig {
   pet_id: string;
   sessions_dir: string | null;
   socket_path: string | null;
+  event_endpoint: string | null;
   state_map: Record<string, { state: string; dialogue: string }>;
   terminal_events: string[];
 }
@@ -62,7 +64,7 @@ async function handleEvent(
     "runtime",
     "sessions",
   ]);
-  const socketPath = config.socket_path || "/tmp/kotori-pet.sock";
+  const eventEndpoint = defaultEventEndpoint(config);
 
   try {
     await fs.promises.mkdir(sessionsDir, { recursive: true });
@@ -76,7 +78,7 @@ async function handleEvent(
   debug("handleEvent", { eventName, sessionId, state: payload.state, sessionFile });
 
   await writeSession(sessionFile, payload);
-  pushSocket(socketPath, payload);
+  pushEvent(eventEndpoint, payload);
 }
 
 type PluginFn = (ctx: {

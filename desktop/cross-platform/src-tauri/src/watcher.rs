@@ -1,8 +1,11 @@
 use crate::aggregator::ActivityAggregator;
 use notify::Watcher;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::{info, warn};
 
 #[cfg(unix)]
@@ -17,6 +20,7 @@ fn is_replaceable_socket_path(path: &Path) -> Result<bool, std::io::Error> {
     Ok(std::fs::symlink_metadata(path)?.file_type().is_socket())
 }
 
+#[cfg(unix)]
 fn ensure_socket_parent_dir(path: &Path) -> Result<(), std::io::Error> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -26,9 +30,135 @@ fn ensure_socket_parent_dir(path: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-/// Start a Unix socket server that receives JSON payloads from hook scripts.
-/// Runs as a Tokio async task.
-pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAggregator>) {
+pub async fn start_event_server(endpoint: &str, session_mgr: Arc<ActivityAggregator>) {
+    if let Some(addr) = endpoint.strip_prefix("tcp://") {
+        start_tcp_server(addr, session_mgr).await;
+        return;
+    }
+
+    #[cfg(unix)]
+    {
+        start_unix_socket_server(endpoint, session_mgr).await;
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = session_mgr;
+        warn!(
+            "Unix socket endpoint {} is not supported on this platform; use tcp://127.0.0.1:17361",
+            endpoint
+        );
+    }
+}
+
+async fn read_payload<R>(mut stream: R, session_mgr: Arc<ActivityAggregator>)
+where
+    R: AsyncRead + Unpin,
+{
+    let mut buf = Vec::with_capacity(8192);
+    let mut tmp = [0u8; 4096];
+    loop {
+        match stream.read(&mut tmp).await {
+            Ok(0) => break,
+            Ok(n) => buf.extend_from_slice(&tmp[..n]),
+            Err(_) => return,
+        };
+        if buf.len() > 65536 {
+            warn!("Event payload too large ({} bytes), dropping", buf.len());
+            return;
+        }
+    }
+
+    let json: serde_json::Value = match serde_json::from_slice(&buf) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+
+    let session_id = json["session_id"].as_str().unwrap_or("unknown").to_string();
+    let state = json["state"].as_str().unwrap_or("idle").to_string();
+    let dialogue = json["dialogue"].as_str().unwrap_or("").to_string();
+    let source = json["source"].as_str().unwrap_or("").to_string();
+    let is_terminal = json["isTerminal"].as_bool().unwrap_or(false);
+    let event = json["event"].as_str().unwrap_or("").to_string();
+
+    session_mgr.update(&session_id, &state, &dialogue, &source, is_terminal);
+
+    if event == "Stop" || state == "jumping" || state == "waving" {
+        let mgr2 = session_mgr.clone();
+        let sid = session_id.clone();
+        let expected = state.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            mgr2.remove_if_state(&sid, &expected);
+        });
+    }
+}
+
+fn schedule_oneshot_cleanup_from_paths(
+    paths: &[std::path::PathBuf],
+    session_mgr: &Arc<ActivityAggregator>,
+) {
+    for path in paths {
+        if path.extension().and_then(|e| e.to_str()) != Some("json") || !path.exists() {
+            continue;
+        }
+        let session_id = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        let data = match std::fs::read_to_string(path) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let json: serde_json::Value = match serde_json::from_str(&data) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let state = json["state"].as_str().unwrap_or("").to_string();
+        if state != "jumping" && state != "waving" {
+            continue;
+        }
+        let mgr = session_mgr.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            mgr.remove_if_state(&session_id, &state);
+        });
+    }
+}
+
+async fn start_tcp_server(addr: &str, session_mgr: Arc<ActivityAggregator>) {
+    if !(addr.starts_with("127.") || addr.starts_with("localhost:") || addr.starts_with("[::1]:")) {
+        warn!(
+            "TCP event endpoint {} is not loopback; local event injection protection is reduced",
+            addr
+        );
+    }
+
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            warn!("Cannot bind TCP event endpoint {}: {}", addr, e);
+            return;
+        }
+    };
+
+    info!("Event TCP listening: {}", addr);
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                let mgr = session_mgr.clone();
+                tokio::spawn(async move {
+                    read_payload(stream, mgr).await;
+                });
+            }
+            Err(e) => warn!("TCP accept error: {}", e),
+        }
+    }
+}
+
+#[cfg(unix)]
+pub async fn start_unix_socket_server(socket_path: &str, session_mgr: Arc<ActivityAggregator>) {
     let path = PathBuf::from(socket_path);
 
     if let Err(err) = ensure_socket_parent_dir(&path) {
@@ -40,11 +170,7 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAgg
         return;
     }
 
-    // Clean up stale socket — connect first to avoid TOCTOU symlink attacks.
-    // If the socket is live (another instance running), exit instead of clobbering it.
-    // Only remove the file when we confirm it's a dead socket (connect fails).
     if path.exists() {
-        #[cfg(unix)]
         match is_replaceable_socket_path(&path) {
             Ok(true) => {}
             Ok(false) => {
@@ -66,7 +192,6 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAgg
                 return;
             }
             Err(_) => {
-                // Stale socket file — safe to remove
                 let _ = std::fs::remove_file(&path);
             }
         }
@@ -80,8 +205,6 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAgg
         }
     };
 
-    // Restrict socket file permissions to owner-only (prevent other users from injecting events)
-    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         if let Err(e) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)) {
@@ -93,60 +216,13 @@ pub async fn start_socket_server(socket_path: &str, session_mgr: Arc<ActivityAgg
 
     loop {
         match listener.accept().await {
-            Ok((mut stream, _)) => {
+            Ok((stream, _)) => {
                 let mgr = session_mgr.clone();
                 tokio::spawn(async move {
-                    use tokio::io::AsyncReadExt;
-                    // Read the full payload in a growing buffer until EOF.
-                    // Hook scripts open a connection, write one JSON blob, then close.
-                    let mut buf = Vec::with_capacity(8192);
-                    let mut tmp = [0u8; 4096];
-                    loop {
-                        match stream.read(&mut tmp).await {
-                            Ok(0) => break,
-                            Ok(n) => buf.extend_from_slice(&tmp[..n]),
-                            Err(_) => return,
-                        };
-                        // Safety cap: reject payloads larger than 64 KB
-                        if buf.len() > 65536 {
-                            warn!("Socket payload too large ({} bytes), dropping", buf.len());
-                            return;
-                        }
-                    }
-
-                    let json: serde_json::Value = match serde_json::from_slice(&buf) {
-                        Ok(v) => v,
-                        Err(_) => return,
-                    };
-
-                    let session_id = json["session_id"].as_str().unwrap_or("unknown").to_string();
-                    let state = json["state"].as_str().unwrap_or("idle").to_string();
-                    let dialogue = json["dialogue"].as_str().unwrap_or("").to_string();
-                    let source = json["source"].as_str().unwrap_or("").to_string();
-                    let is_terminal = json["isTerminal"].as_bool().unwrap_or(false);
-                    let event = json["event"].as_str().unwrap_or("").to_string();
-
-                    mgr.update(&session_id, &state, &dialogue, &source, is_terminal);
-
-                    // Stop → schedule a delayed removal in the backend. The hook
-                    // script is short-lived and cannot reliably run a timer (a
-                    // threading.Timer there is killed when the process exits),
-                    // so we do it here. The 2s delay lets the "搞定啦" celebration
-                    // show; remove_if_state cancels the removal if a new turn
-                    // (state no longer "jumping") started within the window.
-                    if event == "Stop" {
-                        let mgr2 = mgr.clone();
-                        let sid = session_id.clone();
-                        tokio::spawn(async move {
-                            tokio::time::sleep(Duration::from_secs(2)).await;
-                            mgr2.remove_if_state(&sid, "jumping");
-                        });
-                    }
+                    read_payload(stream, mgr).await;
                 });
             }
-            Err(e) => {
-                warn!("Socket accept error: {}", e);
-            }
+            Err(e) => warn!("Socket accept error: {}", e),
         }
     }
 }
@@ -173,10 +249,6 @@ pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<ActivityAggregato
 
     info!("Watching directory: {}", dir);
 
-    // Debounce: coalesce a burst of filesystem events into exactly one
-    // reconcile after activity settles. Unlike the previous "skip events inside
-    // the window" scheme, this never drops the trailing event of a burst — it
-    // waits for `debounce` of silence, then reconciles once.
     let debounce = Duration::from_millis(100);
 
     while let Ok(event) = rx.recv() {
@@ -185,15 +257,12 @@ pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<ActivityAggregato
             Err(_) => Vec::new(),
         };
 
-        // Drain any events already queued from the same burst.
         while let Ok(next) = rx.try_recv() {
             if let Ok(ev) = next {
                 changed_paths.extend(ev.paths);
             }
         }
 
-        // Extend the quiet window on each new event; only reconcile after the
-        // channel falls silent for the full debounce interval.
         loop {
             match rx.recv_timeout(debounce) {
                 Ok(next) => {
@@ -211,7 +280,7 @@ pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<ActivityAggregato
             }
         }
 
-        // Reconcile only the files that actually changed in this burst.
-        session_mgr.reconcile_paths(changed_paths);
+        session_mgr.reconcile_paths(changed_paths.clone());
+        schedule_oneshot_cleanup_from_paths(&changed_paths, &session_mgr);
     }
 }

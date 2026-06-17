@@ -92,7 +92,9 @@ pub fn quit_app(app: tauri::AppHandle, config: tauri::State<'_, PetConfig>) {
     // Remove the socket explicitly here. The startup connect-probe (covers a
     // crash/kill between sessions) and SocketGuard (covers panic unwind) close
     // the remaining gaps, so the socket is reclaimed in every termination case.
-    let _ = std::fs::remove_file(&config.socket_path);
+    if !config.event_endpoint.starts_with("tcp://") {
+        let _ = std::fs::remove_file(&config.event_endpoint);
+    }
     app.exit(0);
 }
 
@@ -221,10 +223,42 @@ pub fn read_frames_batch(
 /// globally. Final result is window-relative, Y from top.
 #[tauri::command]
 pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), String> {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = window;
-        Err("cursor_in_window is macOS-only".into())
+        Err("cursor_in_window is only available on macOS and Windows".into())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        #[repr(C)]
+        struct Point {
+            x: i32,
+            y: i32,
+        }
+
+        #[link(name = "user32")]
+        unsafe extern "system" {
+            fn GetCursorPos(lp_point: *mut Point) -> i32;
+        }
+
+        let mut point = Point { x: 0, y: 0 };
+        let ok = unsafe { GetCursorPos(&mut point) };
+        if ok == 0 {
+            return Err("GetCursorPos failed".into());
+        }
+
+        let window_pos = window
+            .outer_position()
+            .map_err(|e| format!("outer_position: {}", e))?;
+        let scale = window
+            .scale_factor()
+            .map_err(|e| format!("scale_factor: {}", e))?;
+
+        Ok((
+            (point.x - window_pos.x) as f64 / scale,
+            (point.y - window_pos.y) as f64 / scale,
+        ))
     }
 
     #[cfg(target_os = "macos")]

@@ -1,3 +1,23 @@
+#!/usr/bin/env sh
+# 平台分发：Windows 走 PowerShell 版 pre-commit.ps1，Unix 走下方 sh 逻辑。
+# （husky 通过 .husky/_/pre-commit → h → 以 sh 执行本文件）
+
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    # Git Bash / MSYS：仍可用 sh 逻辑（下方），但工具名/PATH 与 Linux 不同，
+    # 直接交给 PowerShell 版以保证 cargo/python/ruff 探测一致。
+    dir="$(dirname "$0")"
+    if command -v pwsh >/dev/null 2>&1; then
+      pwsh -NoProfile -File "$dir/pre-commit.ps1"
+      exit $?
+    elif command -v powershell >/dev/null 2>&1; then
+      powershell -NoProfile -ExecutionPolicy Bypass -File "$dir/pre-commit.ps1"
+      exit $?
+    fi
+    # 两者都没有则回退到下方 sh 逻辑
+    ;;
+esac
+
 cd desktop/cross-platform || exit 1
 
 # ── Frontend: Prettier + ESLint (lint-staged, only changed files) ──

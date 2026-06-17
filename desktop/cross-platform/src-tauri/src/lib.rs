@@ -54,14 +54,16 @@ fn make_window_transparent(window: &tauri::WebviewWindow) {
 /// which skips Drop, so this guard does NOT fire on graceful shutdown — `quit_app`
 /// removes the socket explicitly. This guard covers the remaining case: a panic
 /// that unwinds the stack (Drop runs during unwinding). The startup connect-probe
-/// in `watcher::start_socket_server` is the final backstop for a crash/kill that
+/// in the Unix event server is the final backstop for a crash/kill that
 /// leaves the file behind, reclaiming it on the next launch.
 struct SocketGuard {
-    path: String,
+    endpoint: String,
 }
 impl Drop for SocketGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        if !self.endpoint.starts_with("tcp://") {
+            let _ = std::fs::remove_file(&self.endpoint);
+        }
     }
 }
 
@@ -127,11 +129,11 @@ pub fn run() {
                 }
             });
 
-            // 6. Start Unix socket server
+            // 6. Start event server (Unix socket on Unix, TCP loopback on Windows)
             let mgr_socket = session_mgr.clone();
-            let socket_path = config.socket_path.clone();
+            let event_endpoint = config.event_endpoint.clone();
             tauri::async_runtime::spawn(async move {
-                watcher::start_socket_server(&socket_path, mgr_socket).await;
+                watcher::start_event_server(&event_endpoint, mgr_socket).await;
             });
 
             // 7. Start file watcher (in blocking thread)
@@ -156,14 +158,14 @@ pub fn run() {
             });
 
             // 10. Store config + aggregator for frontend / command access
-            let socket_path_for_guard = config.socket_path.clone();
+            let endpoint_for_guard = config.event_endpoint.clone();
             app.manage(session_mgr.clone());
             app.manage(config);
             // RAII backstop: removes the socket file if the process panics and
             // unwinds (Drop runs during unwinding). The normal quit path cleans
             // up explicitly in `quit_app`; see SocketGuard's doc comment.
             app.manage(SocketGuard {
-                path: socket_path_for_guard,
+                endpoint: endpoint_for_guard,
             });
 
             info!("KotoriPet ✓ Running. Press Ctrl+C to exit.");

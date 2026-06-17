@@ -7,6 +7,7 @@ import fs from "node:fs";
 import {
   OPENCODE_TO_PET,
   buildPayload,
+  defaultEventEndpoint,
   detectRepoRoot,
   findConfigPath,
   loadPluginRuntime,
@@ -16,6 +17,10 @@ import {
   resolveState,
   resolveToolEvent,
 } from "../opencode-shared.mjs";
+
+function norm(p) {
+  return path.normalize(p);
+}
 
 test("OpenCode event map stays aligned with pet events", () => {
   assert.equal(OPENCODE_TO_PET["session.created"], "SessionStart");
@@ -66,33 +71,46 @@ test("resolvePath uses the provided base dir for relative values and fallback pa
       "runtime",
       "sessions",
     ]),
-    "/repo/root/runtime/custom",
+    norm("/repo/root/runtime/custom"),
   );
   assert.equal(
     resolvePath(null, "/repo/root", ["desktop", "cross-platform", "runtime", "sessions"]),
-    "/repo/root/desktop/cross-platform/runtime/sessions",
+    norm("/repo/root/desktop/cross-platform/runtime/sessions"),
   );
 });
 
 test("resolvePetBaseDir and resolvePath keep plugin path semantics aligned with Rust", () => {
   assert.equal(
     resolvePetBaseDir({ pet_base_dir: "pets/kotori" }, "/repo/root"),
-    "/repo/root/pets/kotori",
+    norm("/repo/root/pets/kotori"),
   );
-  assert.equal(resolvePetBaseDir({}, "/repo/root"), "/repo/root");
+  assert.equal(resolvePetBaseDir({}, "/repo/root"), norm("/repo/root"));
   assert.equal(
     resolvePath(
       "runtime/custom",
       resolvePetBaseDir({ pet_base_dir: "pets/kotori" }, "/repo/root"),
       ["desktop", "cross-platform", "runtime", "sessions"],
     ),
-    "/repo/root/pets/kotori/runtime/custom",
+    norm("/repo/root/pets/kotori/runtime/custom"),
+  );
+});
+
+test("defaultEventEndpoint prefers explicit values and keeps platform defaults", () => {
+  assert.equal(
+    defaultEventEndpoint({ event_endpoint: "tcp://127.0.0.1:9999" }),
+    "tcp://127.0.0.1:9999",
+  );
+
+  const fallback = defaultEventEndpoint({ socket_path: "/tmp/custom.sock" });
+  assert.equal(
+    fallback,
+    process.platform === "win32" ? "tcp://127.0.0.1:17361" : "/tmp/custom.sock",
   );
 });
 
 test("detectRepoRoot handles real app layout and flat test fixtures", () => {
-  assert.equal(detectRepoRoot("/repo/desktop/cross-platform"), "/repo");
-  assert.equal(detectRepoRoot("/tmp/kotori-plugin/platform"), "/tmp/kotori-plugin");
+  assert.equal(detectRepoRoot("/repo/desktop/cross-platform"), path.resolve("/repo"));
+  assert.equal(detectRepoRoot("/tmp/kotori-plugin/platform"), path.resolve("/tmp/kotori-plugin"));
 });
 
 test("resolveSessionId prefers nested event properties", () => {
@@ -129,4 +147,18 @@ test("loadPluginRuntime prefers config.json and falls back to example config", (
   assert.equal(runtime?.config.pet_id, "real-pet");
   assert.equal(runtime?.repoRoot, tempDir);
   assert.equal(findConfigPath(platformDir), path.join(platformDir, "config.json"));
+});
+
+test("toNativeImportPath-style runtime loading handles Windows drive paths", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "kotori-plugin-winpath-"));
+  const deployedDir = path.join(tempDir, "plugins");
+  const platformDir = path.join(tempDir, "desktop", "cross-platform");
+  fs.mkdirSync(deployedDir, { recursive: true });
+  fs.mkdirSync(platformDir, { recursive: true });
+  fs.writeFileSync(path.join(deployedDir, ".kotori-pet-config-dir"), platformDir);
+  fs.writeFileSync(path.join(platformDir, "config.example.json"), JSON.stringify({}));
+
+  const runtimeUrl = new URL(`file://${path.join(deployedDir, "pet-plugin.ts")}`);
+  const runtime = loadPluginRuntime(runtimeUrl.href);
+  assert.equal(runtime?.platformDir, platformDir);
 });

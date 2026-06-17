@@ -99,12 +99,32 @@ export function loadPluginRuntime(importMetaUrl) {
 export function resolvePath(configValue, baseDir, fallbackParts) {
   if (typeof configValue === "string" && configValue.trim()) {
     const expanded = configValue.startsWith("~")
-      ? path.join(process.env.HOME || "/", configValue.slice(1))
+      ? path.join(resolveHomeDir(), configValue.slice(1))
       : configValue;
     return path.isAbsolute(expanded) ? expanded : path.join(baseDir, expanded);
   }
 
   return path.join(baseDir, ...fallbackParts);
+}
+
+function resolveHomeDir() {
+  if (process.platform === "win32") {
+    if (process.env.USERPROFILE) return process.env.USERPROFILE;
+    if (process.env.HOMEDRIVE && process.env.HOMEPATH) {
+      return `${process.env.HOMEDRIVE}${process.env.HOMEPATH}`;
+    }
+  }
+  return process.env.HOME || "/";
+}
+
+export function defaultEventEndpoint(config = {}) {
+  if (typeof config.event_endpoint === "string" && config.event_endpoint.trim()) {
+    return config.event_endpoint.trim();
+  }
+  if (process.platform === "win32") {
+    return "tcp://127.0.0.1:17361";
+  }
+  return config.socket_path || "/tmp/kotori-pet.sock";
 }
 
 export function resolvePetBaseDir(config, repoRoot) {
@@ -159,7 +179,24 @@ export async function writeSession(filePath, payload) {
   }
 }
 
-export function pushSocket(socketPath, payload) {
+function pushTcp(endpoint, payload) {
+  try {
+    const url = new URL(endpoint);
+    const port = Number(url.port);
+    if (!port) return;
+
+    const socket = net.createConnection({ host: url.hostname || "127.0.0.1", port }, () => {
+      socket.write(JSON.stringify(payload), () => socket.end());
+    });
+    socket.setTimeout(100);
+    socket.on("timeout", () => socket.destroy());
+    socket.on("error", () => socket.destroy());
+  } catch {
+    // Best-effort only.
+  }
+}
+
+function pushUnixSocket(socketPath, payload) {
   try {
     if (!fs.existsSync(socketPath)) return;
 
@@ -173,3 +210,15 @@ export function pushSocket(socketPath, payload) {
     // Best-effort only.
   }
 }
+
+export function pushEvent(endpoint, payload) {
+  if (typeof endpoint === "string" && endpoint.startsWith("tcp://")) {
+    pushTcp(endpoint, payload);
+    return;
+  }
+  if (process.platform !== "win32") {
+    pushUnixSocket(endpoint, payload);
+  }
+}
+
+export const pushSocket = pushUnixSocket;

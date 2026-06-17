@@ -3,6 +3,7 @@
   "pet_id": "kotori-minami",
   "pet_base_dir": null,
   "frames_dir": null,
+  "event_endpoint": null,
   "socket_path": "/tmp/kotori-pet.sock",
   "sessions_dir": null,
   "renderer": {
@@ -29,9 +30,9 @@
     }
   },
   "hooks": {
-    "claude_code_settings": "~/.claude/settings.json",
-    "codex_hooks": "~/.codex/hooks.json",
-    "opencode_plugins_dir": "~/.config/opencode/plugins"
+    "claude_code_settings": null,
+    "codex_hooks": null,
+    "opencode_plugins_dir": null
   },
   "terminal_events": ["StopFailure", "SessionEnd"],
   "state_map": {

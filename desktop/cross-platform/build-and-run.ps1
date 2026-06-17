@@ -1,0 +1,70 @@
+$ErrorActionPreference = "Stop"
+
+$PlatformDir = $PSScriptRoot
+$TauriDir = Join-Path $PlatformDir "src-tauri"
+$Binary = Join-Path $TauriDir "target\debug\kotori-pet.exe"
+$RuntimeDir = Join-Path $PlatformDir "runtime"
+$SessionsDir = Join-Path $RuntimeDir "sessions"
+$LogFile = Join-Path $RuntimeDir "kotori-pet-tauri.log"
+$ErrLogFile = Join-Path $RuntimeDir "kotori-pet-tauri.err.log"
+$PidFile = Join-Path $RuntimeDir "kotori-pet.pid"
+
+function Add-RustToPath {
+    $paths = @(
+        (Join-Path $env:USERPROFILE ".cargo\bin"),
+        (Join-Path $env:USERPROFILE ".rustup\toolchains\stable-x86_64-pc-windows-msvc\bin")
+    )
+
+    foreach ($path in $paths) {
+        if ((Test-Path $path) -and ($env:Path -notlike "*$path*")) {
+            $env:Path = "$path;$env:Path"
+        }
+    }
+
+    $cargo = Get-Command cargo -ErrorAction SilentlyContinue
+    if ($null -eq $cargo) {
+        Write-Error "cargo was not found. Install Rust with rustup, or add %USERPROFILE%\.cargo\bin to PATH."
+    }
+}
+
+Add-RustToPath
+
+Write-Host "Building KotoriPet (Tauri)..."
+Push-Location $PlatformDir
+try {
+    npx tauri build --debug
+} finally {
+    Pop-Location
+}
+
+New-Item -ItemType Directory -Force -Path $SessionsDir | Out-Null
+
+if (Test-Path $PidFile) {
+    $oldPidText = Get-Content -Raw $PidFile
+    $oldPid = 0
+    if ([int]::TryParse($oldPidText.Trim(), [ref]$oldPid)) {
+        $oldProc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
+        if ($null -ne $oldProc) {
+            Write-Host "Stopping previous KotoriPet process (PID: $oldPid)..."
+            Stop-Process -Id $oldPid -Force
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
+
+if (!(Test-Path $Binary)) {
+    Write-Error "Built binary not found: $Binary"
+}
+
+Write-Host "Starting KotoriPet..."
+$proc = Start-Process -FilePath $Binary -WorkingDirectory $PlatformDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $LogFile -RedirectStandardError $ErrLogFile
+
+Set-Content -Path $PidFile -Value $proc.Id
+Start-Sleep -Seconds 2
+
+$running = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+if ($null -eq $running) {
+    Write-Error "KotoriPet failed to start. See logs: $LogFile and $ErrLogFile"
+}
+
+Write-Host "KotoriPet started (PID: $($proc.Id))"

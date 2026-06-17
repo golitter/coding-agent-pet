@@ -12,6 +12,8 @@ src-tauri/gen/
 .DS_Store
 Thumbs.db
 desktop.ini
+__pycache__/
+*.py[cod]
 
 # IDE / Editor
 .vscode/
@@ -25,6 +27,7 @@ desktop.ini
 npm-debug.log*
 
 # Runtime data (user-specific sessions)
+runtime/
 runtime/sessions/
 
 # User config (keep example only)
