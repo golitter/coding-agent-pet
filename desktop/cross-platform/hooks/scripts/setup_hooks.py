@@ -100,29 +100,21 @@ def split_command(command):
     return command.split()
 
 
-def resolve_command(command):
-    parts = split_command(command)
-    if not parts:
-        return None
-    exe = shutil.which(parts[0])
-    if not exe:
-        return None
-    # Use forward slashes on Windows: Claude Code/Codex execute hooks via sh,
-    # where backslashes are escape chars and silently mangle D:\path\to\exe
-    # into D:pathtoexe. Forward slashes parse correctly under both sh and cmd.
-    if is_windows():
-        exe = exe.replace('\\', '/')
-    if len(parts) == 1:
-        return exe
-    return ' '.join([quote_command_part(exe), *parts[1:]])
-
-
 def detect_python_command():
+    """Return a bare python command name that exists on PATH.
+
+    We deliberately keep the bare name (e.g. 'python') rather than the
+    resolved absolute path: Claude Code/Codex execute hooks via sh, and a
+    bare command lets the hook survive python upgrades/reinstalls without
+    rewriting settings.json. The hook scripts are stdlib-only, so any
+    python on PATH works. Windows order prefers 'python' (some installs
+    lack a 'python3' alias).
+    """
     candidates = ('python', 'py -3', 'python3') if is_windows() else ('python3', 'python')
     for candidate in candidates:
-        resolved = resolve_command(candidate)
-        if resolved:
-            return resolved
+        parts = split_command(candidate)
+        if parts and shutil.which(parts[0]):
+            return candidate
     return None
 
 
@@ -366,7 +358,7 @@ def build_targets(platform_dir, config):
     codex_script = platform_dir / 'hooks' / 'scripts' / 'codex_hook.py'
 
     if is_windows() and python_command:
-        # Forward slashes (see resolve_command): sh treats backslashes as escapes.
+        # Forward slashes: sh treats backslashes as escapes.
         claude_hook = f'{python_command} {quote_command_part(str(claude_script).replace(chr(92), "/"))}'
         codex_hook = f'{python_command} {quote_command_part(str(codex_script).replace(chr(92), "/"))}'
     else:
