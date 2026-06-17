@@ -100,6 +100,16 @@ def split_command(command):
     return command.split()
 
 
+def to_forward_slash(path):
+    """Convert backslashes to forward slashes.
+
+    Claude Code/Codex execute hooks via sh on Windows, where backslashes are
+    escape characters and silently mangle D:\\path\\to\\exe into D:pathtoexe.
+    Forward slashes parse correctly under both sh and cmd.
+    """
+    return str(path).replace('\\', '/')
+
+
 def detect_python_command():
     """Return a bare python command name that exists on PATH.
 
@@ -358,9 +368,8 @@ def build_targets(platform_dir, config):
     codex_script = platform_dir / 'hooks' / 'scripts' / 'codex_hook.py'
 
     if is_windows() and python_command:
-        # Forward slashes: sh treats backslashes as escapes.
-        claude_hook = f'{python_command} {quote_command_part(str(claude_script).replace(chr(92), "/"))}'
-        codex_hook = f'{python_command} {quote_command_part(str(codex_script).replace(chr(92), "/"))}'
+        claude_hook = f'{python_command} {quote_command_part(to_forward_slash(claude_script))}'
+        codex_hook = f'{python_command} {quote_command_part(to_forward_slash(codex_script))}'
     else:
         claude_hook = f'{hook_script} claude-code'
         codex_hook = f'{hook_script} codex'
@@ -383,7 +392,7 @@ def build_targets(platform_dir, config):
             CODEX_EVENTS,
             ['codex'],
             command_windows=(
-                f'{python_command} {quote_command_part(str(codex_script).replace(chr(92), "/"))}'
+                f'{python_command} {quote_command_part(to_forward_slash(codex_script))}'
                 if is_windows() and python_command else None
             ),
         ),
