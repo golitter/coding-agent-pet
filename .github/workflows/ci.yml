@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - "**"
   pull_request:
 
 concurrency:
@@ -20,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
           cache: npm
           cache-dependency-path: desktop/cross-platform/package-lock.json
       - run: npm ci
@@ -73,28 +74,35 @@ jobs:
       - name: ruff
         run: uvx ruff check desktop/cross-platform/hooks/scripts
 
-  prettier-autofix:
-    name: Prettier Auto-Fix
+  lint-autofix:
+    name: Auto-Fix Lint Formatting
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'push'
     permissions:
       contents: write
-    defaults:
-      run:
-        working-directory: desktop/cross-platform
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
           cache: npm
           cache-dependency-path: desktop/cross-platform/package-lock.json
-      - run: npm ci
-      - run: npx prettier --write .
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Install frontend dependencies
+        working-directory: desktop/cross-platform
+        run: npm ci
+      - name: Fix ESLint and Prettier
+        working-directory: desktop/cross-platform
+        run: npm run lint:fix
+      - name: Fix Rust formatting
+        working-directory: desktop/cross-platform/src-tauri
+        run: cargo fmt
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: 'style: apply prettier formatting'
-          file_pattern: 'desktop/cross-platform/**'
+          commit_message: "style: auto-fix lint formatting"
+          file_pattern: "desktop/cross-platform/**"

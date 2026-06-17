@@ -157,12 +157,20 @@ pub async fn run_applescript(script: String) -> Result<String, String> {
 /// Path is validated to be within the configured frames_dir to prevent
 /// arbitrary file reads from the webview context.
 #[tauri::command]
-pub fn read_file_bytes(
+pub async fn read_file_bytes(
     path: String,
     config: tauri::State<'_, PetConfig>,
 ) -> Result<Vec<u8>, String> {
     let validated = validate_path_in_frames(&path, &config.frames_dir)?;
-    std::fs::read(&validated).map_err(|e| format!("Failed to read {}: {}", path, e))
+    // `std::fs::read` is a blocking syscall — run it on the blocking pool so it
+    // never stalls the main thread / async worker. A sync `#[tauri::command]`
+    // runs on the main thread; making this `async` moves it onto the Tauri
+    // runtime, and `spawn_blocking` parks the actual I/O on a dedicated thread.
+    let path_for_err = path.clone();
+    tauri::async_runtime::spawn_blocking(move || std::fs::read(&validated))
+        .await
+        .map_err(|e| format!("Join error: {}", e))?
+        .map_err(|e| format!("Failed to read {}: {}", path_for_err, e))
 }
 
 /// Batch-read multiple frame PNGs in a single IPC call. Returns a map of
@@ -174,7 +182,7 @@ pub fn read_file_bytes(
 /// when lexical check doesn't match. This reduces 55+ canonicalize syscalls
 /// to typically 1 (the base dir).
 #[tauri::command]
-pub fn read_frames_batch(
+pub async fn read_frames_batch(
     paths: Vec<String>,
     config: tauri::State<'_, PetConfig>,
 ) -> Result<HashMap<String, Vec<u8>>, String> {
@@ -183,30 +191,38 @@ pub fn read_frames_batch(
     let frames_canonical = std::fs::canonicalize(frames_dir_path)
         .map_err(|e| format!("Cannot resolve frames_dir: {}", e))?;
 
-    let mut results = HashMap::with_capacity(paths.len());
-    for path in paths {
-        let p = std::path::Path::new(&path);
-        // Fast path: lexical normalization avoids per-file canonicalize syscall.
-        // Correct when no symlinks are involved — the common case for asset dirs.
-        let normalized = normalize_path(p);
-        if normalized.starts_with(&frames_dir_norm) {
-            if let Ok(bytes) = std::fs::read(&normalized) {
-                results.insert(path, bytes);
+    // The whole batch (up to 55+ synchronous `std::fs::read` calls) is moved to
+    // the blocking pool. Sync commands run on the main thread; even async ones
+    // would stall their worker if the reads stayed inline. `spawn_blocking`
+    // guarantees these syscalls never touch the main thread or an async worker.
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut results = HashMap::with_capacity(paths.len());
+        for path in paths {
+            let p = std::path::Path::new(&path);
+            // Fast path: lexical normalization avoids per-file canonicalize syscall.
+            // Correct when no symlinks are involved — the common case for asset dirs.
+            let normalized = normalize_path(p);
+            if normalized.starts_with(&frames_dir_norm) {
+                if let Ok(bytes) = std::fs::read(&normalized) {
+                    results.insert(path, bytes);
+                }
+                continue;
             }
-            continue;
-        }
-        // Slow path: resolve symlinks for paths that don't lexical match
-        let canonical = match std::fs::canonicalize(&path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-        if canonical.starts_with(&frames_canonical) {
-            if let Ok(bytes) = std::fs::read(&canonical) {
-                results.insert(path, bytes);
+            // Slow path: resolve symlinks for paths that don't lexical match
+            let canonical = match std::fs::canonicalize(&path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            if canonical.starts_with(&frames_canonical) {
+                if let Ok(bytes) = std::fs::read(&canonical) {
+                    results.insert(path, bytes);
+                }
             }
         }
-    }
-    Ok(results)
+        results
+    })
+    .await
+    .map_err(|e| format!("Join error: {}", e))
 }
 
 /// Get cursor position relative to the main window's content, in logical

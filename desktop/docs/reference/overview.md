@@ -57,6 +57,7 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
     │   ├── overview.md                #   本文件 — 概述
     │   ├── renderer.md                #   Tauri 渲染器详解
     │   ├── spritesheet.md             #   精灵图规格
+    │   └── tauri-v2-compliance.md     #   Tauri v2 合规审查
     │   ├── design/                    #   设计文档
     │   │   ├── hooks-refactor.md      #     Hook 重构设计
     │   │   ├── hit-test.md            #     透明像素点击穿透
@@ -135,46 +136,67 @@ bash scripts/macos/setup.sh
 
 主要配置项：
 
-| 配置项 | 说明 | 默认值 |
-|---|---|---|
-| `pet_id` | 宠物 ID | `kotori-minami` |
-| `pet_base_dir` | 项目根目录 | `null`（自动检测） |
-| `socket_path` | Unix socket 路径 | `/tmp/kotori-pet.sock` |
-| `renderer.scale` | 缩放因子 | `0.6` |
-| `renderer.fps` | 帧率 | `10` |
-| `state_map` | 事件→动画+台词映射 | 见配置文件 |
-| `menu.items` | 右键菜单项 | 默认仅关闭宠物 |
+| 配置项           | 说明               | 默认值                 |
+| ---------------- | ------------------ | ---------------------- |
+| `pet_id`         | 宠物 ID            | `kotori-minami`        |
+| `pet_base_dir`   | 项目根目录         | `null`（自动检测）     |
+| `socket_path`    | Unix socket 路径   | `/tmp/kotori-pet.sock` |
+| `renderer.scale` | 缩放因子           | `0.6`                  |
+| `renderer.fps`   | 帧率               | `10`                   |
+| `state_map`      | 事件→动画+台词映射 | 见配置文件             |
+| `menu.items`     | 右键菜单项         | 默认仅关闭宠物         |
 
 ## 脚本说明
 
 入口脚本按平台分目录：`scripts/macos/`（`*.sh`）与 `scripts/windows/`（`*.ps1`），两套一一对应。
 
-| 脚本（macOS / Windows） | 用途 |
-|---|---|
-| `setup.sh` / `setup.ps1` | 全流程：安装依赖 → 生成配置 → 配置 hooks → 编译 → 启动 |
-| `setup-hooks.sh` / `setup-hooks.ps1` | 单独配置 hooks（Claude Code + Codex + OpenCode）|
-| `build-and-run.sh` / `build-and-run.ps1` | 单独编译并重启渲染器 |
+| 脚本（macOS / Windows）                  | 用途                                                   |
+| ---------------------------------------- | ------------------------------------------------------ |
+| `setup.sh` / `setup.ps1`                 | 全流程：安装依赖 → 生成配置 → 配置 hooks → 编译 → 启动 |
+| `setup-hooks.sh` / `setup-hooks.ps1`     | 单独配置 hooks（Claude Code + Codex + OpenCode）       |
+| `build-and-run.sh` / `build-and-run.ps1` | 单独编译并重启渲染器                                   |
 
 ## 技术栈
 
-| 层 | 技术 | 说明 |
-|---|---|---|
-| 后端 | Rust + Tauri v2 | 窗口管理、会话聚合、文件/Socket 监听 |
-| 前端 | HTML + CSS + JS | 精灵动画、对话气泡、交互 |
-| 通信 | Tauri Event + IPC | Rust → JS 状态推送 |
-| 构建 | npm + Cargo | 前端依赖 + Rust 编译 |
-| 日志 | `tracing` | 结构化日志，支持 `RUST_LOG` 环境变量 |
+| 层   | 技术              | 说明                                 |
+| ---- | ----------------- | ------------------------------------ |
+| 后端 | Rust + Tauri v2   | 窗口管理、会话聚合、文件/Socket 监听 |
+| 前端 | HTML + CSS + JS   | 精灵动画、对话气泡、交互             |
+| 通信 | Tauri Event + IPC | Rust → JS 状态推送                   |
+| 构建 | npm + Cargo       | 前端依赖 + Rust 编译                 |
+| 日志 | `tracing`         | 结构化日志，支持 `RUST_LOG` 环境变量 |
 
 ## 安全设计
 
-| 方面 | 措施 |
-|---|---|
-| **Socket 权限** | Unix socket 文件权限 `0o600`，仅 owner 可连接，防止本地其他用户注入伪造状态 |
-| **Socket 启动安全** | 先 connect 探活再 remove + bind，避免 `/tmp` 下 TOCTOU symlink 攻击 |
-| **路径校验** | `read_file_bytes` / `read_frames_batch` 校验请求路径在 `frames_dir` 内，防止 webview 任意文件读取 |
-| **AppleScript 沙箱** | `run_applescript` command 拒绝包含 `do shell script`、`do script` 或反引号的脚本，防止任意命令执行 |
-| **Socket 退出清理** | `quit_app` 在 `app.exit()` 前显式删除 socket 文件（`app.exit()` 走 `process::exit()`，会跳过 Rust 的 `Drop`）；`SocketGuard` 兜底 panic 解退路径；启动探活兜底 crash/kill 后的残留文件 |
-| **最小权限** | capabilities 仅声明实际需要的窗口操作和事件权限，不含 `shell:allow-execute` |
-| **Payload 限制** | socket 接收上限 64KB，防止恶意超大 payload |
-| **无 shell 拼接** | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除与 5s 一次性窗口兜底）由 Rust 后端统一管理（socket 通道 + 文件扫描），无注入面 |
-| **Mutex 安全** | ActivityAggregator 所有可变状态合并为单个 `Mutex<Inner>`，消除死锁风险 |
+| 方面                 | 措施                                                                                                                                                                                     |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Socket 权限**      | Unix socket 文件权限 `0o600`，仅 owner 可连接，防止本地其他用户注入伪造状态                                                                                                              |
+| **Socket 启动安全**  | 先 connect 探活再 remove + bind，避免 `/tmp` 下 TOCTOU symlink 攻击                                                                                                                      |
+| **路径校验**         | `read_file_bytes` / `read_frames_batch` 校验请求路径在 `frames_dir` 内，防止 webview 任意文件读取                                                                                        |
+| **AppleScript 沙箱** | `run_applescript` command 拒绝包含 `do shell script`、`do script` 或反引号的脚本，防止任意命令执行                                                                                       |
+| **Socket 退出清理**  | `quit_app` 在 `app.exit()` 前显式删除 socket 文件（`app.exit()` 走 `process::exit()`，会跳过 Rust 的 `Drop`）；`SocketGuard` 兜底 panic 解退路径；启动探活兜底 crash/kill 后的残留文件   |
+| **最小权限**         | capabilities 仅声明实际使用的窗口操作权限（`start-dragging` / `set-position` / `set-size` / `set-ignore-cursor-events`），事件权限由 `core:default` 统一授予，不含 `shell:allow-execute` |
+| **Payload 限制**     | socket 接收上限 64KB，防止恶意超大 payload                                                                                                                                               |
+| **无 shell 拼接**    | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除与 5s 一次性窗口兜底）由 Rust 后端统一管理（socket 通道 + 文件扫描），无注入面                                 |
+| **Mutex 安全**       | ActivityAggregator 所有可变状态合并为单个 `Mutex<Inner>`，消除死锁风险                                                                                                                   |
+
+## IPC 与权限模型
+
+后端通过 `#[tauri::command]` 暴露 8 个命令，全部在 `lib.rs` 的 `generate_handler!` 注册：
+
+| 命令                 | 方向      | 用途                                                                    |
+| -------------------- | --------- | ----------------------------------------------------------------------- |
+| `get_config`         | JS ← Rust | 返回渲染所需的配置快照（帧目录、缩放、帧率、样式映射、菜单等）          |
+| `read_file_bytes`    | JS → Rust | 读单帧 PNG 原始字节（绕过 WKWebView 画布污染，构造 untainted blob URL） |
+| `read_frames_batch`  | JS → Rust | 批量读 55+ 帧（alpha-mask 计算，单次 IPC 替代多次往返）                 |
+| `cursor_in_window`   | JS → Rust | 光标相对窗口客户区的逻辑像素坐标（hit-test 透传）                       |
+| `run_applescript`    | JS → Rust | 执行 osascript（仅 macOS，拦截 `do shell script` 等危险模式）           |
+| `purge_all_sessions` | JS → Rust | 三连击清空全部会话，返回删除文件数                                      |
+| `quit_app`           | JS → Rust | 退出前显式删除 socket 文件，再 `app.exit(0)`                            |
+| `js_log`             | JS → Rust | JS console 桥接到 Rust `tracing` 日志流                                 |
+
+- **状态推送**：Rust 经 `app_handle.emit("state-change", ...)` 推送聚合后的显示态；JS 用 `listen("state-change", ...)` 订阅。
+- **阻塞 I/O 离主线程**：`read_file_bytes` / `read_frames_batch` 为 `async` + `spawn_blocking`，文件系统调用不阻塞 webview 主线程或异步 worker。
+- **权限**：`capabilities/default.json` 声明 `core:default`（含事件 listen/emit）+ 四个实际使用的 `core:window:*` 细粒度权限，无 `shell:*`。
+
+> Tauri v2 合规的逐项核对见 [tauri-v2-compliance.md](tauri-v2-compliance.md)。

@@ -369,8 +369,18 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   let dragStart = null;
   let isDragging = false;
   let lastDragScreenX = null; // last consumed cursor X for incremental drag-delta
+  let lastWindowX = null; // last window outerPosition().x (logical px) for drag-direction polling
+  let dragScaleFactor = 1; // window scale factor, cached at drag start
   let dragMomX = 0; // low-pass-filtered horizontal velocity for stable direction
+  let dragStartedAt = 0; // performance.now() when startDragging() was called
   const DRAG_THRESHOLD = 3;
+  // On Windows, startDragging() re-activates the window and fires a `focus`
+  // event a few ms later. That focus would otherwise hit the "reset stuck drag"
+  // guard below and abort the drag before its first rAF tick — so any focus
+  // arriving within this window of the drag start is treated as drag-induced
+  // and ignored. macOS fires focus on the *initial* click (before the drag
+  // threshold), so it never collides with startDragging and is unaffected.
+  const DRAG_FOCUS_GRACE_MS = 300;
   // Per-frame dx is jittery during the OS drag loop (sub-pixel noise, uneven
   // mousemove delivery), so feeding its raw sign flickered the run animation
   // left↔right and reset it on every flip (looked like stutter). dragMomX
@@ -414,6 +424,7 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
     dragStart = null;
     isDragging = false;
     lastDragScreenX = null;
+    lastWindowX = null;
     dragMomX = 0;
     if (reenableHitTest) {
       hitTestEnabled = true;
@@ -916,8 +927,15 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   // hands control to the OS's native window-drag loop, which only honors the
   // call within the trusted user-gesture event. The previous code called it
   // from a requestAnimationFrame callback (one frame later, outside the event
-  // stack), so the OS ignored it and the pet wouldn't move. The rAF loop below
-  // now only throttles the directional *animation*, not the drag itself.
+  // stack), so the OS ignored it and the pet wouldn't move.
+  //
+  // NOTE: the direction *animation* is NOT driven by mousemove anymore. On
+  // Windows, startDragging() enters a modal Win32 drag loop that captures all
+  // mouse input, so the webview stops receiving mousemove during the drag
+  // (tauri#10767). The old code read e.screenX deltas from mousemove, so on
+  // Windows dragMomX stayed ~0 and the run-left/right animation never fired.
+  // The rAF loop below now polls the window's own outerPosition() — the thing
+  // actually being dragged — which is readable on every platform.
   let pendingMove = null;
   document.addEventListener("mousemove", (e) => {
     const bodyAlpha = checkHoverBodyAlphaAtCss(e.clientX, e.clientY);
@@ -937,7 +955,18 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         isDragging = true;
         lastDragScreenX = e.screenX; // seed incremental tracking at drag start
+        lastWindowX = null; // seeded on first rAF tick via outerPosition()
+        dragScaleFactor = 1;
         dragMomX = 0;
+        dragStartedAt = performance.now();
+        // Cache scale factor (async) for converting physical px → logical.
+        appWindow
+          .scaleFactor()
+          .then((sf) => {
+            dragScaleFactor = sf || 1;
+            jsLog("info", "Drag", `scaleFactor=${sf} cached`);
+          })
+          .catch(() => {});
         jsLog("info", "Drag", "startDragging called");
         appWindow.startDragging().catch((error) => {
           console.warn("[Drag] startDragging failed:", error);
@@ -954,16 +983,29 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
 
   // On-demand rAF loop — only runs while dragging, not permanently.
   let rafId = null;
-  const processMove = () => {
-    if (pendingMove && isDragging) {
-      const e = pendingMove;
+  const processMove = async () => {
+    if (isDragging) {
+      let dx = 0;
+      // Primary signal: the window's own horizontal motion. This works on
+      // Windows where mousemove is suppressed during the OS drag loop, and is
+      // equivalent on macOS/Linux. outerPosition() is physical px, so divide
+      // by scale factor to get logical px matching the original thresholds.
+      try {
+        const pos = await appWindow.outerPosition();
+        const curX = pos.x / dragScaleFactor;
+        if (lastWindowX !== null) {
+          dx = curX - lastWindowX;
+        }
+        lastWindowX = curX;
+      } catch {
+        // outerPosition() unavailable — fall back to the last mousemove.
+        if (pendingMove) {
+          if (lastDragScreenX === null) lastDragScreenX = pendingMove.screenX;
+          dx = pendingMove.screenX - lastDragScreenX;
+          lastDragScreenX = pendingMove.screenX;
+        }
+      }
       pendingMove = null;
-      // Incremental delta since the last consumed frame (NOT cumulative from
-      // dragStart) — so reversing the mouse flips the run direction instead
-      // of waiting for the cumulative displacement to cross zero.
-      if (lastDragScreenX === null) lastDragScreenX = e.screenX;
-      const dx = e.screenX - lastDragScreenX;
-      lastDragScreenX = e.screenX;
       // Smooth dx into a velocity (dragMomX) and only commit a direction once
       // it exceeds threshold. Raw dx flickers sign during a drag, which made
       // the animation flip and stutter; momentum filters that out while still
@@ -1064,9 +1106,19 @@ function setupInteractions(animator, contextMenu, bubble, petSprite) {
   window.addEventListener("focus", () => {
     animator.setFocused(true);
     if (isDragging) {
-      console.log("[Drag] Reset stuck drag state on window focus");
-      jsLog("warn", "Drag", "Reset stuck drag state on window focus");
-      resetDragState();
+      // Ignore the focus burst that startDragging() itself causes (notably on
+      // Windows, where it re-activates the window ~4ms later). Without this,
+      // that focus aborts the drag on its first tick and the run-left/right
+      // animation never gets a chance to play. A genuinely stuck drag (mouseup
+      // lost after a real native drag) still gets caught: that focus lands far
+      // outside the grace window.
+      if (performance.now() - dragStartedAt < DRAG_FOCUS_GRACE_MS) {
+        jsLog("info", "Drag", "focus within drag-start grace — ignored");
+      } else {
+        console.log("[Drag] Reset stuck drag state on window focus");
+        jsLog("warn", "Drag", "Reset stuck drag state on window focus");
+        resetDragState();
+      }
     }
     armNormalHitTestPolling();
   });
