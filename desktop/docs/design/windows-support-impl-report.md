@@ -85,9 +85,14 @@
 
 这是「装在哪」决策的中枢：
 
-- **Python 探测** `detect_python_command`：Windows 候选 `python` → `py -3` → `python3`；`shutil.which` 找绝对路径，必要时加引号。**从不硬编码 `python`**。
+- **Python 探测** `detect_python_command`：Windows 候选 `python` → `py -3` → `python3`。**不是直接返回裸字符串 `"python"`**——每个候选过一层 `resolve_command`，用 `shutil.which` 把解释器名解析成 **`python.exe` 的绝对路径**，再 `quote_command_part` 在路径含空格/引号时套双引号。所以最终 `python_command` 形如 `"C:\Users\...\Python314\python.exe"`，不依赖 hook runner 当前的 PATH 顺序（Windows 上 `python` 可能指向 Store 占位符 / Anaconda 等），**从不硬编码 `python`**。
 - **WSL 特例**：Windows 上若 Claude Code 在 WSL/bash 里跑，把 `C:\...` 转成 `/mnt/c/...` 并验证 WSL 里有 `python3`。
-- **hook 命令三分支**：① Windows+WSL Python → WSL 风格；② Windows+原生 Python → `python "D:\...\claude_hook.py"`；③ macOS/Linux → 沿用 `pet-hook.sh`。
+- **hook 命令三分支**（[setup_hooks.py:403-411](../../cross-platform/hooks/scripts/setup_hooks.py#L403-L411)，优先级从上到下）：
+  1. Windows + WSL python → WSL 风格：`python3 "/mnt/d/.../claude_hook.py"`
+  2. Windows + 原生 python → 原生风格：`"<绝对路径>\python.exe" "<绝对路径>\claude_hook.py"`（即 `f'{python_command} {quote_command_part(claude_script)}'`，`python_command` 与脚本路径都是解析后的绝对路径并加引号）
+  3. macOS / Linux → 沿用 `pet-hook.sh claude-code` / `pet-hook.sh codex`
+
+  判定顺序的关键：`detect_wsl_python_for_path`（[L152-157](../../cross-platform/hooks/scripts/setup_hooks.py#L152-L157)）先于原生分支——只要 Windows 宿主上有 `bash` 且 WSL 里有 `python3`，就优先生成 WSL 命令（推断用户在用 WSL 版 agent）。这个推断偏武断（装了 WSL ≠ agent 在 WSL 里），但覆盖了 WSL2 路径。
 - **Codex 多平台字段**：除 `command` 外，`command_windows` 有值时额外写 `commandWindows`（Codex schema 区分平台的 key）。清理时同时匹配 `command`/`commandWindows`/`command_windows` 三种历史写法。
 - **配置路径**：**不是** `~/.claude` → `%USERPROFILE%\.claude` 的字符串替换，而是依赖 `Path.expanduser()` 跨平台解析，并支持 `CLAUDE_CONFIG_DIR`/`CODEX_HOME`/`OPENCODE_CONFIG_DIR` 环境变量覆盖。
 - **缺工具不报错**：`is_tool_available` 探测 Claude/Codex 是否安装，缺失则 skip 并打印清单。
