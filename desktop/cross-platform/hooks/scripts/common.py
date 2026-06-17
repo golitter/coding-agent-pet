@@ -4,6 +4,7 @@ import json
 import os
 import socket
 import sys
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,7 +22,8 @@ def exit_quietly(output=None):
 def read_stdin_json(fallback_output=None):
     """Read JSON from stdin; exit quietly when the hook payload is unusable."""
     try:
-        return json.load(sys.stdin)
+        raw = sys.stdin.buffer.read()
+        return json.loads(raw.decode('utf-8-sig'))
     except Exception:
         exit_quietly(fallback_output)
 
@@ -41,7 +43,7 @@ def platform_dir_from_script(script_file):
 
 
 def load_json_file(path):
-    with open(path, 'r') as file_obj:
+    with open(path, 'r', encoding='utf-8') as file_obj:
         return json.load(file_obj)
 
 
@@ -88,10 +90,29 @@ def resolve_path_from_base(config_value, base_dir, *fallback_parts):
     return str(Path(base_dir).joinpath(*fallback_parts))
 
 
+def default_event_endpoint(config):
+    endpoint = config.get('event_endpoint')
+    if isinstance(endpoint, str) and endpoint.strip():
+        return endpoint.strip()
+    socket_path = config.get('socket_path')
+    if os.name == 'nt' or is_wsl():
+        return 'tcp://127.0.0.1:17361'
+    return socket_path or '/tmp/kotori-pet.sock'
+
+
+def is_wsl():
+    if os.environ.get('WSL_DISTRO_NAME') or os.environ.get('WSL_INTEROP'):
+        return True
+    try:
+        return 'microsoft' in Path('/proc/version').read_text(encoding='utf-8').lower()
+    except Exception:
+        return False
+
+
 def atomic_write_json(path, payload):
     """Write JSON atomically via a temp file."""
     tmp_path = f'{path}.tmp'
-    with open(tmp_path, 'w') as file_obj:
+    with open(tmp_path, 'w', encoding='utf-8') as file_obj:
         json.dump(payload, file_obj, ensure_ascii=False, indent=2)
     os.replace(tmp_path, path)
 
@@ -104,7 +125,7 @@ def write_session(session_file, payload):
         pass
 
 
-def push_socket(socket_path, payload):
+def push_unix_socket(socket_path, payload):
     """Best-effort push of payload JSON to Unix socket."""
     try:
         if not os.path.exists(socket_path):
@@ -118,6 +139,29 @@ def push_socket(socket_path, payload):
         pass
 
 
+def push_tcp(endpoint, payload):
+    """Best-effort push of payload JSON to a loopback TCP endpoint."""
+    try:
+        parsed = urllib.parse.urlparse(endpoint)
+        host = parsed.hostname or '127.0.0.1'
+        port = parsed.port
+        if port is None:
+            return
+        sock = socket.create_connection((host, port), timeout=0.1)
+        sock.sendall(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+        sock.close()
+    except Exception:
+        pass
+
+
+def push_event(endpoint, payload):
+    """Best-effort event push. One connection carries one JSON payload."""
+    if isinstance(endpoint, str) and endpoint.startswith('tcp://'):
+        push_tcp(endpoint, payload)
+    elif os.name != 'nt':
+        push_unix_socket(endpoint, payload)
+
+
 def resolve_state(hook_event, state_map):
     """Map a hook event to pet state and dialogue."""
     if hook_event == 'PostToolUse':
@@ -129,7 +173,8 @@ def append_debug_log(log_path, **fields):
     if not log_path:
         return
     try:
-        with open(log_path, 'a') as log_file:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, 'a', encoding='utf-8') as log_file:
             log_file.write(json.dumps(fields, ensure_ascii=False) + '\n')
     except Exception:
         pass
@@ -161,7 +206,7 @@ def process_event(platform_dir, source, hook_event, session_id, tool_name,
         'runtime',
         'sessions',
     )
-    socket_path = config.get('socket_path') or '/tmp/kotori-pet.sock'
+    event_endpoint = default_event_endpoint(config)
     state_map = config.get('state_map', {})
     terminal_events = set(config.get('terminal_events', ['StopFailure']))
 
@@ -199,10 +244,10 @@ def process_event(platform_dir, source, hook_event, session_id, tool_name,
         session_id=session_id,
         state=pet_state,
         dialogue=dialogue,
-        socket_exists=os.path.exists(socket_path),
+        event_endpoint=event_endpoint,
         sessions_dir=sessions_dir,
     )
 
     session_file = os.path.join(sessions_dir, session_id + '.json')
     write_session(session_file, payload)
-    push_socket(socket_path, payload)
+    push_event(event_endpoint, payload)

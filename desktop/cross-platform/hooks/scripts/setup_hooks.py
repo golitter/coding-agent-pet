@@ -4,9 +4,11 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 CLAUDE_EVENTS = [
     'Notification', 'PermissionRequest', 'PostToolUse', 'PreCompact',
@@ -29,6 +31,8 @@ LEGACY_HOOK_FRAGMENTS = [
     'pet-hook.sh claude-code',
     'pet-hook.sh codex',
     'pet-codex-hook.sh',
+    'claude_hook.py',
+    'codex_hook.py',
 ]
 
 
@@ -38,20 +42,27 @@ class HookTarget:
     settings_path: str
     command: str
     events: list[str]
+    executable_names: list[str]
+    command_windows: Optional[str] = None
+
+
+def is_windows():
+    return os.name == 'nt'
 
 
 def load_json(path, default=None):
     try:
-        with open(path, 'r') as file_obj:
+        with open(path, 'r', encoding='utf-8') as file_obj:
             return json.load(file_obj)
     except FileNotFoundError:
         return {} if default is None else default
 
 
 def atomic_write(path, content):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp_path = f'{path}.tmp'
     try:
-        with open(tmp_path, 'w') as file_obj:
+        with open(tmp_path, 'w', encoding='utf-8') as file_obj:
             file_obj.write(content)
         os.replace(tmp_path, path)
     except Exception:
@@ -79,6 +90,133 @@ def load_app_config(platform_dir):
     sys.exit(1)
 
 
+def quote_command_part(value):
+    text = str(value)
+    if re.search(r'\s|"', text):
+        return '"' + text.replace('"', '\\"') + '"'
+    return text
+
+
+def split_command(command):
+    return command.split()
+
+
+def to_forward_slash(path):
+    """Convert backslashes to forward slashes.
+
+    Claude Code/Codex execute hooks via sh on Windows, where backslashes are
+    escape characters and silently mangle D:\\path\\to\\exe into D:pathtoexe.
+    Forward slashes parse correctly under both sh and cmd.
+    """
+    return str(path).replace('\\', '/')
+
+
+def validate_python_command(command):
+    """Return True if `command` launches a working Python 3 interpreter.
+
+    Actually runs `<command> --version` (rather than just trusting
+    shutil.which / Get-Command) so we catch App Execution Alias stubs that
+    'exist' on PATH but open the Microsoft Store instead of running python,
+    and broken absolute paths. This is the gate that lets us fail loudly
+    BEFORE writing an unusable hook into settings.json.
+    """
+    parts = split_command(command)
+    if not parts:
+        return False
+    if not shutil.which(parts[0]) and not os.path.isabs(parts[0]):
+        # Bare name not on PATH and not an absolute path → can't resolve.
+        return False
+    if os.path.isabs(parts[0]) and not os.path.exists(parts[0]):
+        return False
+    try:
+        result = subprocess.run(
+            parts + ['--version'],
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode != 0:
+        return False
+    # python 2 prints to stderr; python 3 prints "Python 3.x" to stdout (or
+    # stderr on some builds). Accept either, but reject Python 2.
+    combined = (result.stdout + result.stderr).decode('utf-8', 'replace')
+    return 'Python 3' in combined or combined.strip().startswith('3.')
+
+
+def detect_python_command(config_value=None):
+    """Resolve and validate the python command to embed in hook configs.
+
+    Two modes, both validated via validate_python_command():
+
+    1. Explicit (``hooks.python_command`` in config.json, or the
+       KOTORI_PET_PYTHON env var): the user pins the exact command. This is
+       the recommended path on Windows — it sidesteps conda/PATH drift (a
+       hook written while conda base was active would otherwise hardcode the
+       conda python's absolute path and break on the next env switch). If the
+       pinned command fails validation, we exit with a clear error rather
+       than silently writing a dead hook.
+
+    2. Auto-detect (config value empty): probe candidate bare names and pick
+       the first that validates. Bare names are portable across python
+       upgrades, at the cost of depending on PATH containing python when the
+       hook runs.
+
+    Returns the validated command string (bare name or forward-slashed
+    path), or None when auto-detect finds nothing.
+    """
+    explicit = (config_value or os.environ.get('KOTORI_PET_PYTHON') or '').strip()
+    if explicit:
+        if not validate_python_command(explicit):
+            print(f'[setup-hooks] ERROR: configured python_command does not work: {explicit!r}', file=sys.stderr)
+            print('              `<command> --version` did not return Python 3.', file=sys.stderr)
+            print('              Fix hooks.python_command in config.json (or uninstall the bad', file=sys.stderr)
+            print('              python), then rerun setup.', file=sys.stderr)
+            sys.exit(1)
+        return to_forward_slash(explicit) if os.path.isabs(explicit) else explicit
+
+    candidates = ('python', 'py -3', 'python3') if is_windows() else ('python3', 'python')
+    for candidate in candidates:
+        if validate_python_command(candidate):
+            return candidate
+    return None
+
+
+def build_command(parts):
+    return ' '.join(quote_command_part(part) for part in parts)
+
+
+def default_claude_settings():
+    override = os.environ.get('CLAUDE_CONFIG_DIR')
+    if override:
+        return str(Path(override).expanduser() / 'settings.json')
+    return str(Path('~/.claude/settings.json').expanduser())
+
+
+def default_codex_hooks():
+    override = os.environ.get('CODEX_HOME')
+    if override:
+        return str(Path(override).expanduser() / 'hooks.json')
+    return str(Path('~/.codex/hooks.json').expanduser())
+
+
+def default_opencode_plugins_dir():
+    override = os.environ.get('OPENCODE_CONFIG_DIR')
+    if override:
+        return str(Path(override).expanduser() / 'plugins')
+    return str(Path('~/.config/opencode/plugins').expanduser())
+
+
+def config_path_or_default(value, default_value):
+    if isinstance(value, str) and value.strip():
+        return os.path.expanduser(value)
+    return default_value
+
+
+def is_tool_available(names):
+    return any(shutil.which(name) for name in names)
+
+
 def is_managed_pet_command(command, expected_command):
     fragments = LEGACY_HOOK_FRAGMENTS + [expected_command]
     return any(fragment in command for fragment in fragments)
@@ -90,6 +228,8 @@ def filter_out_pet_hooks(entries, expected_command):
         hooks = entry.get('hooks', [])
         managed_hook_found = any(
             is_managed_pet_command(hook.get('command', ''), expected_command)
+            or is_managed_pet_command(hook.get('commandWindows', ''), expected_command)
+            or is_managed_pet_command(hook.get('command_windows', ''), expected_command)
             for hook in hooks
         )
         if not managed_hook_found:
@@ -104,56 +244,22 @@ def install_event_hooks(settings, target):
         hooks_section[event_name] = filter_out_pet_hooks(entries, target.command)
 
     for event_name in target.events:
-        hooks_section.setdefault(event_name, []).append({
-            'hooks': [{
-                'command': target.command,
-                'type': 'command',
-            }]
-        })
+        hook = {
+            'command': target.command,
+            'type': 'command',
+        }
+        if target.command_windows:
+            hook['commandWindows'] = target.command_windows
+        hooks_section.setdefault(event_name, []).append({'hooks': [hook]})
 
 
 def setup_platform(target):
-    """Register the pet hook in Claude Code or Codex settings."""
-    print(f'更新 {target.name} hooks...')
+    print(f'Updating {target.name} hooks...')
     settings = load_json(target.settings_path, default={})
     install_event_hooks(settings, target)
     atomic_write_json(target.settings_path, settings)
-    print(f'  已写入 {len(target.events)} 个事件到 {target.settings_path}')
-
-
-def main():
-    platform_dir = Path(sys.argv[1])
-    config, config_source = load_app_config(platform_dir)
-
-    hook_dir = str(platform_dir / 'hooks')
-    hook_script = os.path.join(hook_dir, 'pet-hook.sh')
-    claude_hook = f'{hook_script} claude-code'
-    codex_hook = f'{hook_script} codex'
-
-    hooks_config = config.get('hooks', {})
-    claude_settings = os.path.expanduser(hooks_config.get('claude_code_settings', '~/.claude/settings.json'))
-    codex_settings = os.path.expanduser(hooks_config.get('codex_hooks', '~/.codex/hooks.json'))
-
-    print(f'使用配置文件: {config_source}')
-
-    targets = [
-        HookTarget('Claude Code', claude_settings, claude_hook, CLAUDE_EVENTS),
-        HookTarget('Codex', codex_settings, codex_hook, CODEX_EVENTS),
-    ]
-
-    for target in targets:
-        setup_platform(target)
-
-    enable_codex_pet_hooks(codex_settings, codex_hook, CODEX_EVENTS)
-    warn_untrusted_codex_hooks(codex_settings, codex_hook, CODEX_EVENTS)
-    setup_opencode(platform_dir, hooks_config)
-
-    print()
-    print('Hook 配置完成。')
-    print(f'  Claude Code 配置: {claude_settings}')
-    print(f'  Codex 配置:       {codex_settings}')
-    print('  如果 Codex 里的宠物还没反应，请在 Codex 中运行 /hooks，把 pet hook Trust/Enable 一次。')
-    print('  新写入的 hooks 往往要在新会话或重启后才会稳定生效。')
+    print(f'  Wrote {len(target.events)} events to {target.settings_path}')
+    return target.name, target.settings_path
 
 
 def normalize_codex_event(event_name):
@@ -204,14 +310,10 @@ def codex_hook_state_key(settings_path, event_name, matcher_index, hook_index):
 
 
 def enable_codex_pet_hooks(settings_path, hook_cmd, events):
-    """Auto-enable already trusted Codex pet hook state entries.
-
-    This does not invent trust hashes. It only adds `enabled = true` to the
-    exact pet hook sections that Codex has already materialized in config.toml.
-    """
+    """Auto-enable already trusted Codex pet hook state entries."""
     config_toml = Path(settings_path).with_name('config.toml')
     try:
-        text = config_toml.read_text()
+        text = config_toml.read_text(encoding='utf-8')
     except OSError:
         return
 
@@ -245,17 +347,17 @@ def enable_codex_pet_hooks(settings_path, hook_cmd, events):
     if enabled_count == 0:
         return
 
-    atomic_write(config_toml, text)
-    print(f'  已自动启用 {enabled_count} 个 Codex hook 状态')
+    atomic_write(str(config_toml), text)
+    print(f'  Auto-enabled {enabled_count} trusted Codex hook state entries')
 
 
 def warn_untrusted_codex_hooks(settings_path, hook_cmd, events):
     """Best-effort diagnostic for Codex's review/trust gate."""
     config_toml = str(Path(settings_path).with_name('config.toml'))
     try:
-        text = Path(config_toml).read_text()
+        text = Path(config_toml).read_text(encoding='utf-8')
     except OSError:
-        print('  Codex 的 config.toml 还不存在；先启动一次 Codex，再到 /hooks 里信任 pet hook 即可。')
+        print('  Codex config.toml does not exist yet; run Codex once, then trust the pet hook in /hooks.')
         return
 
     positions = load_codex_pet_hook_positions(settings_path, hook_cmd, events)
@@ -278,37 +380,153 @@ def warn_untrusted_codex_hooks(settings_path, hook_cmd, events):
             missing.append(event_name)
 
     if missing:
-        print('  Codex hook 已写入，但下面这些事件还没有在 /hooks 中启用或信任:')
+        print('  Codex hook was written, but these events are not enabled/trusted yet:')
         print('    ' + ', '.join(missing))
-        print('    请在 Codex 输入 /hooks，逐项 Trust/Enable 这条命令:')
+        print('    In Codex, run /hooks and Trust/Enable this command:')
         print(f'    {hook_cmd}')
 
 
 def setup_opencode(platform_dir, hooks_config):
     """Deploy OpenCode plugin + companion config file."""
-    opencode_plugins_dir = os.path.expanduser(
-        hooks_config.get('opencode_plugins_dir', '~/.config/opencode/plugins')
+    opencode_plugins_dir = config_path_or_default(
+        hooks_config.get('opencode_plugins_dir'),
+        default_opencode_plugins_dir(),
     )
     src_plugin = str(platform_dir / 'hooks' / 'opencode-plugin.ts')
     dst_plugin = os.path.join(opencode_plugins_dir, 'pet-plugin.ts')
-    companion  = os.path.join(opencode_plugins_dir, '.kotori-pet-config-dir')
+    companion = os.path.join(opencode_plugins_dir, '.kotori-pet-config-dir')
 
     if not os.path.exists(src_plugin):
-        print(f'OpenCode 插件源码不存在，已跳过: {src_plugin}')
-        return
+        print(f'OpenCode plugin source not found, skipped: {src_plugin}')
+        return None
 
-    print('部署 OpenCode 插件...')
+    print('Deploying OpenCode plugin...')
     os.makedirs(opencode_plugins_dir, exist_ok=True)
-
-    # 复制插件（源文件名 opencode-plugin.ts → 部署名 pet-plugin.ts）
     shutil.copy2(src_plugin, dst_plugin)
 
-    # 写入同伴文件：platform dir 绝对路径
-    with open(companion, 'w') as f:
-        f.write(str(platform_dir))
+    with open(companion, 'w', encoding='utf-8') as file_obj:
+        file_obj.write(str(platform_dir.resolve()))
 
-    print(f'  插件已部署到: {dst_plugin}')
-    print(f'  配置文件已写入: {companion}')
+    print(f'  Plugin deployed to: {dst_plugin}')
+    print(f'  Companion config written to: {companion}')
+    return dst_plugin
+
+
+def build_python_hook_command(python_command, script_path):
+    """Build a Windows hook command: `<python> <script.py>` with both parts
+    quoted and the script path forward-slashed so sh (Git Bash, used by
+    Claude Code/Codex to run hooks) doesn't mangle backslashes.
+
+    python_command is either an absolute interpreter path (sys.executable,
+    possibly containing spaces like 'C:/Program Files/.../python.exe') or a
+    bare multi-token command ('py -3'). A path with spaces must stay a single
+    quoted token — splitting on whitespace would shatter it. We distinguish by
+    existence: an existing filesystem path is quoted whole; anything else
+    (e.g. 'py -3') is split into tokens and each token quoted.
+    """
+    if os.path.exists(python_command):
+        python_part = quote_command_part(to_forward_slash(python_command))
+    else:
+        python_part = build_command(split_command(python_command))
+    script_part = quote_command_part(to_forward_slash(script_path))
+    return f'{python_part} {script_part}'
+
+
+def build_targets(platform_dir, config):
+    hooks_config = config.get('hooks', {})
+    hook_dir = str(platform_dir / 'hooks')
+    hook_script = os.path.join(hook_dir, 'pet-hook.sh')
+    python_command = detect_python_command(hooks_config.get('python_command'))
+
+    claude_script = platform_dir / 'hooks' / 'scripts' / 'claude_hook.py'
+    codex_script = platform_dir / 'hooks' / 'scripts' / 'codex_hook.py'
+
+    if is_windows() and python_command:
+        claude_hook = build_python_hook_command(python_command, claude_script)
+        codex_hook = build_python_hook_command(python_command, codex_script)
+    else:
+        claude_hook = f'{hook_script} claude-code'
+        codex_hook = f'{hook_script} codex'
+
+    claude_settings = config_path_or_default(
+        hooks_config.get('claude_code_settings'),
+        default_claude_settings(),
+    )
+    codex_settings = config_path_or_default(
+        hooks_config.get('codex_hooks'),
+        default_codex_hooks(),
+    )
+
+    targets = [
+        HookTarget('Claude Code', claude_settings, claude_hook, CLAUDE_EVENTS, ['claude', 'claude-code']),
+        HookTarget(
+            'Codex',
+            codex_settings,
+            codex_hook,
+            CODEX_EVENTS,
+            ['codex'],
+            command_windows=(
+                build_python_hook_command(python_command, codex_script)
+                if is_windows() and python_command else None
+            ),
+        ),
+    ]
+    return targets, hooks_config, python_command
+
+
+def main():
+    platform_dir = Path(sys.argv[1]).resolve()
+    config, config_source = load_app_config(platform_dir)
+    targets, hooks_config, python_command = build_targets(platform_dir, config)
+
+    print(f'Using config: {config_source}')
+
+    configured = []
+    skipped = []
+
+    if is_windows() and not python_command:
+        print('[setup-hooks] Python 3 not found; Claude/Codex hooks will be skipped.')
+        print('              To pin a specific interpreter, set "python_command" under "hooks"')
+        print('              in config.json (e.g. "python", "py -3", or an absolute path).')
+
+    for target in targets:
+        if not is_tool_available(target.executable_names):
+            skipped.append((target.name, 'command not found'))
+            print(f'Skipping {target.name}: command not found')
+            continue
+        if is_windows() and not python_command:
+            skipped.append((target.name, 'Python 3 not found'))
+            print(f'Skipping {target.name}: Python 3 not found')
+            continue
+        configured.append(setup_platform(target))
+
+    codex_target = next((target for target in targets if target.name == 'Codex'), None)
+    if codex_target and any(name == 'Codex' for name, _ in configured):
+        enable_codex_pet_hooks(codex_target.settings_path, codex_target.command, CODEX_EVENTS)
+        warn_untrusted_codex_hooks(codex_target.settings_path, codex_target.command, CODEX_EVENTS)
+
+    if is_tool_available(['opencode']):
+        deployed = setup_opencode(platform_dir, hooks_config)
+        if deployed:
+            configured.append(('OpenCode', deployed))
+    else:
+        skipped.append(('OpenCode', 'command not found'))
+        print('Skipping OpenCode: command not found')
+
+    print()
+    print('Hook configuration complete.')
+    if configured:
+        print('Configured:')
+        for name, path in configured:
+            print(f'  - {name}: {path}')
+    if skipped:
+        print('Skipped:')
+        for name, reason in skipped:
+            print(f'  - {name}: {reason}')
+        print('Install skipped tools later, then rerun setup-hooks.')
+    if any(name == 'Codex' for name, _ in configured):
+        print('If Codex does not react yet, run /hooks in Codex and Trust/Enable the pet hook once.')
+    print('New hooks usually take effect in new sessions or after restarting the corresponding CLI.')
 
 
 if __name__ == '__main__':

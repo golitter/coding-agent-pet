@@ -1,0 +1,5 @@
+# 行尾规范：覆盖 core.autocrlf，按文件类型固定行尾
+# Windows PowerShell 脚本必须为 CRLF（PS 5.1 解析 LF+中文注释的 .ps1 会出错）
+*.ps1   text eol=crlf
+# Shell 脚本必须为 LF（CRLF 会让 shebang / 路径末尾带 \r，bash 执行失败）
+*.sh    text eol=lf

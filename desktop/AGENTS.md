@@ -23,9 +23,9 @@ desktop/
 │   │   └── scripts/            #   Python 实现 (common + claude_hook + codex_hook + setup_hooks + test_hooks)
 │   ├── runtime/sessions/       #   运行时会话状态（不入 git）
 │   ├── config.example.json     #   配置模板
-│   ├── setup.sh                #   全流程脚本
-│   ├── build-and-run.sh        #   编译重启
-│   └── setup-hooks.sh          #   单独配置 hooks
+│   └── scripts/                #   平台入口脚本（按 OS 分目录）
+│       ├── macos/              #     setup.sh / build-and-run.sh / setup-hooks.sh
+│       └── windows/            #     setup.ps1 / build-and-run.ps1 / setup-hooks.ps1
 └── docs/                       # 技术文档（按主题分目录）
     ├── reference/              #   技术参考（overview / renderer / spritesheet）
     ├── agent-hooks/            #   Hook 集成（events / claude-code / codex / opencode）
@@ -37,9 +37,15 @@ desktop/
 
 ```bash
 cd cross-platform
-./setup.sh                # 全流程
-./build-and-run.sh        # 编译 + 重启
-./setup-hooks.sh          # 配置 hooks
+
+# macOS / Linux
+./scripts/macos/setup.sh          # 全流程
+./scripts/macos/build-and-run.sh  # 编译 + 重启
+./scripts/macos/setup-hooks.sh    # 配置 hooks
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
+
 npx tauri dev             # 开发热重载
 npx tauri build           # 生产构建
 npm run lint:fix          # eslint + prettier 自动修复

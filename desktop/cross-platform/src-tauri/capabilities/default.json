@@ -1,13 +1,12 @@
 {
   "identifier": "default",
-  "description": "Default permissions for KotoriPet",
+  "description": "Default permissions for KotoriPet. core:default already grants the core event permissions (listen/emit/unlisten), so core:event:default is intentionally omitted to avoid a redundant entry.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-position",
     "core:window:allow-set-size",
-    "core:window:allow-set-ignore-cursor-events",
-    "core:event:default"
+    "core:window:allow-set-ignore-cursor-events"
   ]
 }

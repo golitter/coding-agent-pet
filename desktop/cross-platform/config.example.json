@@ -3,6 +3,7 @@
   "pet_id": "kotori-minami",
   "pet_base_dir": null,
   "frames_dir": null,
+  "event_endpoint": null,
   "socket_path": "/tmp/kotori-pet.sock",
   "sessions_dir": null,
   "renderer": {
@@ -29,9 +30,11 @@
     }
   },
   "hooks": {
-    "claude_code_settings": "~/.claude/settings.json",
-    "codex_hooks": "~/.codex/hooks.json",
-    "opencode_plugins_dir": "~/.config/opencode/plugins"
+    "_python_command_comment": "Windows only: the exact command used to run the pet hook scripts. null = auto-detect (python / py -3). Set this (e.g. 'python', 'py -3', or 'C:/Python313/python.exe') to pin a specific interpreter and avoid conda/PATH drift — it is validated with `<cmd> --version` before any hook is written, and setup aborts if it fails.",
+    "python_command": null,
+    "claude_code_settings": null,
+    "codex_hooks": null,
+    "opencode_plugins_dir": null
   },
   "terminal_events": ["StopFailure", "SessionEnd"],
   "state_map": {

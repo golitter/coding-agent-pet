@@ -1,11 +1,23 @@
 import * as fs from "node:fs";
 import * as net from "node:net";
+import * as os from "node:os";
 import * as path from "node:path";
 
-export const DEBUG_LOG = "/tmp/kotori-pet-opencode-debug.log";
 export const DEFAULT_STATE = { state: "idle", dialogue: "" };
 export const POST_TOOL_STATE = { state: "running", dialogue: "处理中..." };
 export const DEFAULT_TERMINAL_EVENTS = ["StopFailure"];
+
+// Debug log path. Default to the OS temp dir (os.tmpdir() is cross-platform:
+// returns %TEMP% on Windows, /tmp on Unix) so early logs written before the
+// platform dir is resolved still succeed — hardcoding /tmp would ENOENT on
+// Windows. Once loadPluginRuntime() resolves the platform dir it calls
+// setDebugLogPath() to pin the log to <platformDir>/runtime/, matching the
+// Python hooks' runtime/ convention.
+let debugLogPath = path.join(os.tmpdir(), "kotori-pet-opencode-debug.log");
+
+export function setDebugLogPath(filePath) {
+  debugLogPath = filePath;
+}
 
 function isDebugEnabled() {
   const raw = process.env.KOTORI_PET_OPENCODE_DEBUG;
@@ -28,7 +40,7 @@ export function debug(message, data) {
   try {
     const suffix = data ? ` ${JSON.stringify(data)}` : "";
     const line = `[${new Date().toISOString()}] ${message}${suffix}\n`;
-    fs.appendFileSync(DEBUG_LOG, line);
+    fs.appendFileSync(debugLogPath, line);
   } catch {
     // Best-effort only.
   }
@@ -84,6 +96,11 @@ export function loadPluginRuntime(importMetaUrl) {
 
     const repoRoot = detectRepoRoot(platformDir);
 
+    // Pin the debug log to <platformDir>/runtime/, matching the Python hooks.
+    // (Earlier logs went to os.tmpdir(); from here on they land next to the
+    // hook-events.log written by claude_hook.py / codex_hook.py.)
+    setDebugLogPath(path.join(platformDir, "runtime", "kotori-pet-opencode-debug.log"));
+
     return {
       platformDir,
       repoRoot,
@@ -99,12 +116,32 @@ export function loadPluginRuntime(importMetaUrl) {
 export function resolvePath(configValue, baseDir, fallbackParts) {
   if (typeof configValue === "string" && configValue.trim()) {
     const expanded = configValue.startsWith("~")
-      ? path.join(process.env.HOME || "/", configValue.slice(1))
+      ? path.join(resolveHomeDir(), configValue.slice(1))
       : configValue;
     return path.isAbsolute(expanded) ? expanded : path.join(baseDir, expanded);
   }
 
   return path.join(baseDir, ...fallbackParts);
+}
+
+function resolveHomeDir() {
+  if (process.platform === "win32") {
+    if (process.env.USERPROFILE) return process.env.USERPROFILE;
+    if (process.env.HOMEDRIVE && process.env.HOMEPATH) {
+      return `${process.env.HOMEDRIVE}${process.env.HOMEPATH}`;
+    }
+  }
+  return process.env.HOME || "/";
+}
+
+export function defaultEventEndpoint(config = {}) {
+  if (typeof config.event_endpoint === "string" && config.event_endpoint.trim()) {
+    return config.event_endpoint.trim();
+  }
+  if (process.platform === "win32") {
+    return "tcp://127.0.0.1:17361";
+  }
+  return config.socket_path || "/tmp/kotori-pet.sock";
 }
 
 export function resolvePetBaseDir(config, repoRoot) {
@@ -159,7 +196,24 @@ export async function writeSession(filePath, payload) {
   }
 }
 
-export function pushSocket(socketPath, payload) {
+function pushTcp(endpoint, payload) {
+  try {
+    const url = new URL(endpoint);
+    const port = Number(url.port);
+    if (!port) return;
+
+    const socket = net.createConnection({ host: url.hostname || "127.0.0.1", port }, () => {
+      socket.write(JSON.stringify(payload), () => socket.end());
+    });
+    socket.setTimeout(100);
+    socket.on("timeout", () => socket.destroy());
+    socket.on("error", () => socket.destroy());
+  } catch {
+    // Best-effort only.
+  }
+}
+
+function pushUnixSocket(socketPath, payload) {
   try {
     if (!fs.existsSync(socketPath)) return;
 
@@ -173,3 +227,15 @@ export function pushSocket(socketPath, payload) {
     // Best-effort only.
   }
 }
+
+export function pushEvent(endpoint, payload) {
+  if (typeof endpoint === "string" && endpoint.startsWith("tcp://")) {
+    pushTcp(endpoint, payload);
+    return;
+  }
+  if (process.platform !== "win32") {
+    pushUnixSocket(endpoint, payload);
+  }
+}
+
+export const pushSocket = pushUnixSocket;

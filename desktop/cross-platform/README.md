@@ -7,12 +7,19 @@
 ```bash
 cd desktop/cross-platform
 cp config.example.json config.json   # 按需修改配置
-bash setup.sh                        # 正式推荐：一键安装 & 启动
+
+# macOS / Linux
+bash scripts/macos/setup.sh          # 正式推荐：一键安装 & 启动
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
 ```
 
-`setup.sh` 自动完成：安装前端依赖 → 生成配置 → 注册 hooks → 编译 → 启动。
-正式使用时，推荐把 `bash setup.sh` 作为标准入口。
-`./build-and-run.sh` 主要用于已经完成初始化后的开发态“编译并重启”。
+入口脚本按平台分目录：`scripts/macos/`（`setup.sh` / `setup-hooks.sh` / `build-and-run.sh`）与 `scripts/windows/`（对应 `.ps1`）。
+
+`setup.sh` / `setup.ps1` 自动完成：安装前端依赖 → 生成配置 → 注册 hooks → 编译 → 启动。
+正式使用时，推荐把对应平台的 `setup` 脚本作为标准入口。
+`build-and-run.*` 主要用于已经完成初始化后的开发态“编译并重启”。
 
 ### 已验证的 AI Coding CLI 版本
 
@@ -84,10 +91,10 @@ OpenCode           → opencode-plugin.ts (TS 插件) ──┘     ├── Ru
 desktop/cross-platform/
 ├── config.example.json   # 配置模板
 ├── config.json           # 你的配置（自动生成，不入版本控制）
-├── setup.sh              # 正式推荐入口（安装依赖 + hooks + 编译 + 启动）
-├── build-and-run.sh      # 开发辅助：编译并重启
-├── setup-hooks.sh        # 配置 hooks（Claude Code + Codex + OpenCode）
 ├── package.json          # 前端依赖（Tauri CLI + API）
+├── scripts/              # 平台入口脚本（按 OS 分目录）
+│   ├── macos/            #   setup.sh / build-and-run.sh / setup-hooks.sh
+│   └── windows/          #   setup.ps1 / build-and-run.ps1 / setup-hooks.ps1
 ├── src/                  # 前端
 │   ├── index.html        #   入口 HTML
 │   ├── main.js           #   主逻辑：窗口管理 + 交互事件
@@ -147,8 +154,8 @@ desktop/cross-platform/
 
 详见 [config.example.json](config.example.json)。修改后：
 
-- 正式使用：运行 `bash setup.sh`
-- 开发时快速重启：运行 `./build-and-run.sh`
+- 正式使用：运行 `bash scripts/macos/setup.sh`（macOS）或 `scripts/windows/setup.ps1`（Windows）
+- 开发时快速重启：运行 `./scripts/macos/build-and-run.sh` 或 `scripts/windows/build-and-run.ps1`
 
 ### 日志
 

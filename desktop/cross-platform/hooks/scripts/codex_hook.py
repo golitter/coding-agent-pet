@@ -2,6 +2,7 @@
 
 import os
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -32,6 +33,7 @@ EVENT_ALIASES = {
 def main():
     platform_dir = platform_dir_from_script(__file__)
     input_data = read_stdin_json(fallback_output='{}')
+    log_path = str(Path(platform_dir) / 'runtime' / 'hook-events.log')
 
     raw_event = first_present(
         input_data,
@@ -58,7 +60,7 @@ def main():
         tool_name=first_present(input_data, 'tool_name', 'tool', 'toolName'),
         cwd=first_present(input_data, 'cwd'),
         extra_context={'raw_event': raw_event},
-        log_path='/tmp/kotori-pet-codex-hook.log',
+        log_path=log_path,
     )
 
     exit_quietly('{}')
