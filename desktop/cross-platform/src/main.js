@@ -7,6 +7,7 @@ import { SpriteAnimator, SPRITE_W, SPRITE_H } from "./animator.js";
 import { DialogueBubble } from "./bubble.js";
 import { createContextMenu } from "./context-menu.js";
 import { setupInteractions } from "./interaction-controller.js";
+import { PermissionSound } from "./permission-sound.js";
 
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow, LogicalSize, LogicalPosition } = window.__TAURI__.window;
@@ -62,14 +63,23 @@ async function main() {
 
   const bubble = new DialogueBubble(bubbleEl, config);
   const menu = createContextMenu(contextMenuEl);
+  const permissionSound = new PermissionSound({ jsLog });
 
   animator.start();
   jsLog("info", "Main", `Animator started - hitTestReady=${animator.hitTestReady}`);
 
   bubble.show("准备好了～", 0, "idle");
 
+  let lastPermissionCue = "";
   const unlistenStateChange = await listen("state-change", (event) => {
-    const { state, dialogue, active_count } = event.payload;
+    const { state, dialogue, active_count, event: hookEvent } = event.payload;
+    const permissionCue =
+      state === "waiting" && hookEvent === "PermissionRequest" ? `${dialogue}|${active_count}` : "";
+    if (permissionCue && permissionCue !== lastPermissionCue) {
+      permissionSound.play();
+    }
+    lastPermissionCue = permissionCue;
+
     if (state !== "idle") {
       animator.stopHoverJump({ showFrame: false });
     }

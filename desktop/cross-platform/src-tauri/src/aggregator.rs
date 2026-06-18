@@ -108,6 +108,7 @@ fn prune_expired_oneshot(path: &Path, now: u64) -> bool {
 pub struct AgentActivity {
     pub state: String,
     pub dialogue: String,
+    pub event: String,
     #[allow(dead_code)]
     pub source: String,
     #[allow(dead_code)]
@@ -118,6 +119,7 @@ pub struct AgentActivity {
 pub struct StateChange {
     pub state: String,
     pub dialogue: String,
+    pub event: String,
     pub active_count: usize,
 }
 
@@ -125,6 +127,7 @@ pub struct StateChange {
 struct AggregatedState {
     current_state: String,
     current_dialogue: String,
+    current_event: String,
     active_count: usize,
 }
 
@@ -182,6 +185,7 @@ impl ActivityAggregator {
                 aggregated: AggregatedState {
                     current_state: "idle".to_string(),
                     current_dialogue: String::new(),
+                    current_event: String::new(),
                     active_count: 0,
                 },
             }),
@@ -201,6 +205,7 @@ impl ActivityAggregator {
         session_id: &str,
         state: &str,
         dialogue: &str,
+        event: &str,
         source: &str,
         is_terminal: bool,
     ) {
@@ -217,6 +222,7 @@ impl ActivityAggregator {
                     AgentActivity {
                         state: state.to_string(),
                         dialogue: dialogue.to_string(),
+                        event: event.to_string(),
                         source: source.to_string(),
                         is_terminal: false,
                     },
@@ -302,6 +308,7 @@ impl ActivityAggregator {
 
             let state = json["state"].as_str().unwrap_or("idle").to_string();
             let dialogue = json["dialogue"].as_str().unwrap_or("").to_string();
+            let event = json["event"].as_str().unwrap_or("").to_string();
             let source = json["source"].as_str().unwrap_or("").to_string();
             let is_terminal = json["isTerminal"].as_bool().unwrap_or(false);
 
@@ -333,6 +340,7 @@ impl ActivityAggregator {
                 AgentActivity {
                     state,
                     dialogue,
+                    event,
                     source,
                     is_terminal: false,
                 },
@@ -524,12 +532,14 @@ impl ActivityAggregator {
             }
 
             let dialogue = json["dialogue"].as_str().unwrap_or("").to_string();
+            let event = json["event"].as_str().unwrap_or("").to_string();
             let source = json["source"].as_str().unwrap_or("").to_string();
             to_upsert.push((
                 stem,
                 AgentActivity {
                     state,
                     dialogue,
+                    event,
                     source,
                     is_terminal: false,
                 },
@@ -552,6 +562,7 @@ impl ActivityAggregator {
                     .map(|existing| {
                         existing.state != act.state
                             || existing.dialogue != act.dialogue
+                            || existing.event != act.event
                             || existing.source != act.source
                     })
                     .unwrap_or(true);
@@ -577,15 +588,18 @@ impl ActivityAggregator {
         if inner.activities.is_empty() {
             let changed = inner.aggregated.current_state != "idle"
                 || !inner.aggregated.current_dialogue.is_empty()
+                || !inner.aggregated.current_event.is_empty()
                 || inner.aggregated.active_count != 0;
             inner.aggregated.current_state = "idle".to_string();
             inner.aggregated.current_dialogue = String::new();
+            inner.aggregated.current_event = String::new();
             inner.aggregated.active_count = 0;
 
             if changed {
                 return Some(StateChange {
                     state: "idle".to_string(),
                     dialogue: String::new(),
+                    event: String::new(),
                     active_count: 0,
                 });
             }
@@ -607,15 +621,18 @@ impl ActivityAggregator {
             .map(|s| s.state.clone())
             .unwrap_or_else(|| "idle".to_string());
         let new_dialogue = best.map(|s| s.dialogue.clone()).unwrap_or_default();
+        let new_event = best.map(|s| s.event.clone()).unwrap_or_default();
         let new_count = inner.activities.len();
 
         let changed = inner.aggregated.current_state != new_state
             || inner.aggregated.current_dialogue != new_dialogue
+            || inner.aggregated.current_event != new_event
             || inner.aggregated.active_count != new_count;
 
         if changed {
             inner.aggregated.current_state = new_state.clone();
             inner.aggregated.current_dialogue = new_dialogue.clone();
+            inner.aggregated.current_event = new_event.clone();
             inner.aggregated.active_count = new_count;
 
             info!(
@@ -626,6 +643,7 @@ impl ActivityAggregator {
             Some(StateChange {
                 state: new_state,
                 dialogue: new_dialogue,
+                event: new_event,
                 active_count: new_count,
             })
         } else {
@@ -670,6 +688,7 @@ mod tests {
         let payload = serde_json::json!({
             "state": state,
             "dialogue": dialogue,
+            "event": "PermissionRequest",
             "source": "codex",
             "isTerminal": false
         });
@@ -683,7 +702,14 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
 
         let aggregator = ActivityAggregator::new(dir.to_string_lossy().to_string(), 3600);
-        aggregator.update("session-1", "running", "处理中...", "codex", false);
+        aggregator.update(
+            "session-1",
+            "running",
+            "处理中...",
+            "PreToolUse",
+            "codex",
+            false,
+        );
 
         let session_path = write_session_file(&dir, "session-1", "waiting", "需要你的授权～");
         aggregator.reconcile_paths(vec![session_path]);
@@ -692,8 +718,10 @@ mod tests {
         let activity = inner.activities.get("session-1").unwrap();
         assert_eq!(activity.state, "waiting");
         assert_eq!(activity.dialogue, "需要你的授权～");
+        assert_eq!(activity.event, "PermissionRequest");
         assert_eq!(inner.aggregated.current_state, "waiting");
         assert_eq!(inner.aggregated.current_dialogue, "需要你的授权～");
+        assert_eq!(inner.aggregated.current_event, "PermissionRequest");
         assert_eq!(inner.aggregated.active_count, 1);
 
         let _ = fs::remove_dir_all(dir);

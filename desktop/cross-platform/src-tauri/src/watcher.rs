@@ -127,7 +127,7 @@ where
     let is_terminal = json["isTerminal"].as_bool().unwrap_or(false);
     let event = json["event"].as_str().unwrap_or("").to_string();
 
-    session_mgr.update(&session_id, &state, &dialogue, &source, is_terminal);
+    session_mgr.update(&session_id, &state, &dialogue, &event, &source, is_terminal);
 
     if event == "Stop" || state == "jumping" || state == "waving" {
         let mgr2 = session_mgr.clone();
