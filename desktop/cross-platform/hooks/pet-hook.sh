@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE="${1:-claude-code}"
-PYTHON_BIN="/usr/bin/python3"
+PYTHON_BIN="${KOTORI_PET_PYTHON:-/usr/bin/python3}"
 
 run_hook() {
     local script_name="$1"

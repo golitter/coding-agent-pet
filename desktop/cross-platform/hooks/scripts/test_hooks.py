@@ -88,6 +88,20 @@ class CommonPathTests(unittest.TestCase):
 
 
 class SetupHooksTests(unittest.TestCase):
+    def test_shell_entrypoints_use_lf_line_endings(self):
+        platform_dir = SCRIPT_DIR.parent.parent
+        shell_files = [
+            platform_dir / 'hooks' / 'pet-hook.sh',
+            platform_dir / 'scripts' / 'macos' / 'setup.sh',
+            platform_dir / 'scripts' / 'macos' / 'setup-hooks.sh',
+            platform_dir / 'scripts' / 'macos' / 'build-and-run.sh',
+        ]
+
+        for shell_file in shell_files:
+            with self.subTest(path=shell_file):
+                data = shell_file.read_bytes()
+                self.assertNotIn(b'\r\n', data)
+
     def test_install_event_hooks_replaces_managed_entries_and_keeps_foreign_ones(self):
         target = setup_hooks.HookTarget(
             name='Codex',
@@ -195,6 +209,35 @@ class SetupHooksTests(unittest.TestCase):
             setup_hooks.config_path_or_default(None, '/default/path'),
             '/default/path',
         )
+
+    def test_setup_opencode_deploys_plugin_shared_module_and_companion(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            platform_dir = Path(temp_dir) / 'desktop' / 'cross-platform'
+            hooks_dir = platform_dir / 'hooks'
+            plugins_dir = Path(temp_dir) / 'opencode' / 'plugins'
+            hooks_dir.mkdir(parents=True)
+            (hooks_dir / 'opencode-plugin.ts').write_text(
+                'import "./opencode-shared.mjs";\n',
+                encoding='utf-8',
+            )
+            (hooks_dir / 'opencode-shared.mjs').write_text(
+                'export const marker = true;\n',
+                encoding='utf-8',
+            )
+
+            deployed = call_quietly(
+                setup_hooks.setup_opencode,
+                platform_dir,
+                {'opencode_plugins_dir': str(plugins_dir)},
+            )
+
+            self.assertEqual(deployed, str(plugins_dir / 'pet-plugin.ts'))
+            self.assertTrue((plugins_dir / 'pet-plugin.ts').exists())
+            self.assertTrue((plugins_dir / 'opencode-shared.mjs').exists())
+            self.assertEqual(
+                (plugins_dir / '.kotori-pet-config-dir').read_text(encoding='utf-8'),
+                str(platform_dir.resolve()),
+            )
 
 
 class EndpointTests(unittest.TestCase):

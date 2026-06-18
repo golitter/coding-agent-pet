@@ -393,21 +393,28 @@ def setup_opencode(platform_dir, hooks_config):
         default_opencode_plugins_dir(),
     )
     src_plugin = str(platform_dir / 'hooks' / 'opencode-plugin.ts')
+    src_shared = str(platform_dir / 'hooks' / 'opencode-shared.mjs')
     dst_plugin = os.path.join(opencode_plugins_dir, 'pet-plugin.ts')
+    dst_shared = os.path.join(opencode_plugins_dir, 'opencode-shared.mjs')
     companion = os.path.join(opencode_plugins_dir, '.kotori-pet-config-dir')
 
     if not os.path.exists(src_plugin):
         print(f'OpenCode plugin source not found, skipped: {src_plugin}')
         return None
+    if not os.path.exists(src_shared):
+        print(f'OpenCode shared module not found, skipped: {src_shared}')
+        return None
 
     print('Deploying OpenCode plugin...')
     os.makedirs(opencode_plugins_dir, exist_ok=True)
     shutil.copy2(src_plugin, dst_plugin)
+    shutil.copy2(src_shared, dst_shared)
 
     with open(companion, 'w', encoding='utf-8') as file_obj:
         file_obj.write(str(platform_dir.resolve()))
 
     print(f'  Plugin deployed to: {dst_plugin}')
+    print(f'  Shared module deployed to: {dst_shared}')
     print(f'  Companion config written to: {companion}')
     return dst_plugin
 
