@@ -17,6 +17,7 @@ const PERSISTENT_STATES = new Set([
   "waiting",
   "failed",
 ]);
+const VALID_STYLES = new Set(["normal", "warning", "error"]);
 
 export class DialogueBubble {
   constructor(element, config) {
@@ -107,9 +108,10 @@ export class DialogueBubble {
   }
 
   applyStyle(style) {
-    if (this.currentStyle === style) return;
+    const nextStyle = VALID_STYLES.has(style) ? style : "normal";
+    if (this.currentStyle === nextStyle) return;
     this.el.classList.remove("style-normal", "style-warning", "style-error");
-    this.el.classList.add(`style-${style}`);
-    this.currentStyle = style;
+    this.el.classList.add(`style-${nextStyle}`);
+    this.currentStyle = nextStyle;
   }
 }
