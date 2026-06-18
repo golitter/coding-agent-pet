@@ -133,7 +133,7 @@ impl PetConfig {
         let fps = renderer.fps.unwrap_or(10.0);
         let frame_timing = renderer.frame_timing.unwrap_or_default();
         let stale_timeout_sec = renderer.stale_timeout_sec.unwrap_or(3600);
-        let cleanup_interval_sec = renderer.cleanup_interval_sec.unwrap_or(30);
+        let cleanup_interval_sec = sanitize_cleanup_interval_sec(renderer.cleanup_interval_sec);
         let corner_margin = renderer.corner_margin.unwrap_or(20);
 
         let dialogue = raw.dialogue.unwrap_or_default();
@@ -301,6 +301,10 @@ fn default_event_endpoint(_socket_path: Option<String>) -> String {
     }
 }
 
+fn sanitize_cleanup_interval_sec(value: Option<u64>) -> u64 {
+    value.unwrap_or(30).max(1)
+}
+
 /// Walk up from a directory to find the repo root (directory containing the
 /// `desktop/cross-platform/` app source tree — a stable landmark that survives
 /// resource reorganization, unlike pet-specific asset directories).
@@ -325,7 +329,8 @@ fn detect_repo_root(start: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        detect_repo_root, find_config_path, find_cross_platform_dir, join_path_string, resolve_path,
+        detect_repo_root, find_config_path, find_cross_platform_dir, join_path_string,
+        resolve_path, sanitize_cleanup_interval_sec,
     };
     use std::fs;
     use std::path::Path;
@@ -408,5 +413,12 @@ mod tests {
         assert_eq!(detected, root.to_string_lossy());
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn cleanup_interval_is_never_zero() {
+        assert_eq!(sanitize_cleanup_interval_sec(None), 30);
+        assert_eq!(sanitize_cleanup_interval_sec(Some(0)), 1);
+        assert_eq!(sanitize_cleanup_interval_sec(Some(5)), 5);
     }
 }
