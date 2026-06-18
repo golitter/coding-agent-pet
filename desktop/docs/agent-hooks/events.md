@@ -19,7 +19,7 @@
 | `Stop` | `stop` | `session.idle` | ✓ | ✓ | ✓ | `jumping` | 搞定啦！✨ | 一次性动画，**2s 延迟删除**（socket 漏发则 5s 窗口兜底，见第三节） |
 | `StopFailure` | `stop_failure` | `session.error` | ✓ | ✓ | ✓ | `failed` | 呜...出了点问题 | **terminal，立即删除** |
 | `Notification` | `notification` | — | ✓ | ✓ | ✗ | `waving` | 注意哦～ | 一次性动画 |
-| `PermissionRequest` | `permission_request` | `permission.asked` | ✓ | ✓ | ✓ | `waiting` | 需要你的授权～ | 黄色警告气泡 |
+| `PermissionRequest` | `permission_request` | `permission.asked` | ✓ | ✓ | ✓ | `waiting` | 需要你的授权～ | 黄色警告气泡；播放权限提示音；折叠徽标变黄 |
 | `SubagentStop` | `subagent_stop` | — | ✓ | ✓ | ✗ | `idle` | (空) | 回到静息，仍计入 active_count |
 | `PreCompact` | — | `session.compacted` | ✓ | ✗ | ✓ | `waiting` | 整理一下记忆... | **Codex 无此事件** |
 | `SessionEnd` | — | `session.deleted` | ✓ | ✗ | ✓ | `waving` | 下次见！♪ | **Codex 无此事件**，terminal，立即删除 |
@@ -53,7 +53,7 @@
 |---|---|---|---|
 | `UserPromptSubmit` | 用户提交 prompt | 宠物奔跑"收到！开始工作～" | 同左 |
 | `Notification` | 系统通知（如等待用户输入） | 挥手"注意哦～" | 同左 |
-| `PermissionRequest` | 请求工具执行权限 | 等待"需要你的授权～" + 黄色气泡 | 同左 |
+| `PermissionRequest` | 请求工具执行权限 | 等待"需要你的授权～" + 黄色气泡 + 权限提示音；折叠时徽标变黄 | 同左 |
 
 ### 3. 工具调用（tool use）
 

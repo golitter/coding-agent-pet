@@ -2,7 +2,7 @@
 
 ## 背景
 
-Kotori Pet 的 Tauri 窗口是矩形透明窗口。点击窗口内任意位置（包括精灵图透明像素）都会被宠物拦截。期望行为：**点击精灵图的透明区域时，事件穿透到桌面/下层应用**，只有点击到实体像素才触发宠物交互。
+Kotori Pet 的 Tauri 窗口是矩形透明窗口。点击窗口内任意位置（包括精灵图透明像素）都会被宠物拦截。期望行为：**点击精灵图的透明区域时，事件穿透到桌面/下层应用**，只有点击到实体像素或显示中的交互控件（消息气泡、折叠徽标）才触发宠物交互。
 
 ## 方案概述
 
@@ -10,7 +10,7 @@ Kotori Pet 的 Tauri 窗口是矩形透明窗口。点击窗口内任意位置�
 
 动态切换 `window.setIgnoreCursorEvents(true/false)`：
 
-- 光标在实体像素上 → 正常模式，窗口捕获事件
+- 光标在实体像素或消息气泡/折叠徽标上 → 正常模式，窗口捕获事件
 - 光标在透明像素上 → 穿透模式，窗口忽略事件，点击落到桌面
 
 穿透模式下 JS 不再收到鼠标事件，但 **定时器和 IPC 仍正常工作**，通过轮询恢复。
@@ -22,17 +22,19 @@ Kotori Pet 的 Tauri 窗口是矩形透明窗口。点击窗口内任意位置�
   │
   ├─ 正常模式 (ignore=false)
   │   mousemove 事件触发
-  │   → 用 e.clientX/Y 查精灵 alpha（ENTER_THRESHOLD）
+  │   → 用 e.clientX/Y 查交互 alpha（精灵实体像素 + 气泡/徽标矩形）
   │   → alpha < 阈值? ──→ enterPassThrough() + 开始轮询
   │   → 否则 → 继续正常交互
   │
   └─ 穿透模式 (ignore=true)
       定时器 80ms 轮询
       → invoke("cursor_in_window")  [Rust CGEvent，见下]
-      → 检查精灵 alpha（EXIT_THRESHOLD + 连续确认）
+      → 检查交互 alpha（EXIT_THRESHOLD + 连续确认）
       → 连续 2 帧实体 或 离开窗口? → exitPassThrough()
       → 仍透明? → 继续（点击穿透到桌面）
 ```
+
+> 悬停跳跃仍只使用宠物身体 alpha（idle 帧）判断。气泡/徽标是可点击区域，但不会触发宠物跳跃。
 
 ## 三个关键的技术坑（实现时踩到）
 
@@ -109,26 +111,32 @@ extern "C" {
   - try-catch 包裹，失败时 `hitTestReady = false`
 - `getAlphaAt(state, frame, x, y)` — 查 `alphaMasks.get(state)?.[frame]`；**mask 缺失/unready 返回 255**（fail-safe，宠物不会失联）
 
-### 5. `src/main.js` — 穿透控制
+### 5. `src/hit-test.js` + `src/interaction-controller.js` — 穿透控制
 
 **常量：** `ENTER_THRESHOLD=10`、`EXIT_THRESHOLD=20`（双阈值 hysteresis）、`SOLID_CONFIRM_COUNT=2`、`POLL_INTERVAL_MS=80`、`REENTRY_COOLDOWN_MS=200`
 
 **状态：** `isPassThrough`、`applyingPassThrough`（async 防抖锁）、`hitTestEnabled`、`solidHitCount`、`lastExitTime`
 
+`createSpriteHitTester({ interactiveElements })` 同时暴露两类判定：
+
+- `checkHoverBodyAlphaAtCss()`：只查 idle 帧宠物身体 alpha，用于悬停跳跃
+- `getInteractionAlphaAtCss()`：取当前精灵 alpha、idle 身体 alpha、显示中的交互 DOM 元素矩形三者的最大值；`interactiveElements` 目前包含 `bubble.el` 与 `bubble.badgeEl`，确保气泡/徽标可点击且不会被透明窗口穿透
+
 **关键函数：**
 
 - `enterPassThrough()` — 幂等 + 防抖锁 + 重入冷却；`setIgnoreCursorEvents(true)` + startPolling
 - `exitPassThrough()` — 幂等 + 防抖锁；stopPolling + `setIgnoreCursorEvents(false)` + 记录 lastExitTime
-- `pollCursor()` — `invoke("cursor_in_window")` → 用缓存的 `getBoundingClientRect()` 算精灵坐标（resize 时失效）→ 查 alpha → 双阈值+连续确认决定退出
+- `pollCursor()` — `invoke("cursor_in_window")` → 用缓存的 `getBoundingClientRect()` 算精灵坐标（resize 时失效）→ 查交互 alpha → 双阈值+连续确认决定退出
 - `startPolling()` / `stopPolling()` — 链式 `setTimeout`（非 `setInterval`），await 完才调度下一轮，防止 async 重叠
 
-**mousemove 命中检测：** 正常模式下用 `e.clientX/Y` + 缓存的 `getBoundingClientRect()` 查 alpha（缓存 rect 避免 120Hz 布局抖动，`resize` 事件时自动失效），透明则 enterPassThrough
+**mousemove 命中检测：** 正常模式下用 `e.clientX/Y` + 缓存的 `getBoundingClientRect()` 查交互 alpha（缓存 rect 避免 120Hz 布局抖动，`resize` 事件时自动失效），透明则 enterPassThrough
 
 **与现有交互集成：**
 | 交互 | 处理 |
 |---|---|
 | 拖拽 | mousedown → `hitTestEnabled=false` + 若穿透中先退出；mouseup → 恢复 |
 | 右键菜单 | contextmenu → `hitTestEnabled=false`；`hideAllMenus()` → 恢复 |
+| 消息气泡/徽标 | `mousedown` / `mousemove` / `contextmenu` 阻止冒泡；点击气泡折叠，点击徽标展开 |
 | 帧切换 | 轮询每次读 `currentState`+`currentFrameIndex`，天然跟随 |
 
 ## 防抖/稳定性措施

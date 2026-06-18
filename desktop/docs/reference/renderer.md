@@ -38,10 +38,13 @@ RUST_LOG=warn  ./src-tauri/target/debug/kotori-pet   # 仅警告
 | 文件          | 职责                                      |
 | ------------- | ----------------------------------------- |
 | `index.html`  | 主页面，DOM 结构                          |
-| `main.js`     | 入口，窗口设置，交互绑定                  |
+| `main.js`     | 入口，配置加载，状态订阅，模块串联        |
 | `animator.js` | 精灵帧加载 + 动画循环引擎                 |
-| `bubble.js`   | 对话气泡（normal/warning/error 三种样式） |
-| `style.css`   | 全局样式，气泡/菜单/精灵渲染              |
+| `bubble.js`   | 对话气泡（normal/warning/error）+ 折叠徽标 |
+| `interaction-controller.js` | 鼠标交互：悬停/拖动/三连击/穿透切换 |
+| `hit-test.js` | 精灵 alpha 与气泡/徽标命中检测            |
+| `permission-sound.js` | 权限请求提示音播放与 WebAudio 兜底 |
+| `style.css`   | 全局样式，气泡/徽标/菜单/精灵渲染         |
 
 ---
 
@@ -163,7 +166,9 @@ src-tauri/    → cross-platform/    (config 所在目录)
 2. 取优先级最高的会话状态作为显示状态
 3. 取该会话的对话台词显示在气泡中
 4. `active_count` = `inner.activities.len()`，**包含 idle 状态**（"开着"就算 1 个）
-5. `isTerminal: true` 的事件立即删除对应会话
+5. `pending_permission_count` = 当前 `state == "waiting"` 且 `event == "PermissionRequest"` 的会话数；只统计真正等待授权的会话，不会被其它活跃会话继承
+6. `pending_permission_version` 在待处理权限会话集合变化时递增；即使数量仍为 1（权限 A 消失、权限 B 同时出现），前端也能识别为新的权限请求并播放提示音
+7. `isTerminal: true` 的事件立即删除对应会话
 
 ### 状态推送
 
@@ -173,7 +178,10 @@ src-tauri/    → cross-platform/    (config 所在目录)
 pub struct StateChange {
     pub state: String,
     pub dialogue: String,
+    pub event: String,
     pub active_count: usize,
+    pub pending_permission_count: usize,
+    pub pending_permission_version: u64,
 }
 ```
 
@@ -202,7 +210,9 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 `stale_timeout_sec` 默认 1h 的取舍：覆盖阅读/思考/长工具调用等合法静默期；崩溃会话最多残留 1h 后被磁盘反向清理收尸。详见 [bugfix/active-count-undercount.md](bugfix/active-count-undercount.md)。
 
-`active_count`（气泡 `×N`）= HashMap 里所有活动会话数。`idle` 状态（如 `SubagentStop` 触发）只影响状态仲裁优先级，不影响计数——"开着"就该算 1 个。
+`active_count`（气泡 `×N` / 折叠徽标数字）= HashMap 里所有活动会话数。`idle` 状态（如 `SubagentStop` 触发）只影响状态仲裁优先级，不影响计数——"开着"就该算 1 个。
+
+权限提示音不直接看聚合后的 `state == "waiting"`，而是看 `pending_permission_count > 0` 且 `pending_permission_version` 变化。这样一个旧权限请求未处理时，新来的普通活跃会话不会误触发提示音；若待处理权限会话身份发生变化，即使数量相同，也会触发新的提示音。
 
 ---
 
@@ -246,14 +256,15 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 2c. loadFrames()           ← 通过 manifest 加载精灵帧（57 帧）
 3. 窗口设置                ← 尺寸 + 定位（右下角，`primaryMonitor()` API 支持多显示器）
 4. onFrame 回调            ← 动画器 → 更新 <img> src
-5. DialogueBubble          ← 创建对话气泡
-6. animator.start()        ← 启动动画循环
-7. 初始对话                ← "准备好了～"
-8. listen('state-change')  ← 监听 Rust 状态推送
-9. 右键菜单构建            ← 从 config.menu_items 动态生成
-10. 鼠标交互绑定           ← 悬停/拖动/右键/三连击清空
-11. focus/blur 监听         ← 切换 `animator.setFocused()` 帧率；失焦时离开悬停并重新 arm 轮询
-12. pagehide 监听           ← 输出诊断日志（页面卸载前）
+5. DialogueBubble          ← 创建对话气泡与折叠徽标
+6. PermissionSound         ← 创建权限请求提示音播放器（音频文件 + WebAudio 兜底）
+7. animator.start()        ← 启动动画循环
+8. 初始对话                ← "准备好了～"
+9. listen('state-change')  ← 监听 Rust 状态推送，更新动画/气泡/徽标并按版本播放权限音
+10. 右键菜单构建           ← 从 config.menu_items 动态生成
+11. 鼠标交互绑定           ← 悬停/拖动/右键/三连击清空/气泡折叠命中
+12. focus/blur 监听        ← 切换 `animator.setFocused()` 帧率；失焦时离开悬停并重新 arm 轮询
+13. pagehide 监听          ← 输出诊断日志（页面卸载前）
 ```
 
 ### 窗口属性
@@ -286,6 +297,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 | 操作        | 行为                                                                                                                                                                                                                                          |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **悬停**    | 光标悬停宠物身体 → 触发跳跃动画（`HOVER_JUMP_CYCLES` 轮），跳完回到 idle                                                                                                                                                                                                    |
+| 点击消息气泡 | 展开的消息气泡折叠为宠物右上角圆形徽标；徽标显示当前活跃会话数（超过 9 显示 `9+`），点击徽标恢复气泡。折叠态不会因新的 `state-change` 自动展开 |
 | 单击 + 拖动 | 使用 `appWindow.startDragging()` 移动窗口，按方向播放 running-left/right（按需 rAF 仅在拖动时运行）                                                                                                                                           |
 | 松开鼠标    | 停止拖动，取消 rAF，恢复之前状态                                                                                                                                                                                                              |
 | **三连击**  | 800ms 窗口内连续 3 次左键 → 调用 `purge_all_sessions` 清空所有会话文件，气泡反馈清理数量（`清理了 N 个会话～` / `没有可清理的会话～`），3s 后自动淡出（成功 `waving`、失败 `failed` 均传 `forceAutoHide`，机制见下文「对话气泡 → 显示逻辑」） |
@@ -316,7 +328,7 @@ fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool
 
 - **启动/停止**：`startNormalHitTestPolling()` 初始化时常驻；`normalPollingActive` 标志门控链式 `setTimeout` 自续调度——`stopNormalHitTestPolling()` / `disarmNormalHitTestPolling()` 置 false 终止。即便当前不满足门控也继续 `setTimeout` 续命（不活跃的一轮只是廉价的空 tick），等门控翻转（如 agent 停止 → 宠物回 idle）后自动恢复轮询——这是原常驻 hover-poll 提供、合并后保留的特性
 - **门控** `shouldRunNormalHitTestPolling()`：`hitTestEnabled && !dragStart && !applyingPassThrough && !contextMenuIsVisible() && (now < normalPollingUntil || 当前 idle/悬停跳跃/正在悬停)`。**有意不再检查 `!isPassThrough`**——worker 内部按 `isPassThrough` 分支处理
-- **worker** `pollNormalHitTest()`：`cursor_in_window` 取光标 → `checkHoverBodyAlphaAtCss`（idle 帧 alpha）→ `updatePetBodyHover` 维持悬停/触发跳跃；随后按 `isPassThrough` 分支——穿透态 `alpha >= EXIT_THRESHOLD` 退出穿透（原 hover-poll 的恢复职责），正常态 `alpha < ENTER_THRESHOLD` 进入穿透
+- **worker** `pollNormalHitTest()`：`cursor_in_window` 取光标 → `checkHoverBodyAlphaAtCss`（idle 帧 alpha）→ `updatePetBodyHover` 维持悬停/触发跳跃；随后按 `isPassThrough` 分支——穿透态 `alpha >= EXIT_THRESHOLD` 退出穿透（原 hover-poll 的恢复职责），正常态 `alpha < ENTER_THRESHOLD` 进入穿透。这里的交互 alpha 来自 `getInteractionAlphaAtCss`，会把显示中的气泡/折叠徽标当作实体区域；悬停跳跃仍只看宠物身体 alpha，避免鼠标移到气泡上也触发跳跃
 - **armed 窗口**：`armNormalHitTestPolling(durationMs = NORMAL_HIT_TEST_ACTIVE_MS = 2500)` 在鼠标/点击/拖动结束/退出穿透态/blur 等时刻抬起 `normalPollingUntil`。DOM `mousemove` 在聚焦时即时响应，轮询在失焦时兜底，`document` `mouseleave` 作为 best-effort 退出通道
 - **动态频率（省电）**：轮询间隔由 `nextHitTestIntervalMs()` 按状态选取——活跃态（armed 窗口未过期 / 悬停跳跃中 / 光标在 pet body 上 / 穿透态）用 `NORMAL_HIT_TEST_POLL_MS = 120`（8.3Hz，原行为）；**纯 idle 稳态降到 `IDLE_HIT_TEST_POLL_MS = 1000`（1Hz）**，消除后台常驻 `cursor_in_window` IPC（由 `needsHighFreqHitTestPolling()` 判定）。代价：失焦态鼠标移入触发悬停跳跃的延迟从 ≤120ms 变为 ≤1s（焦点态走 `mousemove` 不受影响）
 
@@ -501,8 +513,18 @@ animator.setFocused(true); // 窗口聚焦 → 恢复帧率
 - 有文字或多会话时显示，否则隐藏
 - 多会话时显示 `×N` 计数
 - 根据状态自动切换 normal/warning/error 样式
+- 点击展开的消息气泡会进入折叠态；折叠后显示 `.bubble-badge` 圆形徽标，数字为当前 `active_count`（超过 9 显示 `9+`），点击徽标恢复完整气泡
+- 折叠态是前端本地 UI 状态，新的 `state-change` 只更新徽标数字和警告色，不会自动展开消息框
+- `pendingPermissionCount > 0` 时折叠徽标添加 `warning` 样式，保持黄色权限提醒；权限状态消失后自动恢复普通徽标
+- 气泡和徽标会拦截 `mousedown` / `mousemove` / `contextmenu` 等宠物交互事件，避免点击气泡时误触发拖动、三连击或右键菜单
 - **持久态常驻 / 瞬时态 3s 自动淡出**：`running` / `waiting` / `failed`（agent 活跃、等待授权、出错）保持显示，直到下一个事件替换；其余状态（`idle` / `waving` / `jumping` 等问候与庆祝）显示 3s（`AUTO_HIDE_MS`）后自动淡出。每次 `show()` 重置定时器——事件持续期间不会提前消失，停下 3s 才淡出
 - `forceAutoHide` 参数强制瞬时淡出，覆盖持久态判定（三连击清理的失败分支用它让 `failed` 也淡出）
+
+### 权限提示音
+
+- `PermissionSound` 优先播放 `src/sounds/permission-request.wav`；若音频元素播放失败，则用 WebAudio 合成短促的“叮-咚”兜底
+- 前端只在 `pending_permission_count > 0` 且 `pending_permission_version` 相比上次变化时播放，避免普通活跃会话复用旧 `waiting` 聚合状态造成误报
+- CSP 通过 `media-src 'self'` 允许本地 wav 文件加载
 
 ---
 

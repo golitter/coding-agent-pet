@@ -39,6 +39,7 @@ python setup.py                      # 自动识别平台，一键完成依赖 �
 |---|---|
 | 悬停 | 跳跃 🎉 |
 | 三连击（800ms 内） | 清空所有会话 🧹 |
+| 点击消息框 | 折叠为右上角圆形会话计数徽标；点击徽标恢复消息框 |
 | 拖动 | 移动位置（方向奔跑动画） |
 | 右键 | 菜单：关闭宠物 |
 
@@ -48,10 +49,12 @@ python setup.py                      # 自动识别平台，一键完成依赖 �
 Claude Code / Codex → hook 脚本 (pet-hook.sh) ──┐
                                                  ├→ session 文件 + Unix Socket → Tauri 渲染器
 OpenCode           → TS 插件 (opencode-plugin.ts)┘     ├── Rust: 多会话聚合 + 双通道监听
-                                                        └── JS: 精灵动画 + 对话气泡
+                                                        └── JS: 精灵动画 + 对话气泡/折叠徽标 + 权限提示音
 ```
 
 状态优先级：`waiting > running > running-left/right > review > jumping > waving > idle > failed`
+
+权限确认（`PermissionRequest`）会播放短提示音。消息框折叠时，右上角徽标显示当前活跃会话数；只要仍有待处理权限请求，徽标保持黄色提醒。
 
 ## 在 Codex 中生成宠物素材
 

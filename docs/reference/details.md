@@ -87,10 +87,13 @@
 | 文件                                                        | 职责                                 |
 | ----------------------------------------------------------- | ------------------------------------ |
 | [index.html](../../desktop/cross-platform/src/index.html)   | 主页面 DOM                           |
-| [main.js](../../desktop/cross-platform/src/main.js)         | 入口：窗口设置 + 交互绑定            |
+| [main.js](../../desktop/cross-platform/src/main.js)         | 入口：配置加载 + 状态订阅 + 模块串联 |
 | [animator.js](../../desktop/cross-platform/src/animator.js) | 精灵帧加载 + 动画循环引擎            |
-| [bubble.js](../../desktop/cross-platform/src/bubble.js)     | 对话气泡（normal / warning / error） |
-| [style.css](../../desktop/cross-platform/src/style.css)     | 全局样式（气泡 / 菜单 / 精灵渲染）   |
+| [bubble.js](../../desktop/cross-platform/src/bubble.js)     | 对话气泡（normal / warning / error）+ 折叠徽标 |
+| [interaction-controller.js](../../desktop/cross-platform/src/interaction-controller.js) | 鼠标交互：悬停 / 拖动 / 三连击 / 穿透切换 |
+| [hit-test.js](../../desktop/cross-platform/src/hit-test.js) | 精灵 alpha 与气泡/徽标命中检测       |
+| [permission-sound.js](../../desktop/cross-platform/src/permission-sound.js) | 权限请求提示音播放与 WebAudio 兜底   |
+| [style.css](../../desktop/cross-platform/src/style.css)     | 全局样式（气泡 / 折叠徽标 / 菜单 / 精灵渲染） |
 
 ### Hook 脚本 (`desktop/cross-platform/hooks/`)
 
@@ -121,7 +124,7 @@
 | `cursor_in_window`   | 读硬件鼠标坐标（macOS: CGEvent；Windows: GetCursorPos），穿透态轮询恢复                                                                                                       |
 | `js_log`             | JS → Rust 日志桥接，前端诊断信息输出到 `RUST_LOG` 流（`info`/`warn`/`error` 级别）                                                                                            |
 
-事件通道：Rust → JS 通过 `emit("state-change", payload)` 推送聚合状态，前端 `listen("state-change", ...)` 订阅（事件权限由 `core:default` 授予）。
+事件通道：Rust → JS 通过 `emit("state-change", payload)` 推送聚合状态，前端 `listen("state-change", ...)` 订阅（事件权限由 `core:default` 授予）。payload 包含 `state` / `dialogue` / `event` / `active_count` / `pending_permission_count` / `pending_permission_version`：其中 `active_count` 用于气泡与折叠徽标计数，`pending_permission_count` 控制黄色权限态，`pending_permission_version` 在待处理权限会话集合变化时递增，用于确保“权限 A 消失、权限 B 同时出现”时仍播放新提示音。
 
 ---
 

@@ -39,6 +39,7 @@ npm test                            # hooks 单元测试
 | 操作 | 效果 |
 |---|---|
 | 悬停宠物 | 跳跃 🎉 |
+| 点击消息框 | 折叠为宠物右上角圆形会话计数徽标；点击徽标恢复消息框 |
 | 拖动 | 移动位置（方向奔跑动画） |
 | 右键 | 菜单：关闭宠物 |
 
@@ -47,6 +48,8 @@ npm test                            # hooks 单元测试
 `waiting > running > running-left/right > review > jumping > waving > idle > failed`
 
 多会话同时活动时，按此顺序仲裁显示态。
+
+权限确认（`PermissionRequest`）会播放短提示音；消息框折叠时，徽标显示当前活跃会话数，并在仍有待处理权限请求时保持黄色。
 
 ## 环境要求
 
