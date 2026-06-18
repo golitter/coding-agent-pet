@@ -1,5 +1,6 @@
 export function createSpriteHitTester({
   petSprite,
+  interactiveElements = [],
   animator,
   spriteWidth,
   spriteHeight,
@@ -22,7 +23,11 @@ export function createSpriteHitTester({
   }
 
   function getInteractionAlphaAtCss(cssX, cssY) {
-    return Math.max(checkAlphaAtCss(cssX, cssY), checkHoverBodyAlphaAtCss(cssX, cssY));
+    return Math.max(
+      checkAlphaAtCss(cssX, cssY),
+      checkHoverBodyAlphaAtCss(cssX, cssY),
+      checkInteractiveElementAlphaAtCss(cssX, cssY),
+    );
   }
 
   function checkAlphaAtCssForState(cssX, cssY, state, frameIndex) {
@@ -37,6 +42,31 @@ export function createSpriteHitTester({
 
   function isPointInsideWindow(winX, winY) {
     return winX >= 0 && winY >= 0 && winX < windowRef.innerWidth && winY < windowRef.innerHeight;
+  }
+
+  function checkInteractiveElementAlphaAtCss(cssX, cssY) {
+    for (const element of interactiveElements) {
+      if (!isVisibleInteractiveElement(element)) continue;
+
+      const rect = element.getBoundingClientRect();
+      if (cssX >= rect.left && cssX < rect.right && cssY >= rect.top && cssY < rect.bottom) {
+        return 255;
+      }
+    }
+
+    return 0;
+  }
+
+  function isVisibleInteractiveElement(element) {
+    if (!element) return false;
+
+    const style = windowRef.getComputedStyle(element);
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      style.pointerEvents !== "none" &&
+      Number(style.opacity || 1) > 0.01
+    );
   }
 
   return {

@@ -9,7 +9,7 @@
 //! `ActivityAggregator` + `AgentActivity` for the in-memory model.
 
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -121,6 +121,8 @@ pub struct StateChange {
     pub dialogue: String,
     pub event: String,
     pub active_count: usize,
+    pub pending_permission_count: usize,
+    pub pending_permission_version: u64,
 }
 
 /// Aggregated display state — protected by a single Mutex to prevent deadlocks.
@@ -129,6 +131,9 @@ struct AggregatedState {
     current_dialogue: String,
     current_event: String,
     active_count: usize,
+    pending_permission_count: usize,
+    pending_permission_version: u64,
+    pending_permission_sessions: HashSet<String>,
 }
 
 /// All mutable state behind ONE Mutex. The map key is the agent's session_id
@@ -187,6 +192,9 @@ impl ActivityAggregator {
                     current_dialogue: String::new(),
                     current_event: String::new(),
                     active_count: 0,
+                    pending_permission_count: 0,
+                    pending_permission_version: 0,
+                    pending_permission_sessions: HashSet::new(),
                 },
             }),
             sessions_dir,
@@ -408,7 +416,7 @@ impl ActivityAggregator {
             .unwrap()
             .as_secs();
 
-        let mut file_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut file_ids: HashSet<String> = HashSet::new();
         let mut stale_on_disk: usize = 0;
         let mut oneshot_pruned: usize = 0;
 
@@ -589,11 +597,18 @@ impl ActivityAggregator {
             let changed = inner.aggregated.current_state != "idle"
                 || !inner.aggregated.current_dialogue.is_empty()
                 || !inner.aggregated.current_event.is_empty()
-                || inner.aggregated.active_count != 0;
+                || inner.aggregated.active_count != 0
+                || inner.aggregated.pending_permission_count != 0;
             inner.aggregated.current_state = "idle".to_string();
             inner.aggregated.current_dialogue = String::new();
             inner.aggregated.current_event = String::new();
             inner.aggregated.active_count = 0;
+            inner.aggregated.pending_permission_count = 0;
+            if !inner.aggregated.pending_permission_sessions.is_empty() {
+                inner.aggregated.pending_permission_version =
+                    inner.aggregated.pending_permission_version.wrapping_add(1);
+                inner.aggregated.pending_permission_sessions.clear();
+            }
 
             if changed {
                 return Some(StateChange {
@@ -601,6 +616,8 @@ impl ActivityAggregator {
                     dialogue: String::new(),
                     event: String::new(),
                     active_count: 0,
+                    pending_permission_count: 0,
+                    pending_permission_version: inner.aggregated.pending_permission_version,
                 });
             }
             return None;
@@ -623,17 +640,36 @@ impl ActivityAggregator {
         let new_dialogue = best.map(|s| s.dialogue.clone()).unwrap_or_default();
         let new_event = best.map(|s| s.event.clone()).unwrap_or_default();
         let new_count = inner.activities.len();
+        let new_pending_permission_sessions: HashSet<String> = inner
+            .activities
+            .iter()
+            .filter(|&(_, s)| s.state == "waiting" && s.event == "PermissionRequest")
+            .map(|(id, _)| id.clone())
+            .collect();
+        let new_pending_permission_count = new_pending_permission_sessions.len();
+        let pending_permission_sessions_changed =
+            inner.aggregated.pending_permission_sessions != new_pending_permission_sessions;
+        let new_pending_permission_version = if pending_permission_sessions_changed {
+            inner.aggregated.pending_permission_version.wrapping_add(1)
+        } else {
+            inner.aggregated.pending_permission_version
+        };
 
         let changed = inner.aggregated.current_state != new_state
             || inner.aggregated.current_dialogue != new_dialogue
             || inner.aggregated.current_event != new_event
-            || inner.aggregated.active_count != new_count;
+            || inner.aggregated.active_count != new_count
+            || inner.aggregated.pending_permission_count != new_pending_permission_count
+            || pending_permission_sessions_changed;
 
         if changed {
             inner.aggregated.current_state = new_state.clone();
             inner.aggregated.current_dialogue = new_dialogue.clone();
             inner.aggregated.current_event = new_event.clone();
             inner.aggregated.active_count = new_count;
+            inner.aggregated.pending_permission_count = new_pending_permission_count;
+            inner.aggregated.pending_permission_version = new_pending_permission_version;
+            inner.aggregated.pending_permission_sessions = new_pending_permission_sessions;
 
             info!(
                 "state={} dialogue=\"{}\" active={}",
@@ -645,6 +681,8 @@ impl ActivityAggregator {
                 dialogue: new_dialogue,
                 event: new_event,
                 active_count: new_count,
+                pending_permission_count: new_pending_permission_count,
+                pending_permission_version: new_pending_permission_version,
             })
         } else {
             None
@@ -725,6 +763,121 @@ mod tests {
         assert_eq!(inner.aggregated.active_count, 1);
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn pending_permission_count_does_not_increase_for_non_permission_activity() {
+        let dir = temp_dir("permission-count");
+        fs::create_dir_all(&dir).unwrap();
+
+        let aggregator = ActivityAggregator::new(dir.to_string_lossy().to_string(), 3600);
+        aggregator.update(
+            "permission-session",
+            "waiting",
+            "需要你的授权～",
+            "PermissionRequest",
+            "codex",
+            false,
+        );
+        aggregator.update(
+            "running-session",
+            "running",
+            "处理中...",
+            "PreToolUse",
+            "codex",
+            false,
+        );
+
+        let inner = aggregator.inner.lock().unwrap();
+        assert_eq!(inner.aggregated.current_state, "waiting");
+        assert_eq!(inner.aggregated.current_event, "PermissionRequest");
+        assert_eq!(inner.aggregated.active_count, 2);
+        assert_eq!(inner.aggregated.pending_permission_count, 1);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn pending_permission_version_changes_when_pending_session_identity_changes() {
+        let dir = temp_dir("permission-version");
+        fs::create_dir_all(&dir).unwrap();
+
+        let aggregator = ActivityAggregator::new(dir.to_string_lossy().to_string(), 3600);
+        aggregator.update(
+            "permission-a",
+            "waiting",
+            "需要你的授权～",
+            "PermissionRequest",
+            "codex",
+            false,
+        );
+
+        let first_version = {
+            let inner = aggregator.inner.lock().unwrap();
+            assert_eq!(inner.aggregated.pending_permission_count, 1);
+            inner.aggregated.pending_permission_version
+        };
+
+        aggregator.update(
+            "permission-a",
+            "running",
+            "处理中...",
+            "PreToolUse",
+            "codex",
+            false,
+        );
+        aggregator.update(
+            "permission-b",
+            "waiting",
+            "需要你的授权～",
+            "PermissionRequest",
+            "codex",
+            false,
+        );
+
+        let inner = aggregator.inner.lock().unwrap();
+        assert_eq!(inner.aggregated.pending_permission_count, 1);
+        assert_ne!(
+            inner.aggregated.pending_permission_version, first_version,
+            "version changes even when permission count remains the same"
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn compute_change_emits_when_pending_permission_identity_changes() {
+        let mut inner = Inner {
+            activities: HashMap::new(),
+            aggregated: AggregatedState {
+                current_state: "waiting".to_string(),
+                current_dialogue: "需要你的授权～".to_string(),
+                current_event: "PermissionRequest".to_string(),
+                active_count: 1,
+                pending_permission_count: 1,
+                pending_permission_version: 1,
+                pending_permission_sessions: HashSet::from(["permission-a".to_string()]),
+            },
+        };
+        inner.activities.insert(
+            "permission-b".to_string(),
+            AgentActivity {
+                state: "waiting".to_string(),
+                dialogue: "需要你的授权～".to_string(),
+                event: "PermissionRequest".to_string(),
+                source: "codex".to_string(),
+                is_terminal: false,
+            },
+        );
+
+        let change = ActivityAggregator::compute_change(&mut inner).unwrap();
+
+        assert_eq!(change.pending_permission_count, 1);
+        assert_eq!(change.pending_permission_version, 2);
+        assert_eq!(
+            inner.aggregated.pending_permission_sessions,
+            HashSet::from(["permission-b".to_string()])
+        );
     }
 
     /// Backdate a file's mtime by `secs` seconds so it looks past a window.

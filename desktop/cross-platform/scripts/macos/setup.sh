@@ -3,6 +3,7 @@
 # 配置 hooks → 编译渲染器 → 启动宠物
 set -euo pipefail
 
+# shellcheck source=desktop/cross-platform/scripts/macos/common.sh
 source "$(cd "$(dirname "$0")" && pwd)/common.sh"
 
 CONFIG="$PLATFORM_DIR/config.json"

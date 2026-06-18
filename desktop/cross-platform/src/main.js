@@ -48,6 +48,7 @@ async function main() {
 
   const petSprite = document.getElementById("pet-sprite");
   const bubbleEl = document.getElementById("bubble");
+  const bubbleBadgeEl = document.getElementById("bubble-badge");
   const contextMenuEl = document.getElementById("context-menu");
 
   const scaledWidth = SPRITE_W * config.scale;
@@ -61,7 +62,7 @@ async function main() {
     petSprite.src = img.src;
   };
 
-  const bubble = new DialogueBubble(bubbleEl, config);
+  const bubble = new DialogueBubble(bubbleEl, bubbleBadgeEl, config);
   const menu = createContextMenu(contextMenuEl);
   const permissionSound = new PermissionSound({ jsLog });
 
@@ -70,15 +71,23 @@ async function main() {
 
   bubble.show("准备好了～", 0, "idle");
 
-  let lastPermissionCue = "";
+  let lastPendingPermissionVersion = null;
   const unlistenStateChange = await listen("state-change", (event) => {
-    const { state, dialogue, active_count, event: hookEvent } = event.payload;
-    const permissionCue =
-      state === "waiting" && hookEvent === "PermissionRequest" ? `${dialogue}|${active_count}` : "";
-    if (permissionCue && permissionCue !== lastPermissionCue) {
+    const {
+      state,
+      dialogue,
+      active_count,
+      event: hookEvent,
+      pending_permission_count = 0,
+      pending_permission_version = 0,
+    } = event.payload;
+    if (
+      pending_permission_count > 0 &&
+      pending_permission_version !== lastPendingPermissionVersion
+    ) {
       permissionSound.play();
     }
-    lastPermissionCue = permissionCue;
+    lastPendingPermissionVersion = pending_permission_version;
 
     if (state !== "idle") {
       animator.stopHoverJump({ showFrame: false });
@@ -88,7 +97,7 @@ async function main() {
     } else {
       animator.transitionTo(state);
     }
-    bubble.show(dialogue, active_count, state);
+    bubble.show(dialogue, active_count, state, false, hookEvent, pending_permission_count);
   });
 
   menu.build(config.menu_items);

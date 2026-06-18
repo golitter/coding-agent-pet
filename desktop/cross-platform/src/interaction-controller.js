@@ -72,6 +72,7 @@ export function setupInteractions({ animator, menu, bubble, petSprite, jsLog }) 
 
   const hitTester = createSpriteHitTester({
     petSprite,
+    interactiveElements: [bubble.el, bubble.badgeEl],
     animator,
     spriteWidth: SPRITE_W,
     spriteHeight: SPRITE_H,
@@ -527,7 +528,7 @@ export function setupInteractions({ animator, menu, bubble, petSprite, jsLog }) 
       } else if (bodyAlpha < ENTER_THRESHOLD) {
         // Cursor over a transparent area in normal mode — hand it to the OS.
         // (updatePetBodyHover above already called leavePetBodyHover.)
-        const alpha = checkAlphaAtCss(winX, winY);
+        const alpha = getInteractionAlphaAtCss(winX, winY);
         tryEnterPassThroughAt(winX, winY, { alpha });
       }
     } catch {

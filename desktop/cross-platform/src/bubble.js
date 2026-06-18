@@ -20,14 +20,25 @@ const PERSISTENT_STATES = new Set([
 const VALID_STYLES = new Set(["normal", "warning", "error"]);
 
 export class DialogueBubble {
-  constructor(element, config) {
+  constructor(element, badgeElement, config) {
     this.el = element;
+    this.badgeEl = badgeElement;
     this.textEl = element.querySelector("#bubble-text");
     this.countEl = element.querySelector("#bubble-count");
     this.config = config;
     this.currentStyle = "normal";
+    this.collapsed = false;
     this.hideTimer = null;
+    this.latest = {
+      text: "",
+      sessionCount: 0,
+      state: "idle",
+      forceAutoHide: false,
+      hookEvent: "",
+      pendingPermissionCount: 0,
+    };
     this.applyConfigStyles();
+    this.attachToggleHandlers();
   }
 
   /** Apply configurable dialogue dimensions/timing from config.
@@ -62,9 +73,31 @@ export class DialogueBubble {
    * always fade out — used for one-shot user feedback (e.g. the triple-click
    * purge result) that should never linger even if its state is normally
    * persistent (failed). */
-  show(text, sessionCount = 0, state = "idle", forceAutoHide = false) {
-    if (!text && sessionCount <= 1) {
-      this.hide();
+  show(
+    text,
+    sessionCount = 0,
+    state = "idle",
+    forceAutoHide = false,
+    hookEvent = "",
+    pendingPermissionCount = 0,
+  ) {
+    this.latest = {
+      text,
+      sessionCount,
+      state,
+      forceAutoHide,
+      hookEvent,
+      pendingPermissionCount,
+    };
+    this.render();
+  }
+
+  render() {
+    const { text, sessionCount, state, forceAutoHide, pendingPermissionCount } = this.latest;
+    this.updateBadge(sessionCount, pendingPermissionCount);
+
+    if (this.collapsed || (!text && sessionCount <= 1)) {
+      this.hideBubble();
       return;
     }
 
@@ -88,6 +121,19 @@ export class DialogueBubble {
 
   /** Hide the bubble with fade-out */
   hide() {
+    this.latest = {
+      text: "",
+      sessionCount: 0,
+      state: "idle",
+      forceAutoHide: false,
+      hookEvent: "",
+      pendingPermissionCount: 0,
+    };
+    this.updateBadge(0, 0);
+    this.hideBubble();
+  }
+
+  hideBubble() {
     this.clearAutoHide();
     this.el.classList.remove("visible");
     this.el.classList.add("hidden");
@@ -113,5 +159,37 @@ export class DialogueBubble {
     this.el.classList.remove("style-normal", "style-warning", "style-error");
     this.el.classList.add(`style-${nextStyle}`);
     this.currentStyle = nextStyle;
+  }
+
+  attachToggleHandlers() {
+    const stopPetInteraction = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    ["mousedown", "mouseup", "mousemove", "contextmenu"].forEach((eventName) => {
+      this.el.addEventListener(eventName, stopPetInteraction);
+      this.badgeEl.addEventListener(eventName, stopPetInteraction);
+    });
+    this.el.addEventListener("click", (event) => {
+      stopPetInteraction(event);
+      if (this.el.classList.contains("visible")) {
+        this.collapsed = true;
+        this.render();
+      }
+    });
+
+    this.badgeEl.addEventListener("click", (event) => {
+      stopPetInteraction(event);
+      this.collapsed = false;
+      this.render();
+    });
+  }
+
+  updateBadge(sessionCount, pendingPermissionCount) {
+    const shouldShow = this.collapsed && sessionCount > 0;
+    this.badgeEl.textContent = sessionCount > 9 ? "9+" : String(sessionCount);
+    this.badgeEl.classList.toggle("hidden", !shouldShow);
+    this.badgeEl.classList.toggle("warning", pendingPermissionCount > 0);
   }
 }

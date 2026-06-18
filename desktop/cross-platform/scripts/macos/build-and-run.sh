@@ -2,6 +2,7 @@
 # KotoriPet (Tauri) 编译并启动脚本
 set -euo pipefail
 
+# shellcheck source=desktop/cross-platform/scripts/macos/common.sh
 source "$(cd "$(dirname "$0")" && pwd)/common.sh"
 
 TAURI_DIR="$PLATFORM_DIR/src-tauri"
