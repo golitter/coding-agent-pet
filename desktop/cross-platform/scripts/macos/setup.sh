@@ -3,10 +3,8 @@
 # 配置 hooks → 编译渲染器 → 启动宠物
 set -euo pipefail
 
-# 脚本所在目录（scripts/macos，用于定位同平台兄弟脚本）
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# 项目根目录（cross-platform，共享源码 / 配置 / runtime 所在地）
-PLATFORM_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$(cd "$(dirname "$0")" && pwd)/common.sh"
+
 CONFIG="$PLATFORM_DIR/config.json"
 EXAMPLE="$PLATFORM_DIR/config.example.json"
 

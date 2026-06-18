@@ -2,8 +2,8 @@
 # KotoriPet (Tauri) 编译并启动脚本
 set -euo pipefail
 
-# 项目根目录（cross-platform，src-tauri / runtime 所在地）
-PLATFORM_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+source "$(cd "$(dirname "$0")" && pwd)/common.sh"
+
 TAURI_DIR="$PLATFORM_DIR/src-tauri"
 BINARY="$TAURI_DIR/target/debug/kotori-pet"
 

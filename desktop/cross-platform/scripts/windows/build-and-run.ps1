@@ -1,16 +1,8 @@
 $ErrorActionPreference = "Stop"
 
-# 脚本所在目录（scripts/windows）
-if (-not $PSScriptRoot) {
-    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-} else {
-    $ScriptDir = $PSScriptRoot
-}
-# 项目根目录（cross-platform，src-tauri / runtime 所在地）
-$PlatformDir = (Get-Item $ScriptDir).Parent.Parent.FullName
-if (-not $PlatformDir -or -not (Test-Path $PlatformDir)) {
-    Write-Error "无法定位项目根目录（cross-platform）。ScriptDir=$ScriptDir"
-}
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+. (Join-Path $ScriptDir "common.ps1")
+$PlatformDir = Get-KotoriPlatformDir -ScriptDir $ScriptDir
 $TauriDir = Join-Path $PlatformDir "src-tauri"
 $Binary = Join-Path $TauriDir "target\debug\kotori-pet.exe"
 $RuntimeDir = Join-Path $PlatformDir "runtime"
@@ -19,25 +11,11 @@ $LogFile = Join-Path $RuntimeDir "kotori-pet-tauri.log"
 $ErrLogFile = Join-Path $RuntimeDir "kotori-pet-tauri.err.log"
 $PidFile = Join-Path $RuntimeDir "kotori-pet.pid"
 
-function Add-RustToPath {
-    $paths = @(
-        (Join-Path $env:USERPROFILE ".cargo\bin"),
-        (Join-Path $env:USERPROFILE ".rustup\toolchains\stable-x86_64-pc-windows-msvc\bin")
-    )
-
-    foreach ($path in $paths) {
-        if ((Test-Path $path) -and ($env:Path -notlike "*$path*")) {
-            $env:Path = "$path;$env:Path"
-        }
-    }
-
-    $cargo = Get-Command cargo -ErrorAction SilentlyContinue
-    if ($null -eq $cargo) {
-        Write-Error "cargo was not found. Install Rust with rustup, or add %USERPROFILE%\.cargo\bin to PATH."
-    }
+Add-KotoriRustToPath
+$cargo = Get-Command cargo -ErrorAction SilentlyContinue
+if ($null -eq $cargo) {
+    Write-Error "cargo was not found. Install Rust with rustup, or add %USERPROFILE%\.cargo\bin to PATH."
 }
-
-Add-RustToPath
 
 Write-Host "Building KotoriPet (Tauri)..."
 Push-Location $PlatformDir
