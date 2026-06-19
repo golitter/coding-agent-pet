@@ -12,7 +12,11 @@ OpenCode 通过**插件系统（Plugin System）**扩展行为，本质上是 **
 ### Plugin 接口定义
 
 ```typescript
-import type { Plugin, PluginContext, PluginHandlers } from '@opencode-ai/plugin';
+import type {
+  Plugin,
+  PluginContext,
+  PluginHandlers,
+} from "@opencode-ai/plugin";
 
 // Plugin 本质是一个异步回调函数，接收上下文，返回事件处理器映射
 type Plugin = (ctx: PluginInput) => Promise<Hooks>;
@@ -43,9 +47,9 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 
 将 JavaScript 或 TypeScript 文件放置在插件目录中，启动时自动加载：
 
-| 级别 | 目录 |
-|---|---|
-| 项目级 | `.opencode/plugins/` |
+| 级别   | 目录                          |
+| ------ | ----------------------------- |
+| 项目级 | `.opencode/plugins/`          |
 | 全局级 | `~/.config/opencode/plugins/` |
 
 ### 方式 2：npm 包
@@ -55,7 +59,11 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "plugin": [
+    "opencode-helicone-session",
+    "opencode-wakatime",
+    "@my-org/custom-plugin"
+  ]
 }
 ```
 
@@ -96,81 +104,81 @@ OpenCode 启动时运行 `bun install` 安装依赖，之后插件可直接 impo
 
 ### 会话事件（Session）
 
-| 事件 | 触发时机 | 宠物潜在映射 |
-|---|---|---|
-| `session.created` | 创建新会话 | `waving` — "嗨！小鸟来啦～" |
-| `session.updated` | 会话状态更新 | `running` — "工作中..." |
-| `session.idle` | 会话空闲（AI 完成响应） | `jumping` — "搞定啦！✨" |
-| `session.error` | 会话出错 | `failed` — "呜...出了点问题" |
-| `session.deleted` | 会话被删除 | `waving` — "下次见！♪" |
-| `session.compacted` | 上下文压缩 | `waiting` — "整理记忆..." |
-| `session.diff` | 会话产生 diff | `running` — "处理中..." |
-| `session.status` | 会话状态变化 | 通用状态更新 |
+| 事件                | 触发时机                | 宠物潜在映射                 |
+| ------------------- | ----------------------- | ---------------------------- |
+| `session.created`   | 创建新会话              | `waving` — "嗨！小鸟来啦～"  |
+| `session.updated`   | 会话状态更新            | `running` — "工作中..."      |
+| `session.idle`      | 会话空闲（AI 完成响应） | `jumping` — "搞定啦！✨"     |
+| `session.error`     | 会话出错                | `failed` — "呜...出了点问题" |
+| `session.deleted`   | 会话被删除              | `waving` — "下次见！♪"       |
+| `session.compacted` | 上下文压缩              | `waiting` — "整理记忆..."    |
+| `session.diff`      | 会话产生 diff           | `running` — "处理中..."      |
+| `session.status`    | 会话状态变化            | 通用状态更新                 |
 
 ### 工具事件（Tool）
 
-| 事件 | 触发时机 | 宠物潜在映射 |
-|---|---|---|
+| 事件                  | 触发时机         | 宠物潜在映射            |
+| --------------------- | ---------------- | ----------------------- |
 | `tool.execute.before` | 工具执行**之前** | `running` — "执行中..." |
-| `tool.execute.after` | 工具执行**之后** | `running` — "处理中..." |
+| `tool.execute.after`  | 工具执行**之后** | `running` — "处理中..." |
 
 ### 消息事件（Message）
 
-| 事件 | 触发时机 |
-|---|---|
-| `message.updated` | 消息更新 |
-| `message.removed` | 消息删除 |
+| 事件                   | 触发时机     |
+| ---------------------- | ------------ |
+| `message.updated`      | 消息更新     |
+| `message.removed`      | 消息删除     |
 | `message.part.updated` | 消息片段更新 |
 | `message.part.removed` | 消息片段删除 |
 
 ### 权限事件（Permission）
 
-| 事件 | 触发时机 | 宠物潜在映射 |
-|---|---|---|
-| `permission.asked` | 请求权限 | `waiting` — "需要授权～" |
-| `permission.replied` | 权限回复 | — |
+| 事件                 | 触发时机 | 宠物潜在映射             |
+| -------------------- | -------- | ------------------------ |
+| `permission.asked`   | 请求权限 | `waiting` — "需要授权～" |
+| `permission.replied` | 权限回复 | —                        |
 
 ### 文件事件（File）
 
-| 事件 | 触发时机 |
-|---|---|
-| `file.edited` | 文件被编辑 |
+| 事件                   | 触发时机       |
+| ---------------------- | -------------- |
+| `file.edited`          | 文件被编辑     |
 | `file.watcher.updated` | 文件监视器更新 |
 
 ### 命令事件（Command）
 
-| 事件 | 触发时机 |
-|---|---|
+| 事件               | 触发时机     |
+| ------------------ | ------------ |
 | `command.executed` | 命令执行完毕 |
 
 ### Shell 事件
 
-| 事件 | 触发时机 |
-|---|---|
+| 事件        | 触发时机           |
+| ----------- | ------------------ |
 | `shell.env` | Shell 环境变量注入 |
 
 ### LSP 事件
 
-| 事件 | 触发时机 |
-|---|---|
-| `lsp.client.diagnostics` | LSP 诊断 |
-| `lsp.updated` | LSP 状态更新 |
+| 事件                     | 触发时机     |
+| ------------------------ | ------------ |
+| `lsp.client.diagnostics` | LSP 诊断     |
+| `lsp.updated`            | LSP 状态更新 |
 
 ### TUI 事件
 
-| 事件 | 触发时机 |
-|---|---|
-| `tui.prompt.append` | TUI 追加 prompt |
-| `tui.command.execute` | TUI 执行命令 |
-| `tui.toast.show` | TUI 显示 toast |
+| 事件                  | 触发时机        |
+| --------------------- | --------------- |
+| `tui.prompt.append`   | TUI 追加 prompt |
+| `tui.command.execute` | TUI 执行命令    |
+| `tui.toast.show`      | TUI 显示 toast  |
 
 ### 其他事件
 
-| 事件 | 触发时机 |
-|---|---|
+| 事件                   | 触发时机     |
+| ---------------------- | ------------ |
 | `installation.updated` | 安装状态更新 |
-| `server.connected` | 服务器连接 |
-| `todo.updated` | 待办事项更新 |
+| `server.connected`     | 服务器连接   |
+| `todo.updated`         | 待办事项更新 |
 
 ---
 
@@ -289,20 +297,20 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 ## 七、与 Claude Code / Codex Hooks 的对比
 
-| | Claude Code | Codex | **OpenCode** |
-|---|---|---|---|
-| **机制** | 命令行脚本 + stdin JSON | 命令行脚本 + stdin JSON | **JS/TS 模块，进程内运行** |
-| **语言** | 任意（shell 调 Python） | 任意（shell 调 Python） | **JavaScript / TypeScript** |
-| **配置位置** | `~/.claude/settings.json` | `~/.codex/hooks.json` | `.opencode/plugins/` 目录 / `opencode.json` |
-| **加载方式** | 按事件名注册 command | 按事件名注册 command | 导出函数 + 按事件名返回 handler |
-| **事件字段** | `hook_event_name` (PascalCase) | 多种字段名 + snake_case | **事件名即对象键名** |
-| **运行时** | 独立进程，stdin/stdout 通信 | 独立进程，stdin/stdout 通信 | **进程内，直接函数调用** |
-| **通信方式** | stdin JSON → stdout JSON | stdin JSON → stdout `{}` | 函数参数 `(input, output)` |
-| **阻断能力** | exit 2 阻断 | `decision: "block"` | throw Error 阻断 |
-| **自定义工具** | ❌ | ❌ | ✅ `tool()` API |
-| **环境注入** | ❌ | ❌ | ✅ `shell.env` hook |
-| **依赖管理** | — | — | Bun + package.json |
-| **推荐语言** | — | — | TypeScript（类型安全） |
+|                | Claude Code                    | Codex                       | **OpenCode**                                |
+| -------------- | ------------------------------ | --------------------------- | ------------------------------------------- |
+| **机制**       | 命令行脚本 + stdin JSON        | 命令行脚本 + stdin JSON     | **JS/TS 模块，进程内运行**                  |
+| **语言**       | 任意（shell 调 Python）        | 任意（shell 调 Python）     | **JavaScript / TypeScript**                 |
+| **配置位置**   | `~/.claude/settings.json`      | `~/.codex/hooks.json`       | `.opencode/plugins/` 目录 / `opencode.json` |
+| **加载方式**   | 按事件名注册 command           | 按事件名注册 command        | 导出函数 + 按事件名返回 handler             |
+| **事件字段**   | `hook_event_name` (PascalCase) | 多种字段名 + snake_case     | **事件名即对象键名**                        |
+| **运行时**     | 独立进程，stdin/stdout 通信    | 独立进程，stdin/stdout 通信 | **进程内，直接函数调用**                    |
+| **通信方式**   | stdin JSON → stdout JSON       | stdin JSON → stdout `{}`    | 函数参数 `(input, output)`                  |
+| **阻断能力**   | exit 2 阻断                    | `decision: "block"`         | throw Error 阻断                            |
+| **自定义工具** | ❌                             | ❌                          | ✅ `tool()` API                             |
+| **环境注入**   | ❌                             | ❌                          | ✅ `shell.env` hook                         |
+| **依赖管理**   | —                              | —                           | Bun + package.json                          |
+| **推荐语言**   | —                              | —                           | TypeScript（类型安全）                      |
 
 ### 关键差异
 
@@ -376,15 +384,15 @@ export const MyPlugin = async ({ client }) => {
 
 ## 九、宠物集成（Production Integration）
 
-> 已实现。生产版插件位于 `desktop/cross-platform/hooks/opencode-plugin.ts`，由 `setup-hooks.sh` 自动部署到 `~/.config/opencode/plugins/pet-plugin.ts`。
+> 已实现。生产版插件位于 `desktop/cross-platform/hooks/opencode-plugin.ts`，由 `setup-hooks.sh` 自动部署到 `~/.config/opencode/plugins/pet-plugin.ts`。WSL2 场景可运行 `scripts/wsl/setup-hooks.sh`，插件部署到 WSL 侧 `~/.config/opencode/plugins/`，事件推送给 Windows 原生渲染器。
 
-OpenCode 的插件在进程内运行（Bun 运行时），采用与 Claude Code/Codex 等价的文件系统 + Unix socket 方案：
+OpenCode 的插件在进程内运行（Bun 运行时），采用与 Claude Code/Codex 等价的文件系统 + event endpoint 方案：
 
-1. **Config 加载**：从同伴文件 `~/.config/opencode/plugins/.kotori-pet-config-dir` 读取 `desktop/cross-platform/` 路径，加载 `config.json` 获取 `state_map`、`sessions_dir`、`socket_path`、`terminal_events`
+1. **Config 加载**：从同伴文件 `~/.config/opencode/plugins/.kotori-pet-config-dir` 读取 `desktop/cross-platform/` 路径，加载 `config.json` 获取 `state_map`、`sessions_dir`、`event_endpoint` / `socket_path`、`terminal_events`
 2. **Repo Root 检测**：`detectRepoRoot()` 从 platform dir 向上推导仓库根目录（识别 `desktop/cross-platform` 双层结构 → 向上两级），供路径解析使用
 3. **路径解析**：`resolvePath()` 以 repo root（非 platform dir）为基准解析相对路径和 fallback 路径（fallback 为 `{repoRoot}/desktop/cross-platform/runtime/sessions`），与 Rust 后端的 `pet_base_dir` 检测逻辑保持一致
 4. **异步写入 session 文件**：`fs.promises.writeFile(.tmp)` + `fs.promises.rename(.tmp, target)` 原子写入，格式与 `common.py` 完全一致
-5. **Unix socket 推送**：`node:net` 的 `createConnection()`，fire-and-forget（不 await），100ms 超时，失败静默
+5. **Event endpoint 推送**：`tcp://` 端点使用 `node:net` TCP loopback；非 Windows / 非 WSL 默认回落到 Unix socket。推送 fire-and-forget（不 await），100ms 超时，失败静默
 6. **错误隔离**：所有逻辑包裹在 try/catch 中，插件异常不影响 OpenCode 运行
 
 ### 部署
@@ -395,19 +403,30 @@ cd desktop/cross-platform && ./setup-hooks.sh
 # 自动写入 .kotori-pet-config-dir 同伴文件
 ```
 
+WSL2 中使用：
+
+```bash
+cd <repo>/desktop/cross-platform
+bash scripts/wsl/setup-hooks.sh
+```
+
+`<repo>` 是仓库根目录在 WSL2 中的路径。例如 Windows 路径 `D:\path\to\coding-agent-pet` 通常对应 WSL2 路径 `/mnt/d/path/to/coding-agent-pet`。
+
+WSL2 下 OpenCode shared runtime 默认使用 `tcp://127.0.0.1:17361`，与 Python hooks 和 Windows Tauri 后端保持一致。
+
 ### 事件映射
 
-| OpenCode 事件 | PascalCase | 宠物 state |
-|---|---|---|
-| `session.created` | `SessionStart` | `waving` |
-| `session.idle` | `Stop` | `jumping` |
-| `session.error` | `StopFailure` | `failed` |
-| `session.deleted` | `SessionEnd` | `waving` |
-| `session.compacted` | `PreCompact` | `waiting` |
-| `permission.asked` | `PermissionRequest` | `waiting` |
-| `tool.execute.before` | `PreToolUse` | `running` |
-| `tool.execute.after` | `PostToolUse` | `running` |
-| `question` 工具 (before) | `QuestionAsked` | `waiting` |
+| OpenCode 事件            | PascalCase          | 宠物 state |
+| ------------------------ | ------------------- | ---------- |
+| `session.created`        | `SessionStart`      | `waving`   |
+| `session.idle`           | `Stop`              | `jumping`  |
+| `session.error`          | `StopFailure`       | `failed`   |
+| `session.deleted`        | `SessionEnd`        | `waving`   |
+| `session.compacted`      | `PreCompact`        | `waiting`  |
+| `permission.asked`       | `PermissionRequest` | `waiting`  |
+| `tool.execute.before`    | `PreToolUse`        | `running`  |
+| `tool.execute.after`     | `PostToolUse`       | `running`  |
+| `question` 工具 (before) | `QuestionAsked`     | `waiting`  |
 
 ### 已知限制
 
@@ -418,9 +437,9 @@ cd desktop/cross-platform && ./setup-hooks.sh
 
 ## 十、参考资料
 
-| 资源 | 链接 |
-|---|---|
-| OpenCode 官方插件文档 | <https://opencode.ai/docs/zh-cn/plugins/> |
-| OpenCode 社区插件示例 | <https://opencode.ai/docs/zh-cn/plugins/#examples> |
-| 插件系统详解（知乎） | <https://zhuanlan.zhihu.com/p/2027144829352583703> |
-| `@opencode-ai/plugin` 类型定义 | npm 包 |
+| 资源                           | 链接                                               |
+| ------------------------------ | -------------------------------------------------- |
+| OpenCode 官方插件文档          | <https://opencode.ai/docs/zh-cn/plugins/>          |
+| OpenCode 社区插件示例          | <https://opencode.ai/docs/zh-cn/plugins/#examples> |
+| 插件系统详解（知乎）           | <https://zhuanlan.zhihu.com/p/2027144829352583703> |
+| `@opencode-ai/plugin` 类型定义 | npm 包                                             |

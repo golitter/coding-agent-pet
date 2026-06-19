@@ -16,27 +16,28 @@ Claude Code 和 Codex 的事件机制不同，但宠物端通过 `common.py` 统
 
 ## 文件
 
-| 文件 | 内容 |
-|---|---|
-| [events.md](events.md) | 所有 Hook 事件类型 + 平台行为对照表（速查） |
-| [claude-code.md](claude-code.md) | Claude Code 如何通过 Hooks 触发宠物状态变化 |
-| [codex.md](codex.md) | OpenAI Codex 如何通过 Hooks 触发宠物状态变化 |
-| [opencode.md](opencode.md) | OpenCode 插件系统参考（事件、Hook API、潜在集成方案） |
+| 文件                             | 内容                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| [events.md](events.md)           | 所有 Hook 事件类型 + 平台行为对照表（速查）                              |
+| [claude-code.md](claude-code.md) | Claude Code 如何通过 Hooks 触发宠物状态变化                              |
+| [codex.md](codex.md)             | OpenAI Codex 如何通过 Hooks 触发宠物状态变化                             |
+| [opencode.md](opencode.md)       | OpenCode 插件系统参考（事件、Hook API、潜在集成方案）                    |
+| [wsl2.md](wsl2.md)               | WSL2 内 Claude Code / Codex / OpenCode 推送事件到 Windows 原生宠物渲染器 |
 
 ## 三个平台的对比
 
-| | Claude Code | Codex | OpenCode |
-|---|---|---|---|
-| **机制** | 命令行脚本 + stdin JSON | 命令行脚本 + stdin JSON | JS/TS 插件模块，进程内运行 |
-| **配置文件** | `~/.claude/settings.json` | `~/.codex/hooks.json` 或 `config.toml` | `.opencode/plugins/` 目录或 `opencode.json` |
-| **Hook 入口** | `pet-hook.sh claude-code` → `claude_hook.py` | `pet-hook.sh codex` → `codex_hook.py` | `opencode-plugin.ts` → 导出 Plugin 函数 |
-| **事件字段名** | `hook_event_name` (PascalCase) | `hook_event_name` / `event` / `codex_event_type` (snake_case) | 事件名即对象键名（如 `session.idle`） |
-| **注册事件数** | 11 个 | 9 个 | 8 个（6 个 event 型 + 2 个 `tool.execute.*`） |
-| **独有事件** | `PreCompact`, `SessionEnd` | — | `QuestionAsked`（via `question` 工具） |
-| **信任机制** | 启动时快照，修改需在 `/hooks` 审查 | 非托管 hook 需 review & trust，按 hash 校验 | — |
-| **输出格式** | exit 0 静默；exit 2 阻断 | 期望 stdout 返回 `{}` | 函数参数 `(input, output)`，throw 阻断 |
-| **自定义工具** | ❌ | ❌ | ✅ `tool()` API |
-| **宠物集成** | ✅ 已实现 | ✅ 已实现 | ✅ 已实现（详见 opencode.md） |
+|                | Claude Code                                  | Codex                                                         | OpenCode                                      |
+| -------------- | -------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------- |
+| **机制**       | 命令行脚本 + stdin JSON                      | 命令行脚本 + stdin JSON                                       | JS/TS 插件模块，进程内运行                    |
+| **配置文件**   | `~/.claude/settings.json`                    | `~/.codex/hooks.json` 或 `config.toml`                        | `.opencode/plugins/` 目录或 `opencode.json`   |
+| **Hook 入口**  | `pet-hook.sh claude-code` → `claude_hook.py` | `pet-hook.sh codex` → `codex_hook.py`                         | `opencode-plugin.ts` → 导出 Plugin 函数       |
+| **事件字段名** | `hook_event_name` (PascalCase)               | `hook_event_name` / `event` / `codex_event_type` (snake_case) | 事件名即对象键名（如 `session.idle`）         |
+| **注册事件数** | 11 个                                        | 9 个                                                          | 8 个（6 个 event 型 + 2 个 `tool.execute.*`） |
+| **独有事件**   | `PreCompact`, `SessionEnd`                   | —                                                             | `QuestionAsked`（via `question` 工具）        |
+| **信任机制**   | 启动时快照，修改需在 `/hooks` 审查           | 非托管 hook 需 review & trust，按 hash 校验                   | —                                             |
+| **输出格式**   | exit 0 静默；exit 2 阻断                     | 期望 stdout 返回 `{}`                                         | 函数参数 `(input, output)`，throw 阻断        |
+| **自定义工具** | ❌                                           | ❌                                                            | ✅ `tool()` API                               |
+| **宠物集成**   | ✅ 已实现                                    | ✅ 已实现                                                     | ✅ 已实现（详见 opencode.md）                 |
 
 ## 共享的处理流程
 
@@ -48,7 +49,7 @@ stdin JSON
   → config.json state_map 查表 → 得到 {state, dialogue}
   （OpenCode 插件直接读取 config.json，逻辑等价）
   → 原子写入 sessions/{session_id}.json
-  → 推送 Unix socket /tmp/kotori-pet.sock
+  → 推送 event endpoint（macOS/Linux 默认 Unix socket；Windows/WSL2 默认 tcp://127.0.0.1:17361）
   → 后端处理 isTerminal:
        Stop → 2s 延迟删除（让"搞定啦"播完，期间收到新事件则取消）
        StopFailure / SessionEnd → 立即删除 session 文件
@@ -65,6 +66,8 @@ stdin JSON
 - 脚本是幂等的：会先移除自己管理的 pet hook，再追加一份标准条目
 - 对 Codex，只会自动启用已经存在 `trusted_hash` 的 pet hook 状态
 - 如果是首次接入 Codex，通常仍要在 `/hooks` 中手动 `Trust/Enable` 一次
+
+WSL2 使用独立入口 `scripts/wsl/setup-hooks.sh`。它需要在实际运行 agent 的 WSL distro 内执行，只配置 WSL 侧 hooks/plugins，不构建或启动 Windows Tauri 应用；事件默认推送到 `tcp://127.0.0.1:17361`。
 
 ## 已知局限
 

@@ -19,11 +19,11 @@
 
 ### 默认值（三端必须一致，否则 split-brain）
 
-| 平台 | 默认 endpoint |
-|---|---|
-| Windows / WSL | `tcp://127.0.0.1:17361` |
+| 平台          | 默认 endpoint                           |
+| ------------- | --------------------------------------- |
+| Windows / WSL | `tcp://127.0.0.1:17361`                 |
 | macOS / Linux | `socket_path` 或 `/tmp/kotori-pet.sock` |
-| 显式配置 | `config.event_endpoint` 始终优先 |
+| 显式配置      | `config.event_endpoint` 始终优先        |
 
 同样的判定逻辑在 **三个语言**里各实现一份并严格对齐：
 
@@ -93,10 +93,11 @@
   - **与 setup-hooks.ps1 解耦**：PowerShell 仍会探测一个 python 来**引导运行** `setup_hooks.py`（先有鸡先有蛋），但写入 settings.json 的命令完全由 `setup_hooks.py` 基于 config 决定——这从根本上消除了「PowerShell 探测 vs Python 二次探测不一致」。
 - **裸命令名而非绝对路径**（迭代教训）：早期实现用 `shutil.which` 解析成 `python.exe` 的绝对路径写入 settings.json，结果路径里出现 `miniconda`/`Python314` 等特定环境名，python 升级/重装即失效。当前默认回落仍返回裸命令名，hook 脚本仅依赖标准库（json/os/socket/sys/datetime/pathlib/urllib），任何 PATH 上的 python 都能跑，可随环境迁移；需要钉死环境时改用显式 `python_command` 配置。
 - **hook 命令二分支**（[setup_hooks.py build_targets](../../cross-platform/hooks/scripts/setup_hooks.py)）：
-  1. Windows + 原生 python → `python <脚本路径>`，如 `python D:/Graduate/.../claude_hook.py`
+  1. Windows + 原生 python → `python <脚本路径>`，如 `python C:/path/to/repo/.../claude_hook.py`
   2. macOS / Linux → 沿用 `pet-hook.sh claude-code` / `pet-hook.sh codex`
 
-  > **已删除 WSL 分支**：早期版本会探测 WSL bash + python3 并优先生成 `python3 /mnt/d/...` 命令。但 Claude Code 是原生 Windows 进程，无法执行该命令串；即便在 WSL 内跑，文件事件与 TCP 也穿透不了子系统边界，导致宠物收不到消息。纯 Windows 方案下该分支已彻底移除（含 `detect_wsl_python_for_path` / `windows_path_to_wsl` / `build_wsl_hook_command` / `command_succeeds` 四个辅助函数）。
+  > **旧 WSL 分支已删除，新 WSL2 入口独立存在**：早期版本曾在 Windows 原生 setup 中探测 WSL bash + python3，并尝试给 Windows 原生 Claude Code/Codex 写入 `python3 /mnt/d/...` 命令。这个方向不可行，因为 Windows 原生进程不能直接执行 WSL 命令串。该旧分支已删除。当前支持的是另一条链路：在 WSL distro 内运行 `scripts/wsl/setup-hooks.sh`，为 WSL 内的 Claude Code / Codex / OpenCode 配置 hooks/plugins，并通过 `tcp://127.0.0.1:17361` 推送到 Windows 原生渲染器。
+
 - **脚本路径必须用正斜杠**（`to_forward_slash`）：Claude Code/Codex 在 Windows 上通过 **sh（Git Bash）** 执行 hook 命令。若脚本路径含反斜杠（`D:\...\claude_hook.py`），sh 会把反斜杠当转义符吞掉，路径被破坏成 `D:...claude_hook.py` → 找不到文件 → hook 静默失败 → 宠物收不到任何事件。`to_forward_slash` 统一转为 `/`，sh 与 cmd 均可正确解析。详见 [§ 已知坑：sh 反斜杠转义](#已知坑sh-反斜杠转义)。
 - **Codex 多平台字段**：除 `command` 外，`command_windows` 有值时额外写 `commandWindows`（Codex schema 区分平台的 key），同样用裸 python + 正斜杠脚本路径。清理时同时匹配 `command`/`commandWindows`/`command_windows` 三种历史写法。
 - **配置路径**：**不是** `~/.claude` → `%USERPROFILE%\.claude` 的字符串替换，而是依赖 `Path.expanduser()` 跨平台解析，并支持 `CLAUDE_CONFIG_DIR`/`CODEX_HOME`/`OPENCODE_CONFIG_DIR` 环境变量覆盖。
@@ -116,10 +117,10 @@ TS 侧与 Python 同构：`defaultEventEndpoint` / `pushEvent` / `pushTcp` / `re
 
 对标三个 `.sh`，职责清晰：
 
-| 脚本 | 对标 | 职责 |
-|---|---|---|
-| `setup.ps1` | `setup.sh` | 一键：把 `.cargo\bin` + MSVC toolchain 临时加 PATH → 复制 config.json → `npm install` → 调 setup-hooks.ps1 → 调 build-and-run.ps1 |
-| `setup-hooks.ps1` | `setup-hooks.sh` | Python 启动器：探测 `python`→`py -3`→`python3`，调 `setup_hooks.py`，透传退出码 |
+| 脚本                | 对标               | 职责                                                                                                                                        |
+| ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup.ps1`         | `setup.sh`         | 一键：把 `.cargo\bin` + MSVC toolchain 临时加 PATH → 复制 config.json → `npm install` → 调 setup-hooks.ps1 → 调 build-and-run.ps1           |
+| `setup-hooks.ps1`   | `setup-hooks.sh`   | Python 启动器：探测 `python`→`py -3`→`python3`，调 `setup_hooks.py`，透传退出码                                                             |
 | `build-and-run.ps1` | `build-and-run.sh` | `npx tauri build --debug` → 建 `runtime/sessions` → 读 `runtime/kotori-pet.pid` 杀旧进程 → 后台启动（stdout/stderr 重定向到日志）→ 写新 PID |
 
 进程生命周期用 PID 文件而非 `Stop-Process -Name`，避免误杀用户手动启动的其它实例。
@@ -171,7 +172,7 @@ TS 侧与 Python 同构：`defaultEventEndpoint` / `pushEvent` / `pushTcp` / `re
 
 新增覆盖：UTF-8 中文 dialogue 读取、`commandWindows` 写入、Windows 路径加引号、`default_event_endpoint` 显式值优先、`loadPluginRuntime` 处理带空格盘符的 `file://` URL。
 
-> 注：早期版本含 WSL 路径转换（`windows_path_to_wsl`/`build_wsl_hook_command`）测试用例，纯 Windows 方案下已随实现一并删除。
+> 注：早期版本含 Windows setup 内部的 WSL 路径转换（`windows_path_to_wsl`/`build_wsl_hook_command`）测试用例，纯 Windows 方案下已随实现一并删除。当前 WSL2 支持由独立入口 `scripts/wsl/setup-hooks.sh` 和 WSL 检测测试覆盖。
 
 ---
 
@@ -197,16 +198,16 @@ TS 侧与 Python 同构：`defaultEventEndpoint` / `pushEvent` / `pushTcp` / `re
 
 ## 10. 验证矩阵（建议）
 
-| 项 | macOS | Windows 原生 |
-|---|---|---|
-| Unix socket / TCP 事件通道 | socket | tcp://17361 |
-| 悬停跳跃（cursor_in_window） | ✅ | ✅ GetCursorPos |
-| 精灵帧加载 | asset 协议 | blob URL |
+| 项                                 | macOS       | Windows 原生            |
+| ---------------------------------- | ----------- | ----------------------- |
+| Unix socket / TCP 事件通道         | socket      | tcp://17361             |
+| 悬停跳跃（cursor_in_window）       | ✅          | ✅ GetCursorPos         |
+| 精灵帧加载                         | asset 协议  | blob URL                |
 | hook 安装（Claude/Codex/OpenCode） | pet-hook.sh | python（裸名 + 正斜杠） |
-| `npm test` | ✅ | ✅（去 uv） |
-| husky pre-commit | sh | ps1 |
+| `npm test`                         | ✅          | ✅（去 uv）             |
+| husky pre-commit                   | sh          | ps1                     |
 
-> 说明：纯 Windows 方案下不再支持/测试 WSL 链路，相关列已移除。
+> 说明：Windows 原生 setup 不再尝试跨边界配置 WSL。WSL2 支持由独立入口 `scripts/wsl/setup-hooks.sh` 覆盖：Windows app 渲染，WSL agents 发送事件到 `tcp://127.0.0.1:17361`。
 
 ---
 

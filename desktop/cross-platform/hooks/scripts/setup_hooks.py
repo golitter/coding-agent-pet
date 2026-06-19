@@ -50,6 +50,15 @@ def is_windows():
     return os.name == 'nt'
 
 
+def is_wsl():
+    if os.environ.get('WSL_DISTRO_NAME') or os.environ.get('WSL_INTEROP'):
+        return True
+    try:
+        return 'microsoft' in Path('/proc/version').read_text(encoding='utf-8').lower()
+    except OSError:
+        return False
+
+
 def load_json(path, default=None):
     try:
         with open(path, 'r', encoding='utf-8') as file_obj:
@@ -149,8 +158,8 @@ def detect_python_command(config_value=None):
 
     Two modes, both validated via validate_python_command():
 
-    1. Explicit (``hooks.python_command`` in config.json, or the
-       KOTORI_PET_PYTHON env var): the user pins the exact command. This is
+    1. Explicit (the KOTORI_PET_PYTHON env var, or ``hooks.python_command``
+       in config.json): the user pins the exact command. This is
        the recommended path on Windows — it sidesteps conda/PATH drift (a
        hook written while conda base was active would otherwise hardcode the
        conda python's absolute path and break on the next env switch). If the
@@ -165,13 +174,13 @@ def detect_python_command(config_value=None):
     Returns the validated command string (bare name or forward-slashed
     path), or None when auto-detect finds nothing.
     """
-    explicit = (config_value or os.environ.get('KOTORI_PET_PYTHON') or '').strip()
+    explicit = (os.environ.get('KOTORI_PET_PYTHON') or config_value or '').strip()
     if explicit:
         if not validate_python_command(explicit):
             print(f'[setup-hooks] ERROR: configured python_command does not work: {explicit!r}', file=sys.stderr)
             print('              `<command> --version` did not return Python 3.', file=sys.stderr)
-            print('              Fix hooks.python_command in config.json (or uninstall the bad', file=sys.stderr)
-            print('              python), then rerun setup.', file=sys.stderr)
+            print('              Fix KOTORI_PET_PYTHON or hooks.python_command in config.json,', file=sys.stderr)
+            print('              then rerun setup.', file=sys.stderr)
             sys.exit(1)
         return to_forward_slash(explicit) if os.path.isabs(explicit) else explicit
 
@@ -215,6 +224,10 @@ def config_path_or_default(value, default_value):
 
 def is_tool_available(names):
     return any(shutil.which(name) for name in names)
+
+
+def should_setup_opencode():
+    return os.environ.get('KOTORI_PET_SKIP_OPENCODE') not in ('1', 'true', 'TRUE', 'yes')
 
 
 def is_managed_pet_command(command, expected_command):
@@ -448,7 +461,7 @@ def build_targets(platform_dir, config):
     claude_script = platform_dir / 'hooks' / 'scripts' / 'claude_hook.py'
     codex_script = platform_dir / 'hooks' / 'scripts' / 'codex_hook.py'
 
-    if is_windows() and python_command:
+    if (is_windows() or is_wsl()) and python_command:
         claude_hook = build_python_hook_command(python_command, claude_script)
         codex_hook = build_python_hook_command(python_command, codex_script)
     else:
@@ -512,11 +525,11 @@ def main():
         enable_codex_pet_hooks(codex_target.settings_path, codex_target.command, CODEX_EVENTS)
         warn_untrusted_codex_hooks(codex_target.settings_path, codex_target.command, CODEX_EVENTS)
 
-    if is_tool_available(['opencode']):
+    if should_setup_opencode() and is_tool_available(['opencode']):
         deployed = setup_opencode(platform_dir, hooks_config)
         if deployed:
             configured.append(('OpenCode', deployed))
-    else:
+    elif should_setup_opencode():
         skipped.append(('OpenCode', 'command not found'))
         print('Skipping OpenCode: command not found')
 

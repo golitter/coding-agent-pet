@@ -10,6 +10,7 @@ import {
   defaultEventEndpoint,
   detectRepoRoot,
   findConfigPath,
+  isWsl,
   loadPluginRuntime,
   resolvePetBaseDir,
   resolvePath,
@@ -106,6 +107,17 @@ test("defaultEventEndpoint prefers explicit values and keeps platform defaults",
     fallback,
     process.platform === "win32" ? "tcp://127.0.0.1:17361" : "/tmp/custom.sock",
   );
+});
+
+test("defaultEventEndpoint uses TCP inside WSL", () => {
+  assert.equal(
+    defaultEventEndpoint(
+      { socket_path: "/tmp/custom.sock" },
+      { env: { WSL_DISTRO_NAME: "Ubuntu" }, procVersionText: "" },
+    ),
+    "tcp://127.0.0.1:17361",
+  );
+  assert.equal(isWsl({}, "Linux version 6.6.87.2-microsoft-standard-WSL2"), true);
 });
 
 test("detectRepoRoot handles real app layout and flat test fixtures", () => {

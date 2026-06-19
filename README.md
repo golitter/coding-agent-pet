@@ -35,13 +35,13 @@ python setup.py                      # 自动识别平台，一键完成依赖 �
 
 ## 交互
 
-| 操作 | 效果 |
-|---|---|
-| 悬停 | 跳跃 🎉 |
-| 三连击（800ms 内） | 清空所有会话 🧹 |
-| 点击消息框 | 折叠为右上角圆形会话计数徽标；点击徽标恢复消息框 |
-| 拖动 | 移动位置（方向奔跑动画） |
-| 右键 | 菜单：关闭宠物 |
+| 操作               | 效果                                             |
+| ------------------ | ------------------------------------------------ |
+| 悬停               | 跳跃 🎉                                          |
+| 三连击（800ms 内） | 清空所有会话 🧹                                  |
+| 点击消息框         | 折叠为右上角圆形会话计数徽标；点击徽标恢复消息框 |
+| 拖动               | 移动位置（方向奔跑动画）                         |
+| 右键               | 菜单：关闭宠物                                   |
 
 ## 架构
 
@@ -51,6 +51,8 @@ Claude Code / Codex → hook 脚本 (pet-hook.sh) ──┐
 OpenCode           → TS 插件 (opencode-plugin.ts)┘     ├── Rust: 多会话聚合 + 双通道监听
                                                         └── JS: 精灵动画 + 对话气泡/折叠徽标 + 权限提示音
 ```
+
+Windows / WSL2 场景下事件通道使用 TCP loopback（默认 `tcp://127.0.0.1:17361`）替代 Unix Socket；WSL2 中可运行 `desktop/cross-platform/scripts/wsl/setup-hooks.sh` 配置 Claude Code / Codex / OpenCode。
 
 状态优先级：`waiting > running > running-left/right > review > jumping > waving > idle > failed`
 

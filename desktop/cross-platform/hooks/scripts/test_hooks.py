@@ -96,6 +96,7 @@ class SetupHooksTests(unittest.TestCase):
             platform_dir / 'scripts' / 'macos' / 'setup.sh',
             platform_dir / 'scripts' / 'macos' / 'setup-hooks.sh',
             platform_dir / 'scripts' / 'macos' / 'build-and-run.sh',
+            platform_dir / 'scripts' / 'wsl' / 'setup-hooks.sh',
         ]
 
         for shell_file in shell_files:
@@ -182,6 +183,35 @@ class SetupHooksTests(unittest.TestCase):
             self.assertEqual(hook['command'], 'python3 /mnt/d/repo/codex_hook.py')
             self.assertEqual(hook['commandWindows'], r'python D:\repo\codex_hook.py')
 
+    def test_build_targets_uses_python_scripts_on_wsl(self):
+        platform_dir = Path('/mnt/d/repo/desktop/cross-platform')
+        original_is_windows = setup_hooks.is_windows
+        original_is_wsl = setup_hooks.is_wsl
+        original_detect_python_command = setup_hooks.detect_python_command
+        try:
+            setup_hooks.is_windows = lambda: False
+            setup_hooks.is_wsl = lambda: True
+            setup_hooks.detect_python_command = lambda _config=None: 'python3'
+
+            targets, _hooks_config, _python_command = setup_hooks.build_targets(
+                platform_dir,
+                {'hooks': {}},
+            )
+        finally:
+            setup_hooks.is_windows = original_is_windows
+            setup_hooks.is_wsl = original_is_wsl
+            setup_hooks.detect_python_command = original_detect_python_command
+
+        commands = {target.name: target.command for target in targets}
+        self.assertEqual(
+            commands['Claude Code'],
+            'python3 /mnt/d/repo/desktop/cross-platform/hooks/scripts/claude_hook.py',
+        )
+        self.assertEqual(
+            commands['Codex'],
+            'python3 /mnt/d/repo/desktop/cross-platform/hooks/scripts/codex_hook.py',
+        )
+
     def test_enable_codex_pet_hooks_marks_existing_trusted_entries_enabled(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             settings_path = Path(temp_dir) / 'hooks.json'
@@ -225,6 +255,36 @@ class SetupHooksTests(unittest.TestCase):
             setup_hooks.config_path_or_default(None, '/default/path'),
             '/default/path',
         )
+
+    def test_detect_python_command_env_overrides_config_value(self):
+        original_env = os.environ.get('KOTORI_PET_PYTHON')
+        original_validate = setup_hooks.validate_python_command
+        try:
+            os.environ['KOTORI_PET_PYTHON'] = 'python3'
+            setup_hooks.validate_python_command = lambda command: command == 'python3'
+            self.assertEqual(
+                setup_hooks.detect_python_command('C:/Windows/Python/python.exe'),
+                'python3',
+            )
+        finally:
+            setup_hooks.validate_python_command = original_validate
+            if original_env is None:
+                os.environ.pop('KOTORI_PET_PYTHON', None)
+            else:
+                os.environ['KOTORI_PET_PYTHON'] = original_env
+
+    def test_should_setup_opencode_honors_skip_env(self):
+        original = os.environ.get('KOTORI_PET_SKIP_OPENCODE')
+        try:
+            os.environ['KOTORI_PET_SKIP_OPENCODE'] = '1'
+            self.assertFalse(setup_hooks.should_setup_opencode())
+            os.environ['KOTORI_PET_SKIP_OPENCODE'] = 'false'
+            self.assertTrue(setup_hooks.should_setup_opencode())
+        finally:
+            if original is None:
+                os.environ.pop('KOTORI_PET_SKIP_OPENCODE', None)
+            else:
+                os.environ['KOTORI_PET_SKIP_OPENCODE'] = original
 
     def test_setup_opencode_deploys_plugin_shared_module_and_companion(self):
         with tempfile.TemporaryDirectory() as temp_dir:

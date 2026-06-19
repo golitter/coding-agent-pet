@@ -134,11 +134,22 @@ function resolveHomeDir() {
   return process.env.HOME || "/";
 }
 
-export function defaultEventEndpoint(config = {}) {
+export function isWsl(env = process.env, procVersionText = null) {
+  if (env.WSL_DISTRO_NAME || env.WSL_INTEROP) return true;
+  try {
+    const version =
+      procVersionText === null ? fs.readFileSync("/proc/version", "utf-8") : procVersionText;
+    return version.toLowerCase().includes("microsoft");
+  } catch {
+    return false;
+  }
+}
+
+export function defaultEventEndpoint(config = {}, options = {}) {
   if (typeof config.event_endpoint === "string" && config.event_endpoint.trim()) {
     return config.event_endpoint.trim();
   }
-  if (process.platform === "win32") {
+  if (process.platform === "win32" || isWsl(options.env, options.procVersionText)) {
     return "tcp://127.0.0.1:17361";
   }
   return config.socket_path || "/tmp/kotori-pet.sock";

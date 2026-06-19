@@ -82,7 +82,8 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
         ├── config.json                #   用户配置（自动生成，.gitignore）
         ├── scripts/                   #   平台入口脚本（按 OS 分目录）
         │   ├── macos/                 #     setup.sh / setup-hooks.sh / build-and-run.sh
-        │   └── windows/               #     setup.ps1 / setup-hooks.ps1 / build-and-run.ps1
+        │   ├── windows/               #     setup.ps1 / setup-hooks.ps1 / build-and-run.ps1
+        │   └── wsl/                   #     setup-hooks.sh（WSL2 hooks/plugins → Windows 渲染器）
         ├── package.json               #   Node.js 前端依赖
         ├── hooks/                     #   Hook 脚本
         │   ├── pet-hook.sh            #     Shell 入口 (claude-code / codex)
@@ -128,6 +129,14 @@ bash scripts/macos/setup.sh
 `setup.sh`（macOS）/ `setup.ps1`（Windows）自动完成：安装前端依赖 → 生成配置 → 配置 hooks → 编译 → 启动。
 入口脚本按平台分目录：`scripts/macos/*.sh`、`scripts/windows/*.ps1`。
 
+WSL2 场景下，Windows 原生应用负责渲染，agent 在 WSL distro 内运行。进入同一份仓库后执行：
+
+```bash
+bash scripts/wsl/setup-hooks.sh
+```
+
+该入口只配置 WSL 侧 Claude Code / Codex hooks 和 OpenCode 插件，不安装依赖、不构建、不启动 Tauri；事件默认通过 `tcp://127.0.0.1:17361` 推给 Windows 渲染器。
+
 ## 配置
 
 所有可配置项在 `desktop/cross-platform/config.json`，首次运行自动从 `config.example.json` 复制。
@@ -149,6 +158,8 @@ bash scripts/macos/setup.sh
 ## 脚本说明
 
 入口脚本按平台分目录：`scripts/macos/`（`*.sh`）与 `scripts/windows/`（`*.ps1`），两套一一对应。
+
+WSL2 额外提供 `scripts/wsl/setup-hooks.sh`，用于“Windows 渲染 + WSL agents”的分离工作流。
 
 | 脚本（macOS / Windows）                  | 用途                                                   |
 | ---------------------------------------- | ------------------------------------------------------ |
