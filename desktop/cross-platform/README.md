@@ -179,7 +179,7 @@ npm run test:hooks   # hooks 轻量测试（Python unittest + Node --test）
 
 ## 要求
 
-- macOS 13+（当前已测试平台）
+- macOS 13+ / Windows 10/11（均已测试）
 - [Rust](https://rustup.rs/) + Cargo
 - Node.js + npm
 - Python 3（系统自带，hook 脚本使用）

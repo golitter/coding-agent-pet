@@ -1,12 +1,12 @@
-//! Activity aggregator — owns the live view of every AI agent process
-//! (Claude Code / Codex / …) currently producing events, and rolls them up
-//! into a single display state for the pet renderer.
+//! 活动聚合器——持有当前每个正在产生事件的 AI agent 进程
+//! （Claude Code / Codex / …）的实时视图，并将它们汇总为宠物渲染器使用的
+//! 单一显示状态。
 //!
-//! Naming note: the wire protocol and on-disk filename still use `session_id`
-//! (e.g. `019ea736-...json`), since that identifier is owned by the agent.
-//! Internally, however, what we are tracking is the *agent's current activity*
-//! (running / waiting / jumping / …), not a long-lived session. Hence
-//! `ActivityAggregator` + `AgentActivity` for the in-memory model.
+//! 命名说明：线上协议与磁盘上的文件名仍使用 `session_id`
+//! （例如 `019ea736-...json`），因为该标识符归 agent 所有。
+//! 然而在内部，我们追踪的是 *agent 当前的活动*
+//! （running / waiting / jumping / …），而非长期存活的会话。因此内存模型
+//! 使用 `ActivityAggregator` + `AgentActivity`。
 
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -16,8 +16,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use tracing::info;
 
-/// Priority order for aggregating multi-agent activities.
-/// Higher number = higher priority. Kept as reference; get_priority uses match for O(1).
+/// 多 agent 活动汇总时的状态优先级顺序。
+/// 数字越大优先级越高。仅作参考保留；get_priority 用 match 实现 O(1) 查找。
 #[allow(dead_code)]
 const STATE_PRIORITY: &[(&str, i32)] = &[
     ("waiting", 8),
@@ -44,9 +44,9 @@ fn get_priority(state: &str) -> i32 {
     }
 }
 
-/// Filesystem mtime of a path, as unix seconds (0 if unavailable).
-/// Uses mtime (source of truth), not the JSON's `updatedAt` field — the filesystem
-/// is what reflects reality after `common.py` does an atomic `os.replace()` write.
+/// 路径的文件系统 mtime，以 unix 秒为单位（不可用时为 0）。
+/// 使用 mtime（事实来源），而非 JSON 的 `updatedAt` 字段——在 `common.py`
+/// 执行原子 `os.replace()` 写入后，文件系统才反映真实情况。
 fn file_mtime_secs(path: &Path) -> u64 {
     path.metadata()
         .and_then(|m| m.modified())
@@ -56,34 +56,31 @@ fn file_mtime_secs(path: &Path) -> u64 {
         .unwrap_or(0)
 }
 
-/// A session file is stale if its filesystem mtime is older than `timeout` seconds.
+/// 当会话文件的文件系统 mtime 比 `timeout` 秒更旧时，即视为陈旧。
 fn is_session_file_stale(path: &Path, now: u64, timeout: u64) -> bool {
     now.saturating_sub(file_mtime_secs(path)) > timeout
 }
 
-/// States that play once and revert (celebrations). Their session files should
-/// not linger beyond the display window — see `reconcile_with_disk`.
+/// 播放一次后即还原的状态（庆祝动画）。其会话文件不应在显示窗口之后继续残留——
+/// 见 `reconcile_with_disk`。
 fn is_oneshot_state(state: &str) -> bool {
     state == "jumping" || state == "waving"
 }
 
-/// How long a one-shot celebration file may survive on disk before the file
-/// watcher's reconciliation clears it. Generous vs. the socket channel's 2s
-/// `remove_if_state` delay so the animation finishes even under load.
+/// 一次性庆祝文件在磁盘上允许存活的最长时间，超过后由文件监视器的对账清除。
+/// 相比 socket 通道 2s 的 `remove_if_state` 延迟更宽松，以便动画即使在高负载下也能播完。
 const ONESHOT_DISPLAY_WINDOW_SEC: u64 = 5;
 
-/// Delete a one-shot celebration file (jumping/waving) iff its display window
-/// has already elapsed. Re-reads the file to inspect its `state`, so callers
-/// should only invoke it on paths whose mtime is plausibly past the window —
-/// the cheap mtime pre-check below skips the read for fresh files.
+/// 当一次性庆祝文件（jumping/waving）的显示窗口已过时，删除该文件。
+/// 会重新读取文件以检查其 `state`，因此调用方应仅对 mtime 显然已过窗口的路径
+/// 调用它——下面的廉价 mtime 预检会跳过对新文件的读取。
 ///
-/// This is the *clock-driven* backstop for Stop / SessionEnd celebrations.
-/// The socket channel normally deletes these ~2s after the event, but if the
-/// app was down (or the socket push silently failed) at event time, nothing
-/// ever re-touches the file, so the *reactive* `reconcile_paths` check never
-/// fires. The periodic `cleanup_stale` sweep calls this so such residue is
-/// cleared within `cleanup_interval_sec` instead of lingering for
-/// `stale_timeout_sec` (1h).
+/// 这是 Stop / SessionEnd 庆祝的*时钟驱动*兜底机制。
+/// socket 通道通常在事件后约 2s 删除这些文件，但若事件发生时应用已关闭
+/// （或 socket 推送静默失败），则没有任何东西会再次触及该文件，因此
+/// *反应式* `reconcile_paths` 检查永远不会触发。周期性的 `cleanup_stale`
+/// 扫描会调用本函数，使这类残留物在 `cleanup_interval_sec` 内被清除，
+/// 而非残留至 `stale_timeout_sec`（1h）。
 fn prune_expired_oneshot(path: &Path, now: u64) -> bool {
     if now.saturating_sub(file_mtime_secs(path)) <= ONESHOT_DISPLAY_WINDOW_SEC {
         return false;
@@ -125,7 +122,7 @@ pub struct StateChange {
     pub pending_permission_version: u64,
 }
 
-/// Aggregated display state — protected by a single Mutex to prevent deadlocks.
+/// 汇总后的显示状态——由单个 Mutex 保护以防死锁。
 struct AggregatedState {
     current_state: String,
     current_dialogue: String,
@@ -136,15 +133,14 @@ struct AggregatedState {
     pending_permission_sessions: HashSet<String>,
 }
 
-/// All mutable state behind ONE Mutex. The map key is the agent's session_id
-/// (kept as `String` here to honor the wire-protocol naming).
+/// 所有可变状态都位于同一个 Mutex 之后。map 的键是 agent 的 session_id
+/// （这里保留为 `String` 以遵从线上协议命名）。
 struct Inner {
     activities: HashMap<String, AgentActivity>,
     aggregated: AggregatedState,
 }
 
-/// Aggregates the live activity of multiple concurrent AI agents into a
-/// single display state consumed by the pet renderer.
+/// 将多个并发 AI agent 的实时活动聚合为宠物渲染器使用的单一显示状态。
 pub struct ActivityAggregator {
     inner: Mutex<Inner>,
     sessions_dir: String,
@@ -152,17 +148,17 @@ pub struct ActivityAggregator {
     tx: broadcast::Sender<StateChange>,
 }
 
-// ── Convenience helpers for accessing `inner.activities` ──
+// ── 访问 `inner.activities` 的便捷辅助函数 ──
 
 impl ActivityAggregator {
-    /// Lock inner and replace all activities atomically.
+    /// 加锁并将所有活动原子替换。
     fn replace_all_sessions(&self, new: HashMap<String, AgentActivity>) {
         let mut inner = self.inner.lock().unwrap();
         inner.activities = new;
     }
 
-    /// Lock inner, collect orphaned session ids (those not in `file_ids`),
-    /// then remove them. Returns the removed ids for logging.
+    /// 加锁，收集孤立会话 id（不在 `file_ids` 中的那些），然后删除它们。
+    /// 返回被删除的 id 以供日志记录。
     fn remove_orphaned_sessions(
         &self,
         file_ids: &std::collections::HashSet<String>,
@@ -207,7 +203,7 @@ impl ActivityAggregator {
         self.tx.subscribe()
     }
 
-    /// Update an agent's activity from a hook event.
+    /// 根据 hook 事件更新某个 agent 的活动。
     pub fn update(
         &self,
         session_id: &str,
@@ -217,8 +213,7 @@ impl ActivityAggregator {
         source: &str,
         is_terminal: bool,
     ) {
-        // Single lock acquisition: insert/remove + aggregate under one hold,
-        // then broadcast outside the lock to avoid blocking other callers.
+        // 单次加锁：插入/删除 + 汇总在一次持有内完成，然后在锁外广播以避免阻塞其他调用方。
         let change = {
             let mut inner = self.inner.lock().unwrap();
 
@@ -240,7 +235,7 @@ impl ActivityAggregator {
             Self::compute_change(&mut inner)
         };
 
-        // File deletion and broadcast outside the lock
+        // 文件删除与广播在锁外进行
         if is_terminal {
             let path = PathBuf::from(&self.sessions_dir).join(format!("{}.json", session_id));
             let _ = std::fs::remove_file(path);
@@ -250,16 +245,14 @@ impl ActivityAggregator {
         }
     }
 
-    /// Remove an agent's activity iff it is still in `expected_state`.
+    /// 仅当某 agent 的活动仍处于 `expected_state` 时才删除它。
     ///
-    /// Used for the Stop-delayed cleanup: when a Stop arrives we schedule a
-    /// removal ~2s later so the "搞定啦" celebration is visible, but only
-    /// commit it if the session is *still* in the Stop state ("jumping") when
-    /// the timer fires. If a fresh event (UserPromptSubmit, PreToolUse, …)
-    /// updated the activity in the meantime, its state changed and this is a
-    /// no-op — the live activity survives. This cancellation-by-state check is
-    /// why the cleanup lives in the backend (a long-lived process) rather than
-    /// in the short-lived hook script, whose timer would never fire.
+    /// 用于 Stop 延迟清理：当 Stop 到达时，我们调度约 2s 后的删除，以便
+    /// “搞定啦”庆祝可见；但仅当定时器触发时会话*仍*处于 Stop 状态（"jumping"）
+    /// 时才提交删除。若在此期间有新事件（UserPromptSubmit、PreToolUse、…）更新了
+    /// 活动，则其状态已改变，本次删除为空操作——实时活动得以保留。正是这种
+    /// 按状态判定的取消逻辑，使得清理逻辑应放在后端（长生命周期进程）中，而非
+    /// 短生命周期的 hook 脚本里——后者的定时器根本不会触发。
     pub fn remove_if_state(&self, session_id: &str, expected_state: &str) -> bool {
         let removed = {
             let mut inner = self.inner.lock().unwrap();
@@ -283,7 +276,7 @@ impl ActivityAggregator {
         removed
     }
 
-    /// Load all session files from disk.
+    /// 从磁盘加载所有会话文件。
     pub fn load_from_disk(&self) {
         let read_dir = match std::fs::read_dir(&self.sessions_dir) {
             Ok(d) => d,
@@ -324,18 +317,16 @@ impl ActivityAggregator {
                 continue;
             }
 
-            // Skip stale files using filesystem mtime — single source of truth
-            // for staleness, shared with `cleanup_stale`.
+            // 使用文件系统 mtime 跳过陈旧文件——陈旧判定的唯一事实来源，
+            // 与 `cleanup_stale` 共用。
             if is_session_file_stale(&path, now, self.stale_timeout_sec) {
                 continue;
             }
 
-            // One-shot celebration whose display window already elapsed.
-            // On (re)start these would otherwise resurrect as a live
-            // "jumping"/"waving" pet; delete the residue and skip loading.
-            // This covers the common cause of a lingering Stop file: the app
-            // was down when Stop fired, so the socket channel's ~2s removal
-            // never ran, and nothing has re-touched the file since.
+            // 显示窗口已过的一次性庆祝文件。否则在（重新）启动时它们会作为
+            // 活动的 "jumping"/"waving" 宠物复活；删除残留并跳过加载。
+            // 这覆盖了 Stop 文件残留的常见原因：Stop 触发时应用已关闭，
+            // 因此 socket 通道约 2s 的删除从未执行，此后也没有任何东西再触及该文件。
             if is_oneshot_state(&state)
                 && now.saturating_sub(file_mtime_secs(&path)) > ONESHOT_DISPLAY_WINDOW_SEC
             {
@@ -359,15 +350,12 @@ impl ActivityAggregator {
         self.aggregate_and_notify();
     }
 
-    /// Manual "purge all" — delete every `.json` file under the sessions dir
-    /// and wipe the in-memory activities map. Triggered by the frontend's
-    /// triple-click interaction regardless of file mtime; the user is asking
-    /// for a clean slate on demand. Returns the number of files deleted so
-    /// the renderer can surface a per-call count in the bubble.
+    /// 手动“全部清除”——删除会话目录下的每个 `.json` 文件，并清空内存中的活动 map。
+    /// 由前端三连击交互触发，无视文件 mtime；用户是在按需要求一个干净的起点。
+    /// 返回被删除的文件数，以便渲染器在气泡中展示本次调用的计数。
     ///
-    /// Warning: this kills active agents' session state on disk. They will
-    /// appear idle to the renderer until they fire their next event, at which
-    /// point their entry is recreated from the new file.
+    /// 警告：这会清除活动 agent 在磁盘上的会话状态。在它们触发下一个事件之前，
+    /// 渲染器会看到它们处于空闲态；触发下一个事件后，其条目会从新文件重新创建。
     pub fn purge_all(&self) -> usize {
         let read_dir = match std::fs::read_dir(&self.sessions_dir) {
             Ok(d) => d,
@@ -401,10 +389,9 @@ impl ActivityAggregator {
         count
     }
 
-    /// Clean up activities whose files have been deleted (memory-orphans),
-    /// AND delete session files whose mtime exceeds `stale_timeout_sec` (disk-orphans).
-    /// The disk-side cleanup is the backstop for crashed agents that never fire
-    /// Stop — without it, files would accumulate until app restart.
+    /// 清理文件已被删除的活动（内存孤立项），并删除 mtime 超过 `stale_timeout_sec`
+    /// 的会话文件（磁盘孤立项）。磁盘侧清理是为崩溃后从不触发 Stop 的 agent 准备的
+    /// 兜底机制——否则文件会一直累积直到应用重启。
     pub fn cleanup_stale(&self) {
         let read_dir = match std::fs::read_dir(&self.sessions_dir) {
             Ok(d) => d,
@@ -431,19 +418,17 @@ impl ActivityAggregator {
                 .unwrap_or_default();
 
             if is_session_file_stale(&path, now, self.stale_timeout_sec) {
-                // Stale file on disk → delete the file. The corresponding memory
-                // entry (if any) becomes an orphan and is dropped below by
-                // remove_orphaned_sessions, since the file no longer exists.
+                // 磁盘上的陈旧文件 → 删除该文件。对应的内存条目（若有）成为孤立项，
+                // 因文件已不存在，会在下面由 remove_orphaned_sessions 丢弃。
                 let _ = std::fs::remove_file(&path);
                 stale_on_disk += 1;
                 continue;
             }
 
-            // One-shot celebration lingering past its display window — the
-            // clock-driven backstop that the reactive reconcile_paths check
-            // alone cannot provide (see `prune_expired_oneshot`). Without this,
-            // a Stop file left behind when the app was down at event time would
-            // survive until `stale_timeout_sec` (1h).
+            // 超过显示窗口仍残留的一次性庆祝文件——这是反应式 reconcile_paths
+            // 检查无法单独提供的时钟驱动兜底（见 `prune_expired_oneshot`）。
+            // 若没有它，事件发生时应用已关闭而遗留的 Stop 文件将存活到
+            // `stale_timeout_sec`（1h）。
             if prune_expired_oneshot(&path, now) {
                 oneshot_pruned += 1;
                 continue;
@@ -452,9 +437,8 @@ impl ActivityAggregator {
             file_ids.insert(file_stem);
         }
 
-        // Activities in memory with no surviving file → drop. This covers both
-        // legacy orphan-in-memory (file deleted externally) and the just-deleted
-        // stale-on-disk cases.
+        // 内存中没有对应存活文件的活动 → 丢弃。这既覆盖旧的内存孤立项（文件被外部删除），
+        // 也覆盖刚刚被删除的磁盘陈旧文件情形。
         let orphaned = self.remove_orphaned_sessions(&file_ids);
 
         if !orphaned.is_empty() || stale_on_disk > 0 || oneshot_pruned > 0 {
@@ -468,9 +452,8 @@ impl ActivityAggregator {
         }
     }
 
-    /// Incremental reconciliation for the specific files the watcher reported.
-    /// This keeps hot-path filesystem work proportional to changed files instead
-    /// of rescanning and reparsing the entire sessions directory per event burst.
+    /// 针对监视器上报的具体文件进行增量对账。这使热路径上的文件系统工作
+    /// 与变更文件的数量成正比，而非每次事件突发都重新扫描并重新解析整个会话目录。
     pub fn reconcile_paths(&self, paths: Vec<PathBuf>) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -506,9 +489,9 @@ impl ActivityAggregator {
 
             let is_terminal = json["isTerminal"].as_bool().unwrap_or(false);
 
-            // Terminal residue: `update()` deletes these on sight over the
-            // socket channel. A file still on disk means socket missed the
-            // event — do its job so the dead agent stops showing.
+            // 终态残留：`update()` 在 socket 通道上一旦发现这些就会立即删除。
+            // 仍有文件在磁盘上意味着 socket 漏掉了该事件——替它完成清理，
+            // 让已死的 agent 不再显示。
             if is_terminal {
                 let _ = std::fs::remove_file(&path);
                 to_remove.push(stem);
@@ -516,8 +499,8 @@ impl ActivityAggregator {
                 continue;
             }
 
-            // Stale by mtime — prune it here too so a changed stale file does
-            // not linger in memory until the next periodic cleanup pass.
+            // 按 mtime 判定陈旧——这里也一并修剪，避免变更过的陈旧文件
+            // 在内存中残留到下一次周期性清理。
             if is_session_file_stale(&path, now, self.stale_timeout_sec) {
                 let _ = std::fs::remove_file(&path);
                 to_remove.push(stem);
@@ -527,9 +510,9 @@ impl ActivityAggregator {
 
             let state = json["state"].as_str().unwrap_or("idle").to_string();
 
-            // One-shot celebration whose display window has elapsed. The socket
-            // channel clears these via `remove_if_state` ~2s after Stop; if
-            // socket is down, the pet would otherwise stay stuck "jumping".
+            // 显示窗口已过的一次性庆祝文件。socket 通道会在 Stop 后约 2s 通过
+            // `remove_if_state` 清除这些文件；若 socket 宕机，否则宠物会一直卡在
+            // "jumping"。
             if is_oneshot_state(&state)
                 && now.saturating_sub(file_mtime_secs(&path)) > ONESHOT_DISPLAY_WINDOW_SEC
             {
@@ -590,8 +573,8 @@ impl ActivityAggregator {
         }
     }
 
-    /// Compute aggregated state change from the current activities.
-    /// Returns `Some(StateChange)` if the display state actually changed, `None` otherwise.
+    /// 根据当前活动计算汇总后的状态变更。若显示状态确有变化则返回
+    /// `Some(StateChange)`，否则返回 `None`。
     fn compute_change(inner: &mut Inner) -> Option<StateChange> {
         if inner.activities.is_empty() {
             let changed = inner.aggregated.current_state != "idle"
@@ -689,7 +672,7 @@ impl ActivityAggregator {
         }
     }
 
-    /// Aggregate all activities and broadcast if changed.
+    /// 汇总所有活动，若发生变化则广播。
     fn aggregate_and_notify(&self) {
         let change = self.inner.lock().unwrap().aggregate();
         if let Some(change) = change {
@@ -698,9 +681,9 @@ impl ActivityAggregator {
     }
 }
 
-/// Helper methods on Inner for aggregation.
+/// Inner 上的聚合辅助方法。
 impl Inner {
-    /// Compute and return state change (called while the lock is held).
+    /// 计算并返回状态变更（在持有锁时调用）。
     fn aggregate(&mut self) -> Option<StateChange> {
         ActivityAggregator::compute_change(self)
     }
@@ -880,7 +863,7 @@ mod tests {
         );
     }
 
-    /// Backdate a file's mtime by `secs` seconds so it looks past a window.
+    /// 将文件 mtime 回拨 `secs` 秒，使其看起来已超出某个窗口。
     fn backdate_mtime(path: &Path, secs: u64) {
         let past = SystemTime::now() - Duration::from_secs(secs);
         let times = std::fs::FileTimes::new().set_modified(past);
@@ -897,14 +880,14 @@ mod tests {
         let dir = temp_dir("oneshot-load");
         fs::create_dir_all(&dir).unwrap();
 
-        // A "jumping" (Stop celebration) file whose mtime is past the window.
+        // 一个 "jumping"（Stop 庆祝）文件，其 mtime 已超出窗口。
         let path = write_session_file(&dir, "stop-sess", "jumping", "搞定啦！✨");
         backdate_mtime(&path, ONESHOT_DISPLAY_WINDOW_SEC + 5);
 
         let aggregator = ActivityAggregator::new(dir.to_string_lossy().to_string(), 3600);
         aggregator.load_from_disk();
 
-        // File deleted from disk, and not loaded as a live activity.
+        // 文件已从磁盘删除，且未被加载为活动条目。
         assert!(!path.exists());
         let inner = aggregator.inner.lock().unwrap();
         assert!(!inner.activities.contains_key("stop-sess"));
@@ -920,10 +903,10 @@ mod tests {
 
         let aggregator = ActivityAggregator::new(dir.to_string_lossy().to_string(), 3600);
 
-        // Expired "jumping" file → must be pruned.
+        // 已过期的 "jumping" 文件 → 必须被修剪。
         let stop_path = write_session_file(&dir, "stop-sess", "jumping", "搞定啦！");
         backdate_mtime(&stop_path, ONESHOT_DISPLAY_WINDOW_SEC + 5);
-        // Non-oneshot "running" file → must survive (stale_timeout is 1h).
+        // 非 one-shot 的 "running" 文件 → 必须保留（stale_timeout 为 1h）。
         let run_path = write_session_file(&dir, "run-sess", "running", "处理中...");
 
         aggregator.cleanup_stale();

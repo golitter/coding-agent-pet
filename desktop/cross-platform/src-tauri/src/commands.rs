@@ -17,7 +17,7 @@ pub struct FrontendConfig {
     pub dialogue_corner_radius: u32,
     pub dialogue_fade_duration: f64,
     pub corner_margin: i32,
-    /// pet state → bubble CSS style (e.g. waiting → warning).
+    /// 宠物状态 → 气泡 CSS 样式（例如 waiting → warning）。
     pub style_map: HashMap<String, String>,
     pub menu_items: Vec<FrontendMenuItem>,
 }
@@ -29,8 +29,8 @@ pub struct FrontendMenuItem {
     pub script: Option<String>,
 }
 
-/// Validate that a file path falls within the configured frames directory.
-/// Prevents the webview from reading arbitrary system files via IPC.
+/// 校验文件路径是否落在配置的 frames 目录内。
+/// 防止 webview 通过 IPC 读取任意系统文件。
 fn validate_path_in_frames(path: &str, frames_dir: &str) -> Result<PathBuf, String> {
     let canonical =
         std::fs::canonicalize(path).map_err(|e| format!("Cannot resolve path {}: {}", path, e))?;
@@ -70,20 +70,18 @@ pub fn get_config(config: tauri::State<'_, PetConfig>) -> FrontendConfig {
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle, config: tauri::State<'_, PetConfig>) {
     info!("quit_app command invoked from frontend");
-    // app.exit() drives process::exit(), which skips Rust Drop impls — so the
-    // managed SocketGuard (lib.rs) never fires on this, the primary exit path.
-    // Remove the socket explicitly here. The startup connect-probe (covers a
-    // crash/kill between sessions) and SocketGuard (covers panic unwind) close
-    // the remaining gaps, so the socket is reclaimed in every termination case.
+    // app.exit() 会触发 process::exit()，从而跳过 Rust 的 Drop 实现——因此受托管的
+    // SocketGuard（lib.rs）在这条主退出路径上永远不会执行。这里显式删除 socket。
+    // 启动时的 connect 探测（覆盖会话间的崩溃/被杀）与 SocketGuard（覆盖 panic
+    // unwind）补齐其余缺口，因此 socket 在每种终止情形下都会被回收。
     if !config.event_endpoint.starts_with("tcp://") {
         let _ = std::fs::remove_file(&config.event_endpoint);
     }
     app.exit(0);
 }
 
-/// Wipe every session file on disk and clear the in-memory activities map.
-/// Triggered by the frontend's triple-click interaction. Returns the file
-/// count so the renderer can show a per-call bubble message.
+/// 清除磁盘上所有会话文件，并清空内存中的活动 map。由前端三连击交互触发。
+/// 返回文件数量，以便渲染器展示本次调用的气泡消息。
 #[tauri::command]
 pub fn purge_all_sessions(
     aggregator: tauri::State<'_, Arc<ActivityAggregator>>,
@@ -101,22 +99,20 @@ pub async fn run_applescript(script: String) -> Result<String, String> {
 
     #[cfg(target_os = "macos")]
     {
-        // Reject scripts containing shell-escape attempts.
-        // Case-insensitive: AppleScript is case-insensitive, so a literal
-        // `Do Shell Script` would otherwise bypass a naive `contains("do shell script")`.
-        // Backticks (`do shell script "..."` shorthand) are blocked regardless of case.
-        // Also block `do script` (Terminal.app command execution).
+        // 拒绝包含 shell 转义尝试的脚本。
+        // 不区分大小写：AppleScript 本身大小写不敏感，因此字面的
+        // `Do Shell Script` 否则会绕过朴素的 `contains("do shell script")`。
+        // 反引号（`do shell script "..."` 的简写）无论大小写一律拦截。
+        // 同时拦截 `do script`（Terminal.app 的命令执行）。
         let lower = script.to_lowercase();
         if lower.contains("do shell script") || lower.contains("do script") || script.contains('`')
         {
             return Err("Script contains disallowed patterns".into());
         }
 
-        // Spawn osascript asynchronously so a slow user-supplied script does not
-        // block the main thread / webview event loop. `#[tauri::command]` sync
-        // commands run on the main thread; making this `async` moves it onto the
-        // Tauri tokio runtime, and `tokio::process::Command` awaits the child
-        // without holding a thread.
+        // 异步 spawn osascript，使缓慢的用户脚本不会阻塞主线程 / webview 事件循环。
+        // `#[tauri::command]` 同步命令在主线程运行；将其改为 `async` 会把它移到
+        // Tauri 的 tokio 运行时，`tokio::process::Command` 等待子进程而不占用线程。
         let output = tokio::process::Command::new("osascript")
             .arg("-e")
             .arg(&script)
@@ -132,23 +128,21 @@ pub async fn run_applescript(script: String) -> Result<String, String> {
     }
 }
 
-/// Read raw file bytes for a frame PNG. Used by the hit-test alpha-mask
-/// computation: JS fetch() cannot read asset:// URLs in WKWebView, and <img>
-/// elements loaded from asset:// taint the canvas (blocking getImageData).
-/// Returning raw bytes lets JS build an untainted blob URL instead.
+/// 读取某一帧 PNG 的原始文件字节。用于命中检测 alpha 掩码计算：
+/// 在 WKWebView 中 JS fetch() 无法读取 asset:// URL，而从 asset:// 加载的 <img>
+/// 元素会污染 canvas（导致 getImageData 被阻断）。返回原始字节让 JS 改为构造
+/// 未被污染的 blob URL。
 ///
-/// Path is validated to be within the configured frames_dir to prevent
-/// arbitrary file reads from the webview context.
+/// 路径会被校验是否落在配置的 frames_dir 内，以防从 webview 上下文读取任意文件。
 #[tauri::command]
 pub async fn read_file_bytes(
     path: String,
     config: tauri::State<'_, PetConfig>,
 ) -> Result<Vec<u8>, String> {
     let validated = validate_path_in_frames(&path, &config.frames_dir)?;
-    // `std::fs::read` is a blocking syscall — run it on the blocking pool so it
-    // never stalls the main thread / async worker. A sync `#[tauri::command]`
-    // runs on the main thread; making this `async` moves it onto the Tauri
-    // runtime, and `spawn_blocking` parks the actual I/O on a dedicated thread.
+    // `std::fs::read` 是阻塞式系统调用——放到阻塞池上运行，使其永不会卡住主线程 /
+    // 异步 worker。同步的 `#[tauri::command]` 在主线程运行；改为 `async` 后会移到
+    // Tauri 运行时，`spawn_blocking` 把真正的 I/O 停靠到专用线程上。
     let path_for_err = path.clone();
     tauri::async_runtime::spawn_blocking(move || std::fs::read(&validated))
         .await
@@ -156,13 +150,12 @@ pub async fn read_file_bytes(
         .map_err(|e| format!("Failed to read {}: {}", path_for_err, e))
 }
 
-/// Batch-read multiple frame PNGs in a single IPC call. Returns a map of
-/// original_path → bytes for each file successfully read and validated.
-/// Used by computeAlphaMasks to avoid 55+ individual IPC round trips.
+/// 在单次 IPC 调用中批量读取多个帧 PNG。返回一个 original_path → 字节 的 map，
+/// 仅包含每个成功读取且通过校验的文件。供 computeAlphaMasks 使用，以避免 55+ 次
+/// 独立的 IPC 往返。
 ///
-/// Each requested path is canonicalized before reading, then checked against
-/// the canonical frames_dir. This avoids symlink escapes from the asset
-/// directory while keeping the actual file I/O on the blocking pool.
+/// 每个请求的路径在读取前先做规范化（canonicalize），再与规范的 frames_dir 比对。
+/// 这样既避免从 asset 目录经符号链接逃逸，又把真正的文件 I/O 留在阻塞池上。
 #[tauri::command]
 pub async fn read_frames_batch(
     paths: Vec<String>,
@@ -172,10 +165,9 @@ pub async fn read_frames_batch(
     let frames_canonical = std::fs::canonicalize(frames_dir_path)
         .map_err(|e| format!("Cannot resolve frames_dir: {}", e))?;
 
-    // The whole batch (up to 55+ synchronous `std::fs::read` calls) is moved to
-    // the blocking pool. Sync commands run on the main thread; even async ones
-    // would stall their worker if the reads stayed inline. `spawn_blocking`
-    // guarantees these syscalls never touch the main thread or an async worker.
+    // 整个批次（多达 55+ 次同步 `std::fs::read` 调用）被移到阻塞池。同步命令在
+    // 主线程运行；即便异步命令，若读取留在行内也会卡住其 worker。`spawn_blocking`
+    // 保证这些系统调用永不会触及主线程或某个异步 worker。
     tauri::async_runtime::spawn_blocking(move || {
         let mut results = HashMap::with_capacity(paths.len());
         for path in paths {
@@ -195,18 +187,15 @@ pub async fn read_frames_batch(
     .map_err(|e| format!("Join error: {}", e))
 }
 
-/// Get cursor position relative to the main window's content, in logical
-/// pixels with Y measured from the TOP of the window.
+/// 获取光标相对于主窗口内容的位置，单位为逻辑像素，Y 从窗口顶部起算。
 ///
-/// Uses CGEvent (Core Graphics) to read the *hardware* mouse position, NOT
-/// NSEvent.mouseLocation. Rationale: when `setIgnoreCursorEvents(true)` is
-/// active (pass-through mode), the window stops processing mouse events, so
-/// NSEvent.mouseLocation returns a STALE position (it reflects the last
-/// processed event). CGEvent polls the live hardware position regardless.
+/// 使用 CGEvent（Core Graphics）读取*硬件*鼠标位置，而非 NSEvent.mouseLocation。
+/// 原因：当 `setIgnoreCursorEvents(true)` 激活时（穿透模式），窗口停止处理鼠标
+/// 事件，NSEvent.mouseLocation 返回的是陈旧位置（反映最后一次已处理事件）。
+/// CGEvent 则无论如何都轮询实时硬件位置。
 ///
-/// CG coords use top-left origin with Y down; NS coords use bottom-left with
-/// Y up. We convert using the primary screen height (H): cgY = H - nsY holds
-/// globally. Final result is window-relative, Y from top.
+/// CG 坐标以左上角为原点、Y 向下；NS 坐标以左下角为原点、Y 向上。我们用主屏幕
+/// 高度（H）做换算：全局上 cgY = H - nsY。最终结果相对于窗口，Y 从顶部起算。
 #[tauri::command]
 pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), String> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -234,11 +223,9 @@ pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), Stri
             return Err("GetCursorPos failed".into());
         }
 
-        // Use inner_position (client area origin), not outer_position (which
-        // includes the title bar / border). The window is configured with
-        // decorations:false so the two currently coincide, but inner_position
-        // is the semantically correct reference for a client-area hit test and
-        // stays correct if decorations are ever enabled.
+        // 使用 inner_position（客户区原点），而非 outer_position（后者包含标题栏 /
+        // 边框）。窗口配置为 decorations:false，因此两者当前重合，但 inner_position
+        // 在语义上才是客户区命中检测的正确参照，且即使将来启用装饰也依然正确。
         let window_pos = window
             .inner_position()
             .map_err(|e| format!("inner_position: {}", e))?;
@@ -278,7 +265,7 @@ pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), Stri
             size: NSSize,
         }
 
-        // Core Graphics C API: poll live hardware mouse position.
+        // Core Graphics C API：轮询实时硬件鼠标位置。
         #[link(name = "CoreGraphics", kind = "framework")]
         extern "C" {
             fn CGEventCreate(source: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
@@ -292,7 +279,7 @@ pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), Stri
         let ns_window: *mut Object = ns_window_ptr as *mut Object;
 
         unsafe {
-            // Live cursor in CG global coords (origin = primary display top-left, Y down).
+            // CG 全局坐标下的实时光标（原点 = 主显示器左上角，Y 向下）。
             let event = CGEventCreate(std::ptr::null_mut());
             if event.is_null() {
                 return Err("CGEventCreate returned null".into());
@@ -300,19 +287,19 @@ pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), Stri
             let cursor_cg: CGPoint = CGEventGetLocation(event);
             CFRelease(event);
 
-            // Window frame in NS coords (origin = primary display bottom-left, Y up).
+            // NS 坐标下的窗口 frame（原点 = 主显示器左下角，Y 向上）。
             let frame: NSRect = msg_send![ns_window, frame];
 
-            // Primary screen height (NS points) for coordinate-space conversion.
+            // 主屏幕高度（NS points），用于坐标系换算。
             let screen_class = Class::get("NSScreen").ok_or("NSScreen class not found")?;
             let main_screen: *mut Object = msg_send![screen_class, mainScreen];
             let screen_frame: NSRect = msg_send![main_screen, frame];
             let screen_h = screen_frame.size.h;
 
-            // relX: same X origin in both spaces.
+            // relX：两种坐标系下 X 原点相同。
             let rel_x = cursor_cg.x - frame.origin.x;
-            // relY from window top: cgY is Y-down from primary top; window's top
-            // edge in CG coords is (screen_h - (origin.y + size.h)). Subtract.
+            // relY 从窗口顶部起算：cgY 是相对主屏幕顶部的 Y 向下值；窗口顶部边缘
+            // 在 CG 坐标下为 (screen_h - (origin.y + size.h))。二者相减。
             let window_top_cg = screen_h - (frame.origin.y + frame.size.h);
             let rel_y = cursor_cg.y - window_top_cg;
 
@@ -321,8 +308,8 @@ pub fn cursor_in_window(window: tauri::WebviewWindow) -> Result<(f64, f64), Stri
     }
 }
 
-/// Bridge JS console → Rust log. Lets the frontend write diagnostic messages
-/// that appear in the same stream as Rust-side logs (stdout / RUST_LOG).
+/// 将 JS console 桥接到 Rust 日志。让前端写入的诊断消息出现在与 Rust 侧日志
+/// 相同的流中（stdout / RUST_LOG）。
 #[tauri::command]
 pub fn js_log(level: String, tag: String, msg: String) {
     match level.as_str() {

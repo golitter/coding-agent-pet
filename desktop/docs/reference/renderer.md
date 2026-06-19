@@ -81,11 +81,11 @@ src-tauri/    → cross-platform/    (config 所在目录)
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `get_config`         | 返回前端所需的配置子集（frames*dir, scale, fps, dialogue*\*, menu_items）                                                                             |
 | `run_applescript`    | 执行 AppleScript 命令（**仅 macOS**，含安全检查；`async` + `tokio::process`，慢脚本不阻塞主线程）                                                                                                     |
-| `quit_app`           | 退出应用：先显式删除 socket 文件，再 `app.exit(0)`（`process::exit` 跳过 `Drop`，故 socket 不能依赖 `SocketGuard` 清理）；前端调用时记录 `info!` 日志 |
+| `quit_app`           | 退出应用：Unix socket 端点先显式删除 socket 文件（TCP 端点无文件可删则跳过），再 `app.exit(0)`（`process::exit` 跳过 `Drop`，故 socket 不能依赖 `SocketGuard` 清理）；前端调用时记录 `info!` 日志 |
 | `purge_all_sessions` | 手动清空：删除 sessions 目录下全部 `.json` 并清空内存 activities，返回删除文件数                                                                      |
 | `read_file_bytes`    | 读 PNG 原始字节（hit-test alpha 蒙版），**路径校验限制在 `frames_dir` 内**                                                                            |
 | `read_frames_batch`  | 批量读取多帧 PNG（单次 IPC 替代 57 次 `read_file_bytes`），**两级路径校验**：lexical 快路径（无 syscall）+ canonicalize 慢路径（含符号链接时降级）    |
-| `cursor_in_window`   | CGEvent 读硬件鼠标坐标（穿透态轮询恢复，仅 macOS）                                                                                                    |
+| `cursor_in_window`   | 读硬件鼠标坐标（macOS=CGEvent，Windows=GetCursorPos），穿透态轮询恢复（仅 macOS 与 Windows）                                                          |
 | `js_log`             | JS → Rust 日志桥接，前端诊断信息输出到 `RUST_LOG` 流                                                                                                  |
 
 前端通过 `window.__TAURI__.core.invoke('get_config')` 调用。
@@ -382,7 +382,7 @@ Health check 改进：穿透态卡死检测增加 `passThroughPollInFlight` 标�
 | 3 秒未操作                         | `CONTEXT_MENU_AUTO_HIDE_MS` 定时器兜底（鼠标停在窗口内不动时）           |
 | 点击窗口任意处 / 菜单项 / 按 `Esc` | 立即隐藏                                                                 |
 
-> 鼠标移出检测用 Rust 命令 `cursor_in_window`（CGEvent 读实时硬件位置）轮询，**而非 DOM `mouseleave`**——透明无边框窗口在 `setIgnoreCursorEvents` 按像素切换时不会可靠派发该事件。诊断与方案见 [bugfix：右键菜单在鼠标移出窗口后仍停留满 3 秒](../bugfix/context-menu-lingers-on-mouse-leave.md)。
+> 鼠标移出检测用 Rust 命令 `cursor_in_window`（macOS=CGEvent，Windows=GetCursorPos 读实时硬件位置）轮询，**而非 DOM `mouseleave`**——透明无边框窗口在 `setIgnoreCursorEvents` 按像素切换时不会可靠派发该事件。诊断与方案见 [bugfix：右键菜单在鼠标移出窗口后仍停留满 3 秒](../bugfix/context-menu-lingers-on-mouse-leave.md)。
 
 ### 平台检测
 

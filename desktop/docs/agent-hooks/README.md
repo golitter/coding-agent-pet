@@ -62,7 +62,7 @@ stdin JSON
 - 会自动更新三套集成：
   - Claude Code → `~/.claude/settings.json`
   - Codex → `~/.codex/hooks.json`
-  - OpenCode → `~/.config/opencode/plugins/pet-plugin.ts`
+  - OpenCode → `~/.config/opencode/plugins/pet-plugin.ts`（同时部署 `opencode-shared.mjs` 与同伴文件 `.kotori-pet-config-dir`，后者指向 `desktop/cross-platform/` 路径）
 - 脚本是幂等的：会先移除自己管理的 pet hook，再追加一份标准条目
 - 对 Codex，只会自动启用已经存在 `trusted_hash` 的 pet hook 状态
 - 如果是首次接入 Codex，通常仍要在 `/hooks` 中手动 `Trust/Enable` 一次

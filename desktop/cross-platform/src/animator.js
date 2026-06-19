@@ -1,9 +1,9 @@
 /**
- * Sprite animation engine — equivalent to FrameCache.swift + SpriteAnimator.swift
- * Loads PNG frames, drives animation loop, handles state transitions.
+ * 精灵动画引擎——等价于 FrameCache.swift + SpriteAnimator.swift
+ * 加载 PNG 帧、驱动动画循环、处理状态切换。
  */
 
-// Sprite base dimensions — exported for use in main.js layout calculations.
+// 精灵基础尺寸——导出供 main.js 布局计算使用。
 export const SPRITE_W = 192;
 export const SPRITE_H = 208;
 
@@ -38,7 +38,7 @@ const ALPHA_MASK_CACHE_LIMIT = 4;
 
 export class SpriteAnimator {
   constructor() {
-    this.frames = {}; // { stateName: [Image, ...] }
+    this.frames = {}; // { 状态名: [Image, ...] }
     this.currentState = "idle";
     this.currentFrameIndex = 0;
     this.preDragState = "idle";
@@ -47,18 +47,18 @@ export class SpriteAnimator {
     this.fps = 10;
     this.isFocused = true;
     this.effectiveFps = 10;
-    this.onFrame = null; // callback(imageElement)
-    this.frameTiming = {}; // { stateName: { holds: [tickCount, ...] } }
+    this.onFrame = null; // 回调（imageElement）
+    this.frameTiming = {}; // { 状态名: { holds: [tickCount, ...] } }
     this.holdRemaining = 1;
 
-    // Alpha mask system for per-pixel hit testing
-    this.alphaMasks = new Map(); // stateName → Uint8Array[] (indexed by frame number)
-    this.alphaMaskLoadPromises = new Map(); // stateName → Promise<void>
-    this.framePaths = {}; // { stateName: [nativePath, ...] } — raw FS paths for byte reads
+    // 用于逐像素命中检测的 alpha 掩码系统
+    this.alphaMasks = new Map(); // 状态名 → Uint8Array[]（按帧序号索引）
+    this.alphaMaskLoadPromises = new Map(); // 状态名 → Promise<void>
+    this.framePaths = {}; // { 状态名: [nativePath, ...] }——用于读取字节的原始文件系统路径
     this.baseWidth = SPRITE_W;
     this.baseHeight = SPRITE_H;
     this.hitTestReady = false;
-    this.pendingOneShot = null; // queued one-shot to fire after current finishes
+    this.pendingOneShot = null; // 当前结束后将触发的排队一次性动画
     this.hoverJumpCyclesRemaining = 0;
   }
 
@@ -81,11 +81,10 @@ export class SpriteAnimator {
       const blobUrl = URL.createObjectURL(blob);
       const img = await loadFromUrl(blobUrl);
       if (img) {
-        // NOTE: the object URL is intentionally kept for the Image's lifetime.
-        // Sprite frames are cached long-term and redrawn every animation tick,
-        // so revoking the blob URL after load (even after img.decode()) causes
-        // WebView2 to drop the decoded bitmap and the pet renders blank.
-        // The "leak" is bounded (one URL per frame, fixed count) and acceptable.
+        // 注意：有意在该 Image 的整个生命周期内保留 object URL。
+        // 精灵帧被长期缓存，并在每个动画 tick 重绘，因此在加载后（即使 img.decode()
+        // 之后）撤销 blob URL 会导致 WebView2 丢弃已解码的位图，宠物会渲染为空白。
+        // 该“泄漏”是有界的（每帧一个 URL，固定数量），可接受。
         img.dataset.objectUrl = blobUrl;
         return img;
       }
@@ -102,24 +101,23 @@ export class SpriteAnimator {
     this.resetHold();
   }
 
-  /** Pre-load all sprite frames from disk via Tauri asset protocol.
+  /** 通过 Tauri asset 协议从磁盘预加载所有精灵帧。
    *
-   * Uses `frames-manifest.json` (sibling of state directories) to know exactly
-   * how many frames each state has, avoiding the legacy "fetch-and-fail"
-   * probing that polluted the Tauri log with 9 ERROR lines per startup.
+   * 使用 `frames-manifest.json`（与各状态目录同级）来精确获知每个状态有多少帧，
+   * 从而避免旧的“逐个尝试加载直到失败”的探测方式——那种方式每次启动会在 Tauri
+   * 日志里留下 9 行 ERROR。
    *
-   * Manifest paths are absolute on the generation machine, so we rewrite them
-   * to `${framesDir}/${state}/${basename}` — manifest acts as the source of
-   * truth for *what* to load; the runtime resolves *where*.
+   * 清单中的路径在生成机器上是绝对路径，因此我们将它们改写为
+   * `${framesDir}/${state}/${basename}`——清单是加载*什么*的事实来源，运行时负责
+   * 解析*从哪*加载。
    */
   async loadFrames(framesDir, fps) {
     this.fps = fps || 10;
     this.effectiveFps = this.getTargetFps();
 
-    // 1. Try loading via manifest first. Read bytes via IPC instead of fetch():
-    // WKWebView asset responses can be inconsistent for JSON, which would
-    // silently drop us into the legacy probe path and reintroduce startup
-    // "file does not exist" noise for the missing sentinel frame.
+    // 1. 优先尝试通过清单加载。通过 IPC 读取字节而非 fetch()：
+    // WKWebView 对 JSON 的 asset 响应可能不一致，否则会让我们悄悄落入旧的探测
+    // 路径，重新引入缺失哨兵帧导致的启动期“file does not exist”噪声。
     const manifestPath = `${framesDir}/frames-manifest.json`;
     let manifestRows = null;
     try {
@@ -143,7 +141,7 @@ export class SpriteAnimator {
       for (const row of manifestRows) {
         const state = row.state;
         if (!state || !Array.isArray(row.frames)) continue;
-        // Load all frames in parallel — avoids sequential await on each image
+        // 并行加载所有帧——避免对每张图片顺序 await
         const loadResults = await Promise.all(
           row.frames.map(async (absPath) => {
             const basename = String(absPath).split(/[\\/]/).pop();
@@ -157,7 +155,7 @@ export class SpriteAnimator {
         this.framePaths[state] = validResults.map((result) => result.nativePath);
       }
     } else {
-      // Fallback: legacy probe (kept so a missing manifest doesn't break the app)
+      // 回退：旧式探测（保留以便清单缺失时不会导致应用不可用）
       for (const state of STATES) {
         const frames = [];
         const paths = [];
@@ -188,12 +186,12 @@ export class SpriteAnimator {
       })
       .catch(() => {});
 
-    // Warm the interactive states used most often at startup / drag time.
+    // 预热启动期 / 拖拽时最常用的交互状态。
     await this.ensureAlphaMasksForStates(["idle", "running-left", "running-right"]);
     this.pruneAlphaMasks();
   }
 
-  /** Start the animation loop */
+  /** 启动动画循环 */
   start() {
     if (this.timer) return;
     this.resetHold();
@@ -202,7 +200,7 @@ export class SpriteAnimator {
     console.log(`[Animator] ✓ Started at ${this.effectiveFps} FPS`);
   }
 
-  /** Stop the animation loop */
+  /** 停止动画循环 */
   stop() {
     if (this.timer) {
       clearInterval(this.timer);
@@ -216,7 +214,7 @@ export class SpriteAnimator {
     this.updatePlaybackRate();
   }
 
-  /** Transition to a new animation state */
+  /** 切换到新的动画状态 */
   transitionTo(state) {
     if (this.isHoverJumping()) {
       if (state === "idle") return;
@@ -227,7 +225,7 @@ export class SpriteAnimator {
       console.warn(`[Animator] ⚠️ Unknown state: ${state}`);
       return;
     }
-    // If currently in a one-shot, update restore target
+    // 若当前处于一次性动画中，则更新还原目标
     if (ONE_SHOT_STATES.has(this.currentState) && !ONE_SHOT_STATES.has(state)) {
       this.preOneShotState = state;
     }
@@ -240,17 +238,16 @@ export class SpriteAnimator {
     this.updatePlaybackRate();
   }
 
-  /** Trigger a one-shot animation (jumping, waving).
-   *  If a one-shot is already playing, the new one is queued and fires
-   *  when the current animation finishes — preventing double-Stop events
-   *  from being silently swallowed. */
+  /** 触发一次性动画（jumping、waving）。
+   *  若已有一次性动画在播放，则新的会被排队，在当前动画结束后触发——避免
+   *  重复的 Stop 事件被静默吞掉。 */
   triggerOneShot(state) {
     if (!ONE_SHOT_STATES.has(state)) return;
     if (!this.frames[state]) return;
     if (this.isHoverJumping()) {
       this.stopHoverJump({ showFrame: false });
     }
-    // Queue if a one-shot is already playing
+    // 若已有一次性动画在播放，则排队
     if (ONE_SHOT_STATES.has(this.currentState)) {
       this.pendingOneShot = state;
       return;
@@ -265,7 +262,7 @@ export class SpriteAnimator {
     this.updatePlaybackRate();
   }
 
-  /** Play the idle-only hover jump for a fixed number of full cycles. */
+  /** 仅在 idle 态播放悬停跳跃，固定整周期数。 */
   triggerHoverJump(cycles = 2) {
     const cycleCount = Math.max(1, Math.floor(Number(cycles) || 0));
     if (!this.frames.jumping || this.currentState !== "idle") return false;
@@ -301,7 +298,7 @@ export class SpriteAnimator {
     return this.hoverJumpCyclesRemaining > 0;
   }
 
-  /** Handle drag direction for running animation */
+  /** 根据拖拽方向处理奔跑动画 */
   handleDrag(dx) {
     if (dx !== 0 && this.isHoverJumping()) {
       this.stopHoverJump({ showFrame: false });
@@ -355,9 +352,9 @@ export class SpriteAnimator {
     this.hitTestReady = this.alphaMasks.size > 0;
   }
 
-  /** Compute alpha masks only for requested states.
-   *  This keeps startup cheaper and avoids pinning every frame's mask in
-   *  memory when only the current / nearby states are interactable. */
+  /** 仅对请求的状态计算 alpha 掩码。
+   *  这样启动开销更低，避免在仅当前/邻近状态可交互时把每一帧的掩码都钉在
+   *  内存里。 */
   async ensureAlphaMasksForState(state) {
     if (this.hasCompleteAlphaMaskState(state)) return;
     if (this.alphaMaskLoadPromises.has(state)) {
@@ -457,9 +454,9 @@ export class SpriteAnimator {
     const frameCount = this.framePaths[state]?.length ?? 0;
     if (!Array.isArray(stateMasks) || frameCount === 0) return false;
     if (stateMasks.length !== frameCount) return false;
-    // Dense check: a plain index read treats sparse-array holes as undefined
-    // (falsy), so this rejects partially-filled arrays — which
-    // Array.prototype.every skips and would falsely accept as complete.
+    // 稠密检查：直接按下标读取会把稀疏数组的空洞视为 undefined（falsy），
+    // 因此能拒绝部分填充的数组——而 Array.prototype.every 会跳过空洞，
+    // 错误地把它们当作完整。
     for (let i = 0; i < frameCount; i++) {
       if (!stateMasks[i]) return false;
     }
@@ -482,9 +479,9 @@ export class SpriteAnimator {
     this.hitTestReady = this.alphaMasks.size > 0;
   }
 
-  /** Look up the alpha value at a given sprite pixel coordinate.
-   *  Returns 255 (opaque) as a fail-safe when the system is not ready or
-   *  the mask is missing — this prevents the pet from becoming unclickable. */
+  /** 查询给定精灵像素坐标处的 alpha 值。
+   *  当系统未就绪或掩码缺失时，作为兜底返回 255（不透明）——防止宠物变得
+   *  无法点击。 */
   getAlphaAt(state, frameIndex, x, y) {
     if (!this.hitTestReady) return 255;
     const stateMasks = this.alphaMasks.get(state);
@@ -518,7 +515,7 @@ export class SpriteAnimator {
     this.timer = setInterval(() => this.tick(), 1000 / this.effectiveFps);
   }
 
-  // --- Private ---
+  // --- 私有方法 ---
 
   tick() {
     const frames = this.frames[this.currentState];
@@ -546,7 +543,7 @@ export class SpriteAnimator {
         this.pruneAlphaMasks();
         this.updatePlaybackRate();
       }
-      // One-shot: play full cycle then return to previous state (or fire queued one-shot)
+      // 一次性：播放完整一轮后回到之前的状态（或触发排队的一次性动画）
     } else if (ONE_SHOT_STATES.has(this.currentState) && this.currentFrameIndex >= frames.length) {
       if (this.pendingOneShot) {
         const next = this.pendingOneShot;

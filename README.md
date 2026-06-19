@@ -8,7 +8,7 @@
 当前默认角色是像素风南琴梨（Kotori Minami），会随着 AI 编程助手的生命周期事件切换动画与气泡台词。
 
 <p align="center">
-  <strong>支持平台：</strong>Windows · macOS
+  <strong>支持平台：</strong>Windows（支持 WSL2）· macOS
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@ python setup.py                      # 自动识别平台，一键完成依赖 �
 
 ```
 Claude Code / Codex → hook 脚本 (pet-hook.sh) ──┐
-                                                 ├→ session 文件 + Unix Socket → Tauri 渲染器
+                                                 ├→ session 文件 + 事件端点 (Unix Socket / TCP loopback) → Tauri 渲染器
 OpenCode           → TS 插件 (opencode-plugin.ts)┘     ├── Rust: 多会话聚合 + 双通道监听
                                                         └── JS: 精灵动画 + 对话气泡/折叠徽标 + 权限提示音
 ```
@@ -80,7 +80,7 @@ Windows / WSL2 场景下事件通道使用 TCP loopback（默认 `tcp://127.0.0.
 
 ## 要求
 
-- Rust + Cargo · Node.js + npm · Python 3
+- macOS 13+ / Windows 10/11（均已测试）· Rust + Cargo · Node.js + npm · Python 3
 
 ## License
 

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-/// Resolved configuration used throughout the application.
+/// 贯穿整个应用使用的已解析配置。
 #[derive(Debug, Clone)]
 pub struct PetConfig {
     pub pet_base_dir: String,
@@ -14,10 +14,9 @@ pub struct PetConfig {
     pub scale: f64,
     pub fps: f64,
     pub frame_timing: std::collections::HashMap<String, FrameTiming>,
-    /// How long a session file can stay unchanged before being considered dead.
-    /// During this window, a session is counted as alive even if no events fire
-    /// (covers reading/thinking/long-tool-calls). After it expires, the session
-    /// is dropped from memory and its file is removed by `cleanup_stale`.
+    /// 会话文件保持不变多久后被视为已死。在该窗口期内，即便没有事件触发，会话
+    /// 仍计为活跃（覆盖读取/思考/长时间工具调用）。窗口过期后，会话从内存中
+    /// 移除，其文件由 `cleanup_stale` 删除。
     pub stale_timeout_sec: u64,
     pub cleanup_interval_sec: u64,
     pub corner_margin: i32,
@@ -25,9 +24,8 @@ pub struct PetConfig {
     pub dialogue_max_width: u32,
     pub dialogue_corner_radius: u32,
     pub dialogue_fade_duration: f64,
-    /// pet state → bubble CSS style. Drives bubble coloring (e.g. waiting → warning).
-    /// Kept here so the mapping lives in one place alongside the state map,
-    /// not split between Rust and JS.
+    /// 宠物状态 → 气泡 CSS 样式。驱动气泡配色（例如 waiting → warning）。
+    /// 放在这里是为了让该映射与状态 map 同处一处，而非分散在 Rust 与 JS 之间。
     pub style_map: std::collections::HashMap<String, String>,
     pub menu_items: Vec<MenuItem>,
 }
@@ -35,7 +33,7 @@ pub struct PetConfig {
 #[derive(Debug, Clone)]
 pub struct MenuItem {
     pub title: String,
-    pub action: String, // "applescript", "quit", "separator"
+    pub action: String, // "applescript"、"quit"、"separator"
     pub script: Option<String>,
 }
 
@@ -44,7 +42,7 @@ pub struct FrameTiming {
     pub holds: Vec<u32>,
 }
 
-/// Raw JSON config for deserialization.
+/// 用于反序列化的原始 JSON 配置。
 #[derive(Debug, Deserialize, Default)]
 struct RawConfig {
     pet_id: Option<String>,
@@ -96,8 +94,8 @@ enum RawMenuItem {
 }
 
 impl PetConfig {
-    /// Load configuration from config.json or config.example.json,
-    /// with auto-detection of paths relative to the repo root.
+    /// 从 config.json 或 config.example.json 加载配置，
+    /// 并自动探测相对于仓库根目录的路径。
     pub fn load() -> Self {
         let exe_dir = std::env::current_exe()
             .ok()
@@ -241,7 +239,7 @@ fn find_config_path(start: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Resolve a path: expand ~, resolve relative paths against a base.
+/// 解析路径：展开 ~，将相对路径相对于 base 解析。
 fn resolve_path(path: &str, base: &str) -> String {
     let expanded = if path.starts_with('~') {
         let home = home_dir_string().unwrap_or_else(|| "/".to_string());
@@ -305,9 +303,8 @@ fn sanitize_cleanup_interval_sec(value: Option<u64>) -> u64 {
     value.unwrap_or(30).max(1)
 }
 
-/// Walk up from a directory to find the repo root (directory containing the
-/// `desktop/cross-platform/` app source tree — a stable landmark that survives
-/// resource reorganization, unlike pet-specific asset directories).
+/// 从某目录向上查找仓库根目录（包含 `desktop/cross-platform/` 应用源码树的目录——
+/// 这是一个能挺过资源重组的稳定地标，不像宠物专属的 asset 目录）。
 fn detect_repo_root(start: &Path) -> String {
     let mut dir = start.to_path_buf();
     for _ in 0..12 {

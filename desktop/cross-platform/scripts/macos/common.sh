@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shared helpers for macOS/Linux shell entrypoints.
+# macOS/Linux shell 入口脚本共享的辅助函数。
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLATFORM_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"

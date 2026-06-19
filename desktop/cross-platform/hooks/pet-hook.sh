@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kotori Minami pet state hook entry.
+# 南琴梨（Kotori Minami）宠物状态 hook 入口。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

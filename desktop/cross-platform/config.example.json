@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy this file to config.json and customize. Null values are auto-detected.",
+  "_comment": "将此文件复制为 config.json 后按需自定义。值为 null 的字段会被自动检测。",
   "pet_id": "kotori-minami",
   "pet_base_dir": null,
   "frames_dir": null,
@@ -9,12 +9,12 @@
   "renderer": {
     "scale": 0.6,
     "fps": 10,
-    "_frame_timing_comment": "Per-frame hold counts in fps ticks. idle: frames 0/1/2/4/5 are open eyes, frame 3 is blink; total 35 ticks = 3.5s at 10fps.",
+    "_frame_timing_comment": "逐帧停留 tick 数（单位为 fps tick）。idle：第 0/1/2/4/5 帧睁眼，第 3 帧眨眼；合计 35 tick = 在 10fps 下 3.5s。",
     "frame_timing": {
       "default": { "holds": [1] },
       "idle": { "holds": [10, 4, 4, 1, 4, 12] }
     },
-    "_stale_timeout_sec_comment": "How long (sec) a session file can stay unchanged before being considered dead. 1h covers reading/thinking/long-tool-calls; crashes get cleaned up after this TTL.",
+    "_stale_timeout_sec_comment": "会话文件保持不变多久（秒）后被视为已死。1h 覆盖读取/思考/长时间工具调用；崩溃的进程在此 TTL 后被清理。",
     "stale_timeout_sec": 3600,
     "cleanup_interval_sec": 30,
     "corner_margin": 20
@@ -30,7 +30,7 @@
     }
   },
   "hooks": {
-    "_python_command_comment": "Windows only: the exact command used to run the pet hook scripts. null = auto-detect (python / py -3). Set this (e.g. 'python', 'py -3', or 'C:/Python313/python.exe') to pin a specific interpreter and avoid conda/PATH drift — it is validated with `<cmd> --version` before any hook is written, and setup aborts if it fails.",
+    "_python_command_comment": "仅 Windows：运行宠物 hook 脚本的确切命令。null = 自动探测（python / py -3）。可设为 'python'、'py -3' 或 'C:/Python313/python.exe' 以固定解释器，避免 conda/PATH 漂移——写入任何 hook 前会用 `<cmd> --version` 校验，失败则中止安装。",
     "python_command": null,
     "claude_code_settings": null,
     "codex_hooks": null,

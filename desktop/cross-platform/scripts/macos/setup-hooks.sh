@@ -1,5 +1,5 @@
 #!/bin/bash
-# Configure Claude Code / Codex / OpenCode hooks for Kotori Pet.
+# 为 Kotori Pet 配置 Claude Code / Codex / OpenCode hooks。
 set -euo pipefail
 
 # shellcheck source=desktop/cross-platform/scripts/macos/common.sh

@@ -81,7 +81,7 @@ timeout = 30
 
 - Codex 没有注册 `PreCompact`，因为该事件在宠物 config 的 Codex 事件列表中未启用。
 - Codex 也不注册 `SessionEnd`——Codex 当前不提供该事件，会话死亡检测只能依赖后端 `stale_timeout_sec`（默认 1h）兜底，期间崩溃 agent 的 session 文件不会被立即清理。
-- **`SessionStart` 触发时机不同**（Codex 0.133.0 实测）：上表中"启动或恢复会话"是 Codex 平台官方说法，但实测 Codex 0.133.0 的 `session_start` 是**懒触发**——只在用户**首次提交 prompt** 时才连同 `user_prompt_submit` 一起补发（两者间隔 30~50ms），CLI/IDE 启动瞬间并不发。若用户启动 codex 后不发消息直接退出，两个事件都不会触发。证据见 `/tmp/kotori-pet-codex-hook.log` + `~/.codex/log/codex-tui.log`。结果：挥手动画（waving）会被紧随的奔跑动画（running）瞬时覆盖，肉眼几乎不可见。
+- **`SessionStart` 触发时机不同**（Codex 0.133.0 实测）：上表中"启动或恢复会话"是 Codex 平台官方说法，但实测 Codex 0.133.0 的 `session_start` 是**懒触发**——只在用户**首次提交 prompt** 时才连同 `user_prompt_submit` 一起补发（两者间隔 30~50ms），CLI/IDE 启动瞬间并不发。若用户启动 codex 后不发消息直接退出，两个事件都不会触发。证据见 `<platform_dir>/runtime/hook-events.log` + `~/.codex/log/codex-tui.log`。结果：挥手动画（waving）会被紧随的奔跑动画（running）瞬时覆盖，肉眼几乎不可见。
 
 ### matcher 字段
 
@@ -371,17 +371,16 @@ Codex hooks 支持丰富的输出控制，但宠物 hook **不使用任何**：
 
 ## 七、调试
 
-Codex hook 写入详细的调试日志到 `/tmp/kotori-pet-codex-hook.log`：
+Codex hook 写入详细的调试日志到 `<platform_dir>/runtime/hook-events.log`（与 Claude Code hook 共用同一文件）：
 
 ```json
 {
-  "time": "2026-06-08T10:09:16.998Z",
-  "raw_event": "stop",
+  "time": "2026-06-08T10:09:16.998+00:00",
   "event": "Stop",
   "session_id": "f2f5b758...",
   "state": "jumping",
   "dialogue": "搞定啦！✨",
-  "socket_exists": true,
+  "event_endpoint": "tcp://127.0.0.1:17361",
   "sessions_dir": "/path/to/sessions"
 }
 ```
@@ -389,15 +388,14 @@ Codex hook 写入详细的调试日志到 `/tmp/kotori-pet-codex-hook.log`：
 每条日志一行 JSON，包含：
 
 - `time` — UTC 时间戳
-- `raw_event` — Codex 原始事件名（可能是 snake_case）
-- `event` — 转换后的 PascalCase 事件名
+- `event` — 转换后的 PascalCase 事件名（由 `EVENT_ALIASES` 映射）
 - `session_id` — 会话 ID
 - `state` — 映射后的宠物状态
 - `dialogue` — 映射后的对话文本
-- `socket_exists` — 渲染器是否在运行
+- `event_endpoint` — 事件上报端点（Unix socket 路径或 `tcp://...`）
 - `sessions_dir` — session 文件目录路径
 
-通过 `log_path` 参数在 `codex_hook.py` 调用 `common.process_event()` 时传入。
+通过 `log_path` 关键字参数在 `codex_hook.py` 调用 `common.process_event()` 时传入。
 
 ---
 

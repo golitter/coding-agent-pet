@@ -12,7 +12,8 @@
 ├── desktop/
 │   ├── cross-platform/     # Tauri 主实现（src/ + src-tauri/ + hooks/）
 │   │   ├── hooks/          #   pet-hook.sh (Claude/Codex) + opencode-plugin.ts (OpenCode)
-│   │   └── scripts/        #   平台入口脚本：macos/ (*.sh) + windows/ (*.ps1)
+│   │   │                   #   + opencode-shared.mjs (OpenCode 共享逻辑) + scripts/ (Python 实现)
+│   │   └── scripts/        #   平台入口脚本：macos/ (*.sh) + windows/ (*.ps1) + wsl/ (WSL2 hooks)
 │   └── docs/               # 跨平台 / Hook / 精灵图 / Bugfix 文档
 ├── docs/                   # 顶层文档（教程 + reference/details.md）
 ├── AGENTS.md               # 本文件
@@ -53,7 +54,7 @@ npm test                            # hooks 单元测试
 
 ## 环境要求
 
-- macOS 13+ · [Rust](https://rustup.rs/) + Cargo · Node.js + npm · Python 3
+- macOS 13+ / Windows 10/11（均已测试）· [Rust](https://rustup.rs/) + Cargo · Node.js + npm · Python 3
 
 ## 完整文档
 

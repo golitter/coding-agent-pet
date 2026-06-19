@@ -242,8 +242,8 @@ assets/kotori-minami/
 | `/tmp/kotori-pet.sock`                                      | macOS/Linux 默认 Unix socket — hook → 后端推送通道（权限 `0o600`） |
 | `tcp://127.0.0.1:17361`                                     | Windows/WSL2 默认 TCP loopback 事件端点                            |
 | `/tmp/kotori-pet-tauri.log`                                 | Tauri 渲染器日志（`build-and-run.sh` 输出）                        |
-| `/tmp/kotori-pet-codex-hook.log`                            | Codex hook 调试日志                                                |
-| `/tmp/kotori-pet-opencode-debug.log`                        | OpenCode 插件调试日志                                              |
+| `desktop/cross-platform/runtime/hook-events.log`            | Claude Code / Codex hook 调试日志（共用）                          |
+| `desktop/cross-platform/runtime/kotori-pet-opencode-debug.log` | OpenCode 插件调试日志（由 `setDebugLogPath` 固定到 `runtime/`）  |
 | `~/.config/opencode/plugins/pet-plugin.ts`                  | OpenCode 插件部署路径（由 `setup-hooks.sh` 自动复制）              |
 | `~/.config/opencode/plugins/.kotori-pet-config-dir`         | OpenCode 插件同伴文件（指向 `desktop/cross-platform/` 路径）       |
 

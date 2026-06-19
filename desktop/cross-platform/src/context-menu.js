@@ -97,7 +97,7 @@ export function createContextMenu(menuEl, { invokeFn = invoke, windowRef = windo
     menuEl.style.left = `${menuMargin}px`;
     menuEl.style.top = `${menuMargin}px`;
 
-    // Anchor the menu to the rendered pet body, not the click position.
+    // 将菜单锚定到已渲染的宠物身体，而非点击位置。
     const spriteRect = petSprite.getBoundingClientRect();
     const menuRect = menuEl.getBoundingClientRect();
     const clampedLeft = Math.max(

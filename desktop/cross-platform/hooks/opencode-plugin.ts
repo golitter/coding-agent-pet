@@ -1,8 +1,7 @@
 /**
- * Kotori Pet Plugin for OpenCode.
+ * 面向 OpenCode 的 Kotori Pet 插件。
  *
- * Keeps OpenCode's event stream aligned with the same pet states used by
- * Claude Code and Codex hooks.
+ * 让 OpenCode 的事件流与 Claude Code、Codex hook 所用的宠物状态保持一致。
  */
 
 import * as fs from "node:fs";

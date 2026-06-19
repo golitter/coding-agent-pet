@@ -41,7 +41,7 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
               │  ├── bubble.js — 对话气泡      │
               │  └── style.css — 样式         │
               └──────────────────────────────┘
-              交互: 悬停跳跃 | 三连击清空会话 | 拖动移动 | 右键菜单
+              交互: 悬停跳跃 | 点击折叠气泡 | 三连击清空会话 | 拖动移动 | 右键菜单
 ```
 
 ## 目录结构
@@ -62,7 +62,9 @@ Kotori 虚拟桌面宠物将像素风南小鸟以浮窗形式显示在桌面上�
     │   │   ├── hooks-refactor.md      #     Hook 重构设计
     │   │   ├── hit-test.md            #     透明像素点击穿透
     │   │   ├── opencode-plugin.md     #     OpenCode 插件设计
-    │   │   └── opencode-integration-plan.md  # OpenCode 集成计划
+    │   │   ├── opencode-integration-plan.md  # OpenCode 集成计划
+    │   │   ├── windows-support.md     #     Windows 平台支持设计
+    │   │   └── windows-support-impl-report.md # Windows 支持实现报告
     │   ├── agent-hooks/               #   各平台 Hook 机制详解
     │   │   ├── README.md              #     索引 + 三平台对比
     │   │   ├── events.md              #     事件类型对照表
@@ -142,7 +144,7 @@ bash scripts/wsl/setup-hooks.sh
 
 所有可配置项在 `desktop/cross-platform/config.json`，首次运行自动从 `config.example.json` 复制。
 
-路径设为 `null` 时自动检测，无需手动填写。详见 [config.example.json](../cross-platform/config.example.json)。
+路径设为 `null` 时自动检测，无需手动填写。详见 [config.example.json](../../cross-platform/config.example.json)。
 
 主要配置项：
 
@@ -187,7 +189,7 @@ WSL2 额外提供 `scripts/wsl/setup-hooks.sh`，用于“Windows 渲染 + WSL a
 | **Socket 启动安全**  | 先 connect 探活再 remove + bind，避免 `/tmp` 下 TOCTOU symlink 攻击                                                                                                                      |
 | **路径校验**         | `read_file_bytes` / `read_frames_batch` 校验请求路径在 `frames_dir` 内，防止 webview 任意文件读取                                                                                        |
 | **AppleScript 沙箱** | `run_applescript` command 拒绝包含 `do shell script`、`do script` 或反引号的脚本，防止任意命令执行                                                                                       |
-| **Socket 退出清理**  | `quit_app` 在 `app.exit()` 前显式删除 socket 文件（`app.exit()` 走 `process::exit()`，会跳过 Rust 的 `Drop`）；`SocketGuard` 兜底 panic 解退路径；启动探活兜底 crash/kill 后的残留文件   |
+| **Socket 退出清理**  | `quit_app` 在 `app.exit()` 前显式删除 Unix socket 文件（TCP 端点无文件可删则跳过；`app.exit()` 走 `process::exit()`，会跳过 Rust 的 `Drop`）；`SocketGuard` 兜底 panic 解退路径；启动探活兜底 crash/kill 后的残留文件   |
 | **最小权限**         | capabilities 仅声明实际使用的窗口操作权限（`start-dragging` / `set-position` / `set-size` / `set-ignore-cursor-events`），事件权限由 `core:default` 统一授予，不含 `shell:allow-execute` |
 | **Payload 限制**     | socket 接收上限 64KB，防止恶意超大 payload                                                                                                                                               |
 | **无 shell 拼接**    | hook 不构造任何 shell 命令——session 文件生命周期（含 Stop 后的 2s 延迟删除与 5s 一次性窗口兜底）由 Rust 后端统一管理（socket 通道 + 文件扫描），无注入面                                 |
@@ -201,11 +203,11 @@ WSL2 额外提供 `scripts/wsl/setup-hooks.sh`，用于“Windows 渲染 + WSL a
 | -------------------- | --------- | ----------------------------------------------------------------------- |
 | `get_config`         | JS ← Rust | 返回渲染所需的配置快照（帧目录、缩放、帧率、样式映射、菜单等）          |
 | `read_file_bytes`    | JS → Rust | 读单帧 PNG 原始字节（绕过 WKWebView 画布污染，构造 untainted blob URL） |
-| `read_frames_batch`  | JS → Rust | 批量读 55+ 帧（alpha-mask 计算，单次 IPC 替代多次往返）                 |
+| `read_frames_batch`  | JS → Rust | 批量读 57 帧（alpha-mask 计算，单次 IPC 替代多次往返）                  |
 | `cursor_in_window`   | JS → Rust | 光标相对窗口客户区的逻辑像素坐标（hit-test 透传）                       |
 | `run_applescript`    | JS → Rust | 执行 osascript（仅 macOS，拦截 `do shell script` 等危险模式）           |
 | `purge_all_sessions` | JS → Rust | 三连击清空全部会话，返回删除文件数                                      |
-| `quit_app`           | JS → Rust | 退出前显式删除 socket 文件，再 `app.exit(0)`                            |
+| `quit_app`           | JS → Rust | 退出前清理事件端点（Unix socket 删文件 / TCP 无文件），再 `app.exit(0)` |
 | `js_log`             | JS → Rust | JS console 桥接到 Rust `tracing` 日志流                                 |
 
 - **状态推送**：Rust 经 `app_handle.emit("state-change", ...)` 推送聚合后的显示态；JS 用 `listen("state-change", ...)` 订阅。

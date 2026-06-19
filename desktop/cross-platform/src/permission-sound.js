@@ -1,8 +1,8 @@
 /**
- * Permission request sound cue.
+ * 权限请求提示音。
  *
- * Plays a short local chime when the pet needs user confirmation. If the
- * packaged WAV cannot be played, a tiny Web Audio chime keeps the cue alive.
+ * 当宠物需要用户确认时播放一段简短的本地提示音。若打包的 WAV 无法播放，
+ * 则用一段极小的 Web Audio 提示音作为兜底，保证提示不丢失。
  */
 
 const SOUND_PATH = "./sounds/permission-request.wav";

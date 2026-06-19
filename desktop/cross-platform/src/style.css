@@ -16,7 +16,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 }
 
-/* Pet sprite */
+/* 宠物精灵 */
 #pet-sprite {
   display: block;
   margin: 0 auto;
@@ -26,7 +26,7 @@ body {
   cursor: default;
 }
 
-/* Dialogue bubble */
+/* 对话气泡 */
 .bubble {
   display: flex;
   align-items: center;
@@ -58,7 +58,7 @@ body {
   pointer-events: auto;
 }
 
-/* Bubble styles */
+/* 气泡样式 */
 .bubble.style-normal {
   background: rgba(255, 255, 255, 0.88);
   color: rgba(51, 51, 51, 1);
@@ -136,7 +136,7 @@ body {
   color: rgba(38, 38, 38, 1);
 }
 
-/* Context menu */
+/* 上下文菜单 */
 .context-menu {
   position: fixed;
   width: auto;

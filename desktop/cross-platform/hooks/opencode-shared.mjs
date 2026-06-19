@@ -7,12 +7,11 @@ export const DEFAULT_STATE = { state: "idle", dialogue: "" };
 export const POST_TOOL_STATE = { state: "running", dialogue: "处理中..." };
 export const DEFAULT_TERMINAL_EVENTS = ["StopFailure"];
 
-// Debug log path. Default to the OS temp dir (os.tmpdir() is cross-platform:
-// returns %TEMP% on Windows, /tmp on Unix) so early logs written before the
-// platform dir is resolved still succeed — hardcoding /tmp would ENOENT on
-// Windows. Once loadPluginRuntime() resolves the platform dir it calls
-// setDebugLogPath() to pin the log to <platformDir>/runtime/, matching the
-// Python hooks' runtime/ convention.
+// 调试日志路径。默认用 OS 临时目录（os.tmpdir() 跨平台：Windows 上返回 %TEMP%，
+// Unix 上返回 /tmp），这样在平台目录解析之前写下的早期日志也能成功——若硬编码
+// /tmp 在 Windows 上会 ENOENT。一旦 loadPluginRuntime() 解析出平台目录，就会
+// 调用 setDebugLogPath() 把日志固定到 <platformDir>/runtime/，与 Python hook 的
+// runtime/ 约定一致。
 let debugLogPath = path.join(os.tmpdir(), "kotori-pet-opencode-debug.log");
 
 export function setDebugLogPath(filePath) {
@@ -42,7 +41,7 @@ export function debug(message, data) {
     const line = `[${new Date().toISOString()}] ${message}${suffix}\n`;
     fs.appendFileSync(debugLogPath, line);
   } catch {
-    // Best-effort only.
+    // 仅尽力而为。
   }
 }
 
@@ -96,9 +95,9 @@ export function loadPluginRuntime(importMetaUrl) {
 
     const repoRoot = detectRepoRoot(platformDir);
 
-    // Pin the debug log to <platformDir>/runtime/, matching the Python hooks.
-    // (Earlier logs went to os.tmpdir(); from here on they land next to the
-    // hook-events.log written by claude_hook.py / codex_hook.py.)
+    // 把调试日志固定到 <platformDir>/runtime/，与 Python hook 一致。
+    // （更早的日志写到 os.tmpdir()；从这里开始，它们会落在 claude_hook.py /
+    // codex_hook.py 写入的 hook-events.log 旁边。）
     setDebugLogPath(path.join(platformDir, "runtime", "kotori-pet-opencode-debug.log"));
 
     return {
@@ -203,7 +202,7 @@ export async function writeSession(filePath, payload) {
     await fs.promises.writeFile(tmpFile, JSON.stringify(payload, null, 2), "utf-8");
     await fs.promises.rename(tmpFile, filePath);
   } catch {
-    // Best-effort only.
+    // 仅尽力而为。
   }
 }
 
@@ -220,7 +219,7 @@ function pushTcp(endpoint, payload) {
     socket.on("timeout", () => socket.destroy());
     socket.on("error", () => socket.destroy());
   } catch {
-    // Best-effort only.
+    // 仅尽力而为。
   }
 }
 
@@ -235,7 +234,7 @@ function pushUnixSocket(socketPath, payload) {
     socket.on("timeout", () => socket.destroy());
     socket.on("error", () => socket.destroy());
   } catch {
-    // Best-effort only.
+    // 仅尽力而为。
   }
 }
 

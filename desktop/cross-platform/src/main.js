@@ -1,6 +1,6 @@
 /**
- * Main entry point.
- * Wires backend config/events to animation, dialogue, menu, and interaction modules.
+ * 主入口。
+ * 将后端配置/事件连接到动画、对话气泡、菜单与交互模块。
  */
 
 import { SpriteAnimator, SPRITE_W, SPRITE_H } from "./animator.js";
@@ -16,7 +16,7 @@ const { listen } = window.__TAURI__.event;
 const WINDOW_PAD_W = 24;
 const WINDOW_PAD_H = 60;
 
-/** Bridge JS -> Rust log for diagnostics. Appears in RUST_LOG output. */
+/** 将 JS 桥接到 Rust 日志，用于诊断。会出现在 RUST_LOG 输出中。 */
 function jsLog(level, tag, msg) {
   invoke("js_log", { level, tag, msg }).catch(() => {});
 }
@@ -126,7 +126,7 @@ async function main() {
   jsLog("info", "Main", `Pet initialized - scale=${config.scale} fps=${config.fps}`);
 }
 
-/** Set window size and position — matches mac PetWindow dimensions exactly */
+/** 设置窗口尺寸与位置——与 mac 端 PetWindow 尺寸完全一致 */
 async function setupWindow(config, scaledW, scaledH) {
   try {
     const appWindow = getCurrentWindow();
@@ -134,11 +134,11 @@ async function setupWindow(config, scaledW, scaledH) {
     const windowW = scaledW + WINDOW_PAD_W;
     const windowH = scaledH + WINDOW_PAD_H;
 
-    // Resize window
+    // 调整窗口大小
     await appWindow.setSize(new LogicalSize(windowW, windowH));
 
-    // Position at bottom-right — use Tauri monitor API for multi-display support.
-    // Falls back to window.screen (primary display only) if unavailable.
+    // 定位到右下角——使用 Tauri monitor API 以支持多显示器。
+    // 不可用时回退到 window.screen（仅主显示器）。
     const margin = config.corner_margin || 20;
     let screenWidth, screenHeight;
     try {
@@ -148,7 +148,7 @@ async function setupWindow(config, scaledW, scaledH) {
         screenHeight = monitor.size.height / monitor.scaleFactor;
       }
     } catch {
-      /* primaryMonitor not available — fallback below */
+      /* primaryMonitor 不可用——下方回退 */
     }
     screenWidth ??= window.screen.width;
     screenHeight ??= window.screen.height;
@@ -162,5 +162,5 @@ async function setupWindow(config, scaledW, scaledH) {
   }
 }
 
-// Start
+// 启动
 main().catch((e) => console.error("[Main] Fatal:", e));

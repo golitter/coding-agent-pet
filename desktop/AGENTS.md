@@ -25,7 +25,8 @@ desktop/
 │   ├── config.example.json     #   配置模板
 │   └── scripts/                #   平台入口脚本（按 OS 分目录）
 │       ├── macos/              #     setup.sh / build-and-run.sh / setup-hooks.sh
-│       └── windows/            #     setup.ps1 / build-and-run.ps1 / setup-hooks.ps1
+│       ├── windows/            #     setup.ps1 / build-and-run.ps1 / setup-hooks.ps1
+│       └── wsl/                #     setup-hooks.sh（Windows 渲染 + WSL2 agents 分离工作流）
 └── docs/                       # 技术文档（按主题分目录）
     ├── reference/              #   技术参考（overview / renderer / spritesheet）
     ├── agent-hooks/            #   Hook 集成（events / claude-code / codex / opencode）

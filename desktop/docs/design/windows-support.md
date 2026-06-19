@@ -1,5 +1,7 @@
 # Windows 支持设计
 
+> **状态：已实现**。本文为最初的设计提案（用将来时描述目标），落地记录见同目录 [windows-support-impl-report.md](windows-support-impl-report.md)。
+
 ## 背景
 
 当前 `desktop/cross-platform` 名义上是跨平台 Tauri 实现，但实际运行路径里仍有多处 macOS / POSIX 假设：

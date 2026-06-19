@@ -13,35 +13,34 @@ use tracing::{info, warn};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
-/// Best-effort loopback check for a TCP bind address.
+/// 对 TCP 绑定地址的尽力而为的 loopback 检查。
 ///
-/// TCP replaces the Unix socket's file-permission (0o600) protection, so this
-/// is the compensating safeguard that warns when an endpoint could accept
-/// connections from other hosts. Parses the host out of `host:port` /
-/// `[ipv6]:port` shapes and tests it with [`IpAddr::is_loopback`]. A bare
-/// hostname is trusted only when it is the literal `localhost` — anything else
-/// (which could resolve off-box via hosts/DNS) is treated as non-loopback.
+/// TCP 取代了 Unix socket 的文件权限（0o600）保护，因此这是一个补偿性安全措施：
+/// 当某个端点可能接受来自其他主机的连接时发出警告。从 `host:port` /
+/// `[ipv6]:port` 形式中解析出主机，并用 [`IpAddr::is_loopback`] 测试。裸主机名
+/// 仅当其字面值为 `localhost` 时才被信任——其他任何名称（可能经 hosts/DNS
+/// 解析到本机之外）都被视为非 loopback。
 fn is_loopback_endpoint(addr: &str) -> bool {
-    // SocketAddr::parse covers `127.0.0.1:port` and `[::1]:port` directly.
+    // SocketAddr::parse 直接覆盖 `127.0.0.1:port` 与 `[::1]:port`。
     if let Ok(socket) = addr.parse::<SocketAddr>() {
         return socket.ip().is_loopback();
     }
 
-    // Fall back to splitting host/port for shapes SocketAddr rejects (e.g. a
-    // bare `::1:port` without brackets) and test the host as an IpAddr.
+    // 对 SocketAddr 拒绝的形式（如不带方括号的裸 `::1:port`）回退到拆分主机/端口，
+    // 并将主机作为 IpAddr 测试。
     if let Some((host, _port)) = split_host_port(addr) {
         if let Ok(ip) = host.parse::<IpAddr>() {
             return ip.is_loopback();
         }
-        // Hostname: trust only the literal localhost.
+        // 主机名：仅信任字面值 localhost。
         return host == "localhost";
     }
 
     false
 }
 
-/// Split `host:port` / `[host]:port` into (host, port) without DNS resolution.
-/// Returns None when no port separator can be found.
+/// 将 `host:port` / `[host]:port` 拆分为 (host, port)，不做 DNS 解析。
+/// 找不到端口分隔符时返回 None。
 fn split_host_port(addr: &str) -> Option<(&str, &str)> {
     if let Some(rest) = addr.strip_prefix('[') {
         // `[ipv6]:port`
@@ -51,8 +50,8 @@ fn split_host_port(addr: &str) -> Option<(&str, &str)> {
         let port = after.strip_prefix(':')?;
         return Some((host, port));
     }
-    // For a plain `host:port`, split on the last ':' (handles bare IPv6 poorly,
-    // but those are already covered by the SocketAddr::parse path above).
+    // 对普通 `host:port`，按最后一个 ':' 拆分（对裸 IPv6 处理不佳，
+    // 但这些已由上面的 SocketAddr::parse 路径覆盖）。
     let idx = addr.rfind(':')?;
     Some((&addr[..idx], &addr[idx + 1..]))
 }
@@ -284,8 +283,8 @@ pub async fn start_unix_socket_server(socket_path: &str, session_mgr: Arc<Activi
     }
 }
 
-/// Start a file system watcher on the sessions directory.
-/// Uses the `notify` crate and runs in a blocking thread.
+/// 在会话目录上启动文件系统监视器。
+/// 使用 `notify` crate，并在阻塞线程中运行。
 pub fn start_file_watcher(sessions_dir: &str, session_mgr: Arc<ActivityAggregator>) {
     let dir = sessions_dir.to_string();
 

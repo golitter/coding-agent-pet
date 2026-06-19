@@ -1,15 +1,14 @@
 /**
- * Dialogue bubble — equivalent to DialogueBubble.swift
- * Shows text above the pet with 3 styles: normal, warning, error.
+ * 对话气泡——等价于 DialogueBubble.swift
+ * 在宠物上方显示文本，有 3 种样式：normal、warning、error。
  */
 
-/** How long a non-persistent bubble stays visible before auto-fading (ms). */
+/** 非持久气泡保持可见多久后自动淡出（毫秒）。 */
 const AUTO_HIDE_MS = 3000;
 
-/** States that stay visible until the next event replaces them — the agent is
- * actively working, awaiting user input, or in an error state. Everything else
- * (celebrations like jumping/waving, idle greetings, notifications) auto-fades
- * after AUTO_HIDE_MS so the bubble doesn't linger forever. */
+/** 保持可见直到被下一个事件替换的状态——agent 正在工作中、等待用户输入或处于
+ * 错误态。其余一切（如 jumping/waving 的庆祝、idle 问候、通知）都会在 AUTO_HIDE_MS
+ * 后自动淡出，以免气泡永远停留。 */
 const PERSISTENT_STATES = new Set([
   "running",
   "running-left",
@@ -41,14 +40,13 @@ export class DialogueBubble {
     this.attachToggleHandlers();
   }
 
-  /** Apply configurable dialogue dimensions/timing from config.
+  /** 从 config 应用可配置的对话尺寸/时序。
    *
-   * These mirror the .bubble CSS defaults (pt for font, px for sizes, s for
-   * fade) so the shipped config values reproduce the built-in look while
-   * letting config.json override them. Previously the Rust → frontend plumbing
-   * landed these fields in `config` but nothing ever read them, so customizing
-   * font_size / max_width / corner_radius / fade_duration in config.json had
-   * no effect. */
+   * 这些与 .bubble 的 CSS 默认值对应（字体用 pt、尺寸用 px、淡出用 s），因此
+   * 自带的配置值能复现内置外观，同时允许 config.json 覆盖它们。此前 Rust →
+   * 前端的管线把这些字段放进了 `config`，却从没有任何地方读取它们，所以在
+   * config.json 中自定义 font_size / max_width / corner_radius / fade_duration
+   * 毫无效果。 */
   applyConfigStyles() {
     const c = this.config || {};
     if (c.dialogue_font_size != null) {
@@ -65,14 +63,12 @@ export class DialogueBubble {
     }
   }
 
-  /** Show the bubble with text, session count, and state-based style.
+  /** 显示气泡，包含文本、会话计数和基于状态的样式。
    *
-   * Persistent states (running/waiting/failed — agent is busy, awaiting input,
-   * or errored) stay visible until the next event replaces them. All other
-   * states auto-fade after AUTO_HIDE_MS. Pass forceAutoHide=true to override and
-   * always fade out — used for one-shot user feedback (e.g. the triple-click
-   * purge result) that should never linger even if its state is normally
-   * persistent (failed). */
+   * 持久状态（running/waiting/failed——agent 忙碌、等待输入或出错）保持可见，
+   * 直到被下一个事件替换。其余所有状态在 AUTO_HIDE_MS 后自动淡出。传入
+   * forceAutoHide=true 可覆盖该行为并总是淡出——用于一次性用户反馈（例如
+   * 三连击的清除结果），即便其状态通常是持久的（failed），也不应久留。 */
   show(
     text,
     sessionCount = 0,
@@ -101,8 +97,8 @@ export class DialogueBubble {
       return;
     }
 
-    // Style comes from config.dialogue.style_map (waiting → warning, failed → error).
-    // Default to "normal" for unmapped states.
+    // 样式来自 config.dialogue.style_map（waiting → warning，failed → error）。
+    // 未映射的状态默认为 "normal"。
     const style = (this.config.style_map && this.config.style_map[state]) || "normal";
 
     this.applyStyle(style);
@@ -119,7 +115,7 @@ export class DialogueBubble {
     }
   }
 
-  /** Hide the bubble with fade-out */
+  /** 淡出隐藏气泡 */
   hide() {
     this.latest = {
       text: "",
@@ -139,8 +135,8 @@ export class DialogueBubble {
     this.el.classList.add("hidden");
   }
 
-  /** Start (or reset) the auto-fade timer. Each show() resets it, so a stream
-   * of events keeps the bubble alive; it only fades once events stop. */
+  /** 启动（或重置）自动淡出定时器。每次 show() 都会重置它，因此一连串事件能
+   * 让气泡保持存活；只有事件停止后才会淡出。 */
   scheduleAutoHide() {
     this.clearAutoHide();
     this.hideTimer = setTimeout(() => this.hide(), AUTO_HIDE_MS);

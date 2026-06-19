@@ -118,7 +118,7 @@ def main():
         tool_name=tool_name,
         cwd=cwd,
         extra_context={'raw_event': raw_event},
-        log_path='/tmp/kotori-pet-codex-hook.log',
+        log_path='<platform_dir>/runtime/hook-events.log',
     )
 
     # Codex command hooks expect JSON-ish stdout
