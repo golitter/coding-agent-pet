@@ -67,7 +67,7 @@ stdin JSON
 - 对 Codex，只会自动启用已经存在 `trusted_hash` 的 pet hook 状态
 - 如果是首次接入 Codex，通常仍要在 `/hooks` 中手动 `Trust/Enable` 一次
 
-WSL2 使用独立入口 `scripts/wsl/setup-hooks.sh`。它需要在实际运行 agent 的 WSL distro 内执行，只配置 WSL 侧 hooks/plugins，不构建或启动 Windows Tauri 应用；事件默认推送到 `tcp://127.0.0.1:17361`。
+WSL2 使用独立入口 `scripts/wsl/setup-hooks.sh`。它需要在实际运行 agent 的 WSL distro 内执行，只配置 WSL 侧 hooks/plugins，不构建或启动 Windows Tauri 应用；事件默认推送到 `tcp://127.0.0.1:17361`。完整步骤见 [wsl2.md](wsl2.md)。
 
 ## 已知局限
 

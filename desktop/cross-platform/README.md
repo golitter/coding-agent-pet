@@ -15,7 +15,7 @@ bash scripts/macos/setup.sh          # 正式推荐：一键安装 & 启动
 powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
 ```
 
-入口脚本按平台分目录：`scripts/macos/`（`setup.sh` / `setup-hooks.sh` / `build-and-run.sh`）与 `scripts/windows/`（对应 `.ps1`）。
+入口脚本按平台分目录：`scripts/macos/`（`setup.sh` / `setup-hooks.sh` / `build-and-run.sh`）与 `scripts/windows/`（对应 `.ps1`）。WSL2 分离工作流额外提供 `scripts/wsl/setup-hooks.sh`，只配置 WSL 侧 hooks/plugins，不构建或启动 Windows 桌面应用。
 
 `setup.sh` / `setup.ps1` 自动完成：安装前端依赖 → 生成配置 → 注册 hooks → 编译 → 启动。
 正式使用时，推荐把对应平台的 `setup` 脚本作为标准入口。
@@ -95,7 +95,8 @@ desktop/cross-platform/
 ├── package.json          # 前端依赖（Tauri CLI + API）
 ├── scripts/              # 平台入口脚本（按 OS 分目录）
 │   ├── macos/            #   setup.sh / build-and-run.sh / setup-hooks.sh
-│   └── windows/          #   setup.ps1 / build-and-run.ps1 / setup-hooks.ps1
+│   ├── windows/          #   setup.ps1 / build-and-run.ps1 / setup-hooks.ps1
+│   └── wsl/              #   setup-hooks.sh（WSL2 agents → Windows 渲染器）
 ├── src/                  # 前端
 │   ├── index.html        #   入口 HTML
 │   ├── main.js           #   主入口：配置加载 + 状态订阅 + 模块串联
@@ -185,9 +186,10 @@ npm run test:hooks   # hooks 轻量测试（Python unittest + Node --test）
 
 ## 相关文档
 
-| 文档                                                                 | 说明                    |
-| -------------------------------------------------------------------- | ----------------------- |
-| [../docs/reference/overview.md](../docs/reference/overview.md)       | 跨平台实现概述          |
-| [../docs/agent-hooks/README.md](../docs/agent-hooks/README.md)       | Hook 机制详解（三平台） |
-| [../docs/reference/renderer.md](../docs/reference/renderer.md)       | Tauri 渲染器详解        |
-| [../docs/reference/spritesheet.md](../docs/reference/spritesheet.md) | 精灵图规格              |
+| 文档                                                                 | 说明                            |
+| -------------------------------------------------------------------- | ------------------------------- |
+| [../docs/reference/overview.md](../docs/reference/overview.md)       | 跨平台实现概述                  |
+| [../docs/agent-hooks/README.md](../docs/agent-hooks/README.md)       | Hook 机制详解（三平台）         |
+| [../docs/agent-hooks/wsl2.md](../docs/agent-hooks/wsl2.md)           | WSL2 agents 推送到 Windows 宠物 |
+| [../docs/reference/renderer.md](../docs/reference/renderer.md)       | Tauri 渲染器详解                |
+| [../docs/reference/spritesheet.md](../docs/reference/spritesheet.md) | 精灵图规格                      |

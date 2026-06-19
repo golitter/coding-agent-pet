@@ -34,6 +34,7 @@ Codex 的 hooks 可以通过两种格式配置：
 ```
 
 配置文件位置：
+
 - `~/.codex/hooks.json` — 用户级（宠物 hook 注册在这里）
 - `<repo>/.codex/hooks.json` — 项目级（需信任后才生效）
 
@@ -64,17 +65,17 @@ timeout = 30
 
 ### 注册的 9 个事件
 
-| 事件 | 触发时机 | 宠物用途 |
-|---|---|---|
-| `SessionStart` | 启动或恢复会话 | 宠物挥手："嗨！小鸟来啦～" |
-| `UserPromptSubmit` | 用户提交 prompt | 宠物奔跑："收到！开始工作～" |
-| `PreToolUse` | Codex 调用工具之前 | 宠物奔跑："执行中..." |
-| `PostToolUse` | 工具执行完成后 | 宠物奔跑："处理中..." |
-| `Stop` | Codex 完成响应 | 宠物跳跃："搞定啦！✨" |
-| `StopFailure` | Codex 执行失败 | 宠物失败："呜...出了点问题" |
-| `Notification` | 发送通知时 | 宠物挥手："注意哦～" |
-| `PermissionRequest` | 请求权限时 | 宠物等待："需要你的授权～" |
-| `SubagentStop` | 子代理完成时 | 宠物回到 idle |
+| 事件                | 触发时机           | 宠物用途                     |
+| ------------------- | ------------------ | ---------------------------- |
+| `SessionStart`      | 启动或恢复会话     | 宠物挥手："嗨！小鸟来啦～"   |
+| `UserPromptSubmit`  | 用户提交 prompt    | 宠物奔跑："收到！开始工作～" |
+| `PreToolUse`        | Codex 调用工具之前 | 宠物奔跑："执行中..."        |
+| `PostToolUse`       | 工具执行完成后     | 宠物奔跑："处理中..."        |
+| `Stop`              | Codex 完成响应     | 宠物跳跃："搞定啦！✨"       |
+| `StopFailure`       | Codex 执行失败     | 宠物失败："呜...出了点问题"  |
+| `Notification`      | 发送通知时         | 宠物挥手："注意哦～"         |
+| `PermissionRequest` | 请求权限时         | 宠物等待："需要你的授权～"   |
+| `SubagentStop`      | 子代理完成时       | 宠物回到 idle                |
 
 **与 Claude Code 的差异**：
 
@@ -88,15 +89,15 @@ timeout = 30
 
 Codex 的 `matcher` 是一个**正则表达式**，可以精确匹配工具名：
 
-| 事件 | matcher 过滤的内容 | 示例 |
-|---|---|---|
-| `PreToolUse` | tool_name | `"Bash"`, `"Edit|Write"`, `"mcp__fs__.*"` |
-| `PostToolUse` | tool_name | 同上 |
-| `PermissionRequest` | tool_name | 同上 |
-| `SessionStart` | source | `"startup|resume"` |
-| `SubagentStop` | agent_type | 子代理类型 |
-| `Stop` | 不支持 matcher | — |
-| `UserPromptSubmit` | 不支持 matcher | — |
+| 事件                | matcher 过滤的内容 | 示例             |
+| ------------------- | ------------------ | ---------------- | ------------------------- |
+| `PreToolUse`        | tool_name          | `"Bash"`, `"Edit | Write"`, `"mcp**fs**.\*"` |
+| `PostToolUse`       | tool_name          | 同上             |
+| `PermissionRequest` | tool_name          | 同上             |
+| `SessionStart`      | source             | `"startup        | resume"`                  |
+| `SubagentStop`      | agent_type         | 子代理类型       |
+| `Stop`              | 不支持 matcher     | —                |
+| `UserPromptSubmit`  | 不支持 matcher     | —                |
 
 ---
 
@@ -130,13 +131,13 @@ hook 开始正常执行
 
 ### 信任规则
 
-| 规则 | 说明 |
-|---|---|
-| **Hash 校验** | 信任基于 hook 定义的当前 hash，命令变更后需重新审查 |
-| **托管 hook** | 来自 system/MDM/cloud/requirements.toml 的 hook 自动信任，不可禁用 |
-| **项目级 hook** | 只在项目 `.codex/` 被信任时才加载 |
-| **跳过审查** | `--dangerously-bypass-hook-trust` 可跳过信任检查（CI/自动化场景） |
-| **插件 hook** | 插件捆绑的 hook 也需审查后才能运行 |
+| 规则            | 说明                                                               |
+| --------------- | ------------------------------------------------------------------ |
+| **Hash 校验**   | 信任基于 hook 定义的当前 hash，命令变更后需重新审查                |
+| **托管 hook**   | 来自 system/MDM/cloud/requirements.toml 的 hook 自动信任，不可禁用 |
+| **项目级 hook** | 只在项目 `.codex/` 被信任时才加载                                  |
+| **跳过审查**    | `--dangerously-bypass-hook-trust` 可跳过信任检查（CI/自动化场景）  |
+| **插件 hook**   | 插件捆绑的 hook 也需审查后才能运行                                 |
 
 **对宠物的影响**：首次安装后，用户需要通过 `/hooks` 手动信任宠物 hook，否则 hook 不会执行，宠物不会响应。
 
@@ -240,7 +241,7 @@ common.process_event()
         │ 4. load_config() 加载 config.json
         │ 5. state_map 查表 → {state, dialogue}
         │ 6. 写 session 文件 (原子写入)
-        │ 7. 推送 Unix socket
+        │ 7. 推送 event endpoint（Unix socket 或 TCP）
         │ 8. terminal 事件: 后端立即删除
         ▼
 Tauri 渲染器 → 宠物动画更新
@@ -295,17 +296,17 @@ EVENT_ALIASES = {
 
 与 Claude Code 完全一致（因为都使用同一个 `common.process_event()`）：
 
-| hook_event (PascalCase) | → 宠物 state | → dialogue | 备注 |
-|---|---|---|---|
-| `SessionStart` | `waving` | "嗨！小鸟来啦～" | 一次性动画（⚠️ Codex 0.133.0 懒触发，被紧随的 running 瞬时覆盖，详见上文"与 Claude Code 的差异"） |
-| `UserPromptSubmit` | `running` | "收到！开始工作～" | 循环动画 |
-| `PreToolUse` | `running` | "执行中..." | 循环动画 |
-| `PostToolUse` | `running` | "处理中..." | 硬编码 |
-| `Stop` | `jumping` | "搞定啦！✨" | 一次性动画，2s 后删除 |
-| `StopFailure` | `failed` | "呜...出了点问题" | terminal，立即删除 |
-| `Notification` | `waving` | "注意哦～" | 一次性动画 |
-| `PermissionRequest` | `waiting` | "需要你的授权～" | 黄色警告气泡 |
-| `SubagentStop` | `idle` | "" | 回到静息 |
+| hook_event (PascalCase) | → 宠物 state | → dialogue         | 备注                                                                                              |
+| ----------------------- | ------------ | ------------------ | ------------------------------------------------------------------------------------------------- |
+| `SessionStart`          | `waving`     | "嗨！小鸟来啦～"   | 一次性动画（⚠️ Codex 0.133.0 懒触发，被紧随的 running 瞬时覆盖，详见上文"与 Claude Code 的差异"） |
+| `UserPromptSubmit`      | `running`    | "收到！开始工作～" | 循环动画                                                                                          |
+| `PreToolUse`            | `running`    | "执行中..."        | 循环动画                                                                                          |
+| `PostToolUse`           | `running`    | "处理中..."        | 硬编码                                                                                            |
+| `Stop`                  | `jumping`    | "搞定啦！✨"       | 一次性动画，2s 后删除                                                                             |
+| `StopFailure`           | `failed`     | "呜...出了点问题"  | terminal，立即删除                                                                                |
+| `Notification`          | `waving`     | "注意哦～"         | 一次性动画                                                                                        |
+| `PermissionRequest`     | `waiting`    | "需要你的授权～"   | 黄色警告气泡                                                                                      |
+| `SubagentStop`          | `idle`       | ""                 | 回到静息                                                                                          |
 
 ---
 
@@ -313,10 +314,10 @@ EVENT_ALIASES = {
 
 ### Exit code
 
-| 行为 | 含义 |
-|---|---|
-| `exit 0` + stdout `{}` | 成功，Codex 正常继续 |
-| `|| true` | shell 脚本末尾保险，即使 Python 报错也不阻断 Codex |
+| 行为                   | 含义                                               |
+| ---------------------- | -------------------------------------------------- |
+| `exit 0` + stdout `{}` | 成功，Codex 正常继续                               |
+| `\|\| true`            | shell 脚本末尾保险，即使 Python 报错也不阻断 Codex |
 
 ### stdout
 
@@ -345,26 +346,26 @@ Codex hooks 支持丰富的输出控制，但宠物 hook **不使用任何**：
 
 ## 六、Codex Hook 运行时特性
 
-| 特性 | 说明 |
-|---|---|
-| **超时** | 默认 600 秒，宠物 hook 通常 <100ms 完成 |
-| **并行** | 多个匹配的 command hook 并行启动，互不阻塞 |
-| **去重** | 相同的 hook 命令自动去重 |
-| **环境变量** | `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT` 可用（兼容字段） |
-| **工作目录** | 在会话的 cwd 中执行 |
-| **插件 hook** | 插件可通过 manifest 捆绑 hook，使用 `PLUGIN_ROOT` 环境变量 |
-| **禁用** | `config.toml` 中 `[features] hooks = false` 可全局禁用 |
-| **加载顺序** | 多层配置的 hook 全部加载，高优先级不会替换低优先级的 hook |
+| 特性          | 说明                                                        |
+| ------------- | ----------------------------------------------------------- |
+| **超时**      | 默认 600 秒，宠物 hook 通常 <100ms 完成                     |
+| **并行**      | 多个匹配的 command hook 并行启动，互不阻塞                  |
+| **去重**      | 相同的 hook 命令自动去重                                    |
+| **环境变量**  | `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT` 可用（兼容字段） |
+| **工作目录**  | 在会话的 cwd 中执行                                         |
+| **插件 hook** | 插件可通过 manifest 捆绑 hook，使用 `PLUGIN_ROOT` 环境变量  |
+| **禁用**      | `config.toml` 中 `[features] hooks = false` 可全局禁用      |
+| **加载顺序**  | 多层配置的 hook 全部加载，高优先级不会替换低优先级的 hook   |
 
 ### Codex 独有的特性（Claude Code 没有）
 
-| 特性 | 说明 |
-|---|---|
-| **插件 hook** | 插件可通过 `plugin.json` manifest 捆绑 hook |
-| **managed_dir** | 企业管理员可通过 `requirements.toml` 指定托管 hook 脚本目录 |
-| **allow_managed_hooks_only** | 强制只允许管理员 hook，忽略用户/项目级 hook |
-| **TOML 格式** | 支持 `config.toml` 内联 hook 定义 |
-| **commandWindows** | 支持 Windows 平台专用命令覆盖 |
+| 特性                         | 说明                                                        |
+| ---------------------------- | ----------------------------------------------------------- |
+| **插件 hook**                | 插件可通过 `plugin.json` manifest 捆绑 hook                 |
+| **managed_dir**              | 企业管理员可通过 `requirements.toml` 指定托管 hook 脚本目录 |
+| **allow_managed_hooks_only** | 强制只允许管理员 hook，忽略用户/项目级 hook                 |
+| **TOML 格式**                | 支持 `config.toml` 内联 hook 定义                           |
+| **commandWindows**           | 支持 Windows 平台专用命令覆盖                               |
 
 ---
 
@@ -373,10 +374,20 @@ Codex hooks 支持丰富的输出控制，但宠物 hook **不使用任何**：
 Codex hook 写入详细的调试日志到 `/tmp/kotori-pet-codex-hook.log`：
 
 ```json
-{"time": "2026-06-08T10:09:16.998Z", "raw_event": "stop", "event": "Stop", "session_id": "f2f5b758...", "state": "jumping", "dialogue": "搞定啦！✨", "socket_exists": true, "sessions_dir": "/path/to/sessions"}
+{
+  "time": "2026-06-08T10:09:16.998Z",
+  "raw_event": "stop",
+  "event": "Stop",
+  "session_id": "f2f5b758...",
+  "state": "jumping",
+  "dialogue": "搞定啦！✨",
+  "socket_exists": true,
+  "sessions_dir": "/path/to/sessions"
+}
 ```
 
 每条日志一行 JSON，包含：
+
 - `time` — UTC 时间戳
 - `raw_event` — Codex 原始事件名（可能是 snake_case）
 - `event` — 转换后的 PascalCase 事件名
@@ -445,10 +456,10 @@ t=10s   (2s timer fires)              session 文件被删除                →
 
 ## 九、相关文件
 
-| 文件 | 职责 |
-|---|---|
-| `hooks/pet-hook.sh` | Shell 入口 (claude-code / codex)，调用 Python |
-| `hooks/scripts/codex_hook.py` | 解析 Codex stdin JSON，EVENT_ALIASES 转换 |
-| `hooks/scripts/common.py` | 共享逻辑：配置加载、状态映射、socket 推送 |
-| `setup-hooks.sh` | 自动注册 hook 到 `~/.codex/hooks.json` |
-| `config.json` | state_map 映射表、socket 路径等配置 |
+| 文件                          | 职责                                          |
+| ----------------------------- | --------------------------------------------- |
+| `hooks/pet-hook.sh`           | Shell 入口 (claude-code / codex)，调用 Python |
+| `hooks/scripts/codex_hook.py` | 解析 Codex stdin JSON，EVENT_ALIASES 转换     |
+| `hooks/scripts/common.py`     | 共享逻辑：配置加载、状态映射、socket 推送     |
+| `setup-hooks.sh`              | 自动注册 hook 到 `~/.codex/hooks.json`        |
+| `config.json`                 | state_map 映射表、socket 路径等配置           |

@@ -132,10 +132,11 @@ bash scripts/macos/setup.sh
 WSL2 场景下，Windows 原生应用负责渲染，agent 在 WSL distro 内运行。进入同一份仓库后执行：
 
 ```bash
+cd <repo>/desktop/cross-platform
 bash scripts/wsl/setup-hooks.sh
 ```
 
-该入口只配置 WSL 侧 Claude Code / Codex hooks 和 OpenCode 插件，不安装依赖、不构建、不启动 Tauri；事件默认通过 `tcp://127.0.0.1:17361` 推给 Windows 渲染器。
+其中 `<repo>` 是仓库在 WSL2 中看到的路径，例如 Windows 路径 `D:\path\to\coding-agent-pet` 通常对应 `/mnt/d/path/to/coding-agent-pet`。该入口只配置 WSL 侧 Claude Code / Codex hooks 和 OpenCode 插件，不安装依赖、不构建、不启动 Tauri；事件默认通过 `tcp://127.0.0.1:17361` 推给 Windows 渲染器。完整说明见 [agent-hooks/wsl2.md](../agent-hooks/wsl2.md)。
 
 ## 配置
 
@@ -145,15 +146,16 @@ bash scripts/wsl/setup-hooks.sh
 
 主要配置项：
 
-| 配置项           | 说明               | 默认值                 |
-| ---------------- | ------------------ | ---------------------- |
-| `pet_id`         | 宠物 ID            | `kotori-minami`        |
-| `pet_base_dir`   | 项目根目录         | `null`（自动检测）     |
-| `socket_path`    | Unix socket 路径   | `/tmp/kotori-pet.sock` |
-| `renderer.scale` | 缩放因子           | `0.6`                  |
-| `renderer.fps`   | 帧率               | `10`                   |
-| `state_map`      | 事件→动画+台词映射 | 见配置文件             |
-| `menu.items`     | 右键菜单项         | 默认仅关闭宠物         |
+| 配置项           | 说明                                                                   | 默认值                 |
+| ---------------- | ---------------------------------------------------------------------- | ---------------------- |
+| `pet_id`         | 宠物 ID                                                                | `kotori-minami`        |
+| `pet_base_dir`   | 项目根目录                                                             | `null`（自动检测）     |
+| `socket_path`    | Unix socket 路径（兼容字段）                                           | `/tmp/kotori-pet.sock` |
+| `event_endpoint` | 事件端点；macOS/Linux 默认 Unix socket，Windows/WSL2 默认 TCP loopback | `null`（自动检测）     |
+| `renderer.scale` | 缩放因子                                                               | `0.6`                  |
+| `renderer.fps`   | 帧率                                                                   | `10`                   |
+| `state_map`      | 事件→动画+台词映射                                                     | 见配置文件             |
+| `menu.items`     | 右键菜单项                                                             | 默认仅关闭宠物         |
 
 ## 脚本说明
 

@@ -36,14 +36,14 @@
 
 ### 设计文档 (`desktop/docs/design/`)
 
-| 文档                                                                                   | 内容                                                 |
-| -------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| [hit-test.md](../../desktop/docs/design/hit-test.md)                                   | 透明像素点击穿透设计（alpha 蒙版 + CGEvent 轮询）    |
-| [hooks-refactor.md](../../desktop/docs/design/hooks-refactor.md)                       | Hook 重构设计（合并冗余 wrapper → 统一 pet-hook.sh） |
-| [opencode-plugin.md](../../desktop/docs/design/opencode-plugin.md)                     | OpenCode 插件设计（事件映射 + 独立调试）             |
-| [opencode-integration-plan.md](../../desktop/docs/design/opencode-integration-plan.md) | OpenCode 集成计划                                    |
-| [windows-support.md](../../desktop/docs/design/windows-support.md)                     | Windows 平台支持设计（socket/脚本/路径的 POSIX 假设排查） |
-| [windows-support-impl-report.md](../../desktop/docs/design/windows-support-impl-report.md) | Windows 支持实现报告（`feat/windows-support` 落地记录） |
+| 文档                                                                                       | 内容                                                      |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| [hit-test.md](../../desktop/docs/design/hit-test.md)                                       | 透明像素点击穿透设计（alpha 蒙版 + CGEvent 轮询）         |
+| [hooks-refactor.md](../../desktop/docs/design/hooks-refactor.md)                           | Hook 重构设计（合并冗余 wrapper → 统一 pet-hook.sh）      |
+| [opencode-plugin.md](../../desktop/docs/design/opencode-plugin.md)                         | OpenCode 插件设计（事件映射 + 独立调试）                  |
+| [opencode-integration-plan.md](../../desktop/docs/design/opencode-integration-plan.md)     | OpenCode 集成计划                                         |
+| [windows-support.md](../../desktop/docs/design/windows-support.md)                         | Windows 平台支持设计（socket/脚本/路径的 POSIX 假设排查） |
+| [windows-support-impl-report.md](../../desktop/docs/design/windows-support-impl-report.md) | Windows 支持实现报告（`feat/windows-support` 落地记录）   |
 
 ### Hook 协议 (`desktop/docs/agent-hooks/`)
 
@@ -54,18 +54,20 @@
 | [claude-code.md](../../desktop/docs/agent-hooks/claude-code.md) | Claude Code Hook 实现详解                                                 |
 | [codex.md](../../desktop/docs/agent-hooks/codex.md)             | Codex Hook 实现详解                                                       |
 | [opencode.md](../../desktop/docs/agent-hooks/opencode.md)       | OpenCode 插件系统参考（事件、Hook API、宠物集成）                         |
+| [wsl2.md](../../desktop/docs/agent-hooks/wsl2.md)               | WSL2 agents 推送事件到 Windows 原生宠物渲染器的配置步骤                   |
 
 ### Bugfix 计划 (`desktop/docs/bugfix/`)
 
-| 文档                                                                                                       | 内容                                                             | 状态   |
-| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------ |
-| [README.md](../../desktop/docs/bugfix/README.md)                                                           | Bugfix 计划索引                                                  | —      |
-| [active-count-undercount.md](../../desktop/docs/bugfix/active-count-undercount.md)                         | 多会话计数 N-1 问题                                              | 已实施 |
-| [idle-blink-too-fast.md](../../desktop/docs/bugfix/idle-blink-too-fast.md)                                 | idle 状态眨眼太快（引入 `frame_timing` 逐帧停留）                | 已实施 |
-| [pet-unresponsive-stuck-state.md](../../desktop/docs/bugfix/pet-unresponsive-stuck-state.md)               | 宠物无响应/拖动卡死（穿透态轮询链断裂）                          | 已实施 |
-| [stuck-jumping-after-stop.md](../../desktop/docs/bugfix/stuck-jumping-after-stop.md)                       | Stop 后卡 jumping、session 文件不删（5s 窗口缺时钟驱动）         | 已实施 |
-| [context-menu-lingers-on-mouse-leave.md](../../desktop/docs/bugfix/context-menu-lingers-on-mouse-leave.md) | 右键菜单在鼠标移出窗口后仍停留满 3 秒（DOM `mouseleave` 不可靠） | 已实施 |
-| [drag-direction-stuck-or-flicker.md](../../desktop/docs/bugfix/drag-direction-stuck-or-flicker.md)         | 拖动方向不跟随反向 / 单方向也左右闪烁（累计 dx + 单帧抖动）      | 已实施 |
+| 文档                                                                                                       | 内容                                                                               | 状态   |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------ |
+| [README.md](../../desktop/docs/bugfix/README.md)                                                           | Bugfix 计划索引                                                                    | —      |
+| [active-count-undercount.md](../../desktop/docs/bugfix/active-count-undercount.md)                         | 多会话计数 N-1 问题                                                                | 已实施 |
+| [idle-blink-too-fast.md](../../desktop/docs/bugfix/idle-blink-too-fast.md)                                 | idle 状态眨眼太快（引入 `frame_timing` 逐帧停留）                                  | 已实施 |
+| [pet-unresponsive-stuck-state.md](../../desktop/docs/bugfix/pet-unresponsive-stuck-state.md)               | 宠物无响应/拖动卡死（穿透态轮询链断裂）                                            | 已实施 |
+| [stuck-jumping-after-stop.md](../../desktop/docs/bugfix/stuck-jumping-after-stop.md)                       | Stop 后卡 jumping、session 文件不删（5s 窗口缺时钟驱动）                           | 已实施 |
+| [context-menu-lingers-on-mouse-leave.md](../../desktop/docs/bugfix/context-menu-lingers-on-mouse-leave.md) | 右键菜单在鼠标移出窗口后仍停留满 3 秒（DOM `mouseleave` 不可靠）                   | 已实施 |
+| [drag-direction-stuck-or-flicker.md](../../desktop/docs/bugfix/drag-direction-stuck-or-flicker.md)         | 拖动方向不跟随反向 / 单方向也左右闪烁（累计 dx + 单帧抖动）                        | 已实施 |
+| [pre-commit-staged-paths.md](../../desktop/docs/bugfix/pre-commit-staged-paths.md)                         | pre-commit 切到子目录后 staged 路径仍按仓库根相对，导致 ruff/shellcheck 找不到文件 | 已实施 |
 
 ---
 
@@ -84,16 +86,16 @@
 
 ### 前端 (`desktop/cross-platform/src/`)
 
-| 文件                                                        | 职责                                 |
-| ----------------------------------------------------------- | ------------------------------------ |
-| [index.html](../../desktop/cross-platform/src/index.html)   | 主页面 DOM                           |
-| [main.js](../../desktop/cross-platform/src/main.js)         | 入口：配置加载 + 状态订阅 + 模块串联 |
-| [animator.js](../../desktop/cross-platform/src/animator.js) | 精灵帧加载 + 动画循环引擎            |
-| [bubble.js](../../desktop/cross-platform/src/bubble.js)     | 对话气泡（normal / warning / error）+ 折叠徽标 |
-| [interaction-controller.js](../../desktop/cross-platform/src/interaction-controller.js) | 鼠标交互：悬停 / 拖动 / 三连击 / 穿透切换 |
-| [hit-test.js](../../desktop/cross-platform/src/hit-test.js) | 精灵 alpha 与气泡/徽标命中检测       |
-| [permission-sound.js](../../desktop/cross-platform/src/permission-sound.js) | 权限请求提示音播放与 WebAudio 兜底   |
-| [style.css](../../desktop/cross-platform/src/style.css)     | 全局样式（气泡 / 折叠徽标 / 菜单 / 精灵渲染） |
+| 文件                                                                                    | 职责                                           |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| [index.html](../../desktop/cross-platform/src/index.html)                               | 主页面 DOM                                     |
+| [main.js](../../desktop/cross-platform/src/main.js)                                     | 入口：配置加载 + 状态订阅 + 模块串联           |
+| [animator.js](../../desktop/cross-platform/src/animator.js)                             | 精灵帧加载 + 动画循环引擎                      |
+| [bubble.js](../../desktop/cross-platform/src/bubble.js)                                 | 对话气泡（normal / warning / error）+ 折叠徽标 |
+| [interaction-controller.js](../../desktop/cross-platform/src/interaction-controller.js) | 鼠标交互：悬停 / 拖动 / 三连击 / 穿透切换      |
+| [hit-test.js](../../desktop/cross-platform/src/hit-test.js)                             | 精灵 alpha 与气泡/徽标命中检测                 |
+| [permission-sound.js](../../desktop/cross-platform/src/permission-sound.js)             | 权限请求提示音播放与 WebAudio 兜底             |
+| [style.css](../../desktop/cross-platform/src/style.css)                                 | 全局样式（气泡 / 折叠徽标 / 菜单 / 精灵渲染）  |
 
 ### Hook 脚本 (`desktop/cross-platform/hooks/`)
 
@@ -117,7 +119,7 @@
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `get_config`         | 返回前端使用的配置子集（`FrontendConfig`）                                                                                                                                    |
 | `quit_app`           | 退出宠物进程（删除 socket 文件后 `app.exit(0)`）                                                                                                                              |
-| `purge_all_sessions` | 清空所有 session 文件（右键菜单触发）                                                                                                                                          |
+| `purge_all_sessions` | 清空所有 session 文件（右键菜单触发）                                                                                                                                         |
 | `run_applescript`    | 执行 AppleScript（`async` + `tokio::process`，慢脚本不阻塞主线程；过滤 `do shell script`、`do script` 和反引号）                                                              |
 | `read_file_bytes`    | 读 PNG 原始字节，路径校验限制在 `frames_dir` 内（hit-test alpha 蒙版）。`async` + `spawn_blocking`，文件 I/O 不阻塞主线程                                                     |
 | `read_frames_batch`  | 批量读取多帧 PNG，单次 IPC 替代 57 次 `read_file_bytes`（两级路径校验：lexical 快路径 + canonicalize 慢路径）。`async` + `spawn_blocking`，55+ 次串行读取整体在阻塞线程池执行 |
@@ -136,7 +138,7 @@
 | `pet_base_dir`                  | `null`                                                | 项目根，`null` 自动检测                                                                                                                                                                                                                                                                                                          |
 | `frames_dir`                    | `null`                                                | 精灵帧目录，`null` 自动检测（`{pet_base_dir}/assets/{pet_id}/frames`）                                                                                                                                                                                                                                                           |
 | `socket_path`                   | `/tmp/kotori-pet.sock`                                | Unix socket 路径                                                                                                                                                                                                                                                                                                                 |
-| `event_endpoint`                | `null`                                                | 事件上报端点，`null` 走本地 socket；显式指定则改为 HTTP POST 推送                                                                                                                                                                                                                                                               |
+| `event_endpoint`                | `null`                                                | 事件上报端点，`null` 走平台默认：macOS/Linux 使用 Unix socket，Windows/WSL2 使用 `tcp://127.0.0.1:17361`；显式指定时支持 Unix socket 路径或 `tcp://host:port`                                                                                                                                                                    |
 | `sessions_dir`                  | `null`                                                | session 文件目录，`null` 自动检测（`{pet_base_dir}/desktop/cross-platform/runtime/sessions`）                                                                                                                                                                                                                                    |
 | `renderer.stale_timeout_sec`    | `3600`                                                | session 文件过期阈值（秒），1h 覆盖长工具调用                                                                                                                                                                                                                                                                                    |
 | `renderer.cleanup_interval_sec` | `30`                                                  | 定时清理间隔（秒）：扫描过期文件、孤儿内存会话、过期的一次性庆祝（`jumping`/`waving`）文件                                                                                                                                                                                                                                       |
@@ -180,6 +182,10 @@ bash scripts/macos/setup.sh          # 正式推荐：全流程 依赖 → 配�
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
 
+# WSL2 agents → Windows 渲染器（在 WSL2 内执行）
+cd <repo>/desktop/cross-platform
+bash scripts/wsl/setup-hooks.sh
+
 npm test               # hooks 轻量测试（别名 → test:hooks）
 npm run test:hooks     # hooks 轻量测试（Python unittest + Node --test，uv 缓存至 .uv-cache）
 npm run dev            # 开发热重载（tauri dev）
@@ -190,6 +196,8 @@ npm run lint:fix       # 自动修复
 
 `setup-hooks.sh` 是幂等的：每次会先清掉它自己管理的 pet hook，再写回一份标准配置，因此不会重复追加。
 对于 Codex，它会自动写入 `~/.codex/hooks.json`，并尝试把已有 `trusted_hash` 的 pet hook 状态补成 `enabled = true`；首次使用通常仍需在 `/hooks` 中手动 `Trust/Enable` 一次。
+
+WSL2 入口只配置 WSL 侧 Claude Code / Codex hooks 和 OpenCode 插件，不安装依赖、不构建、不启动 Tauri；Windows 原生宠物需要先启动并监听同一个 `tcp://127.0.0.1:17361` 端点。详见 [desktop/docs/agent-hooks/wsl2.md](../../desktop/docs/agent-hooks/wsl2.md)。
 
 日志级别：`RUST_LOG={error,warn,info,debug,trace}`，默认 `info`。
 
@@ -228,15 +236,16 @@ assets/kotori-minami/
 
 ## 7. 运行时目录
 
-| 路径                                                        | 用途                                                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------ |
-| `desktop/cross-platform/runtime/sessions/{session_id}.json` | 各会话当前状态（hook 写、后端读）                            |
-| `/tmp/kotori-pet.sock`                                      | Unix socket — hook → 后端推送通道（权限 `0o600`）            |
-| `/tmp/kotori-pet-tauri.log`                                 | Tauri 渲染器日志（`build-and-run.sh` 输出）                  |
-| `/tmp/kotori-pet-codex-hook.log`                            | Codex hook 调试日志                                          |
-| `/tmp/kotori-pet-opencode-debug.log`                        | OpenCode 插件调试日志                                        |
-| `~/.config/opencode/plugins/pet-plugin.ts`                  | OpenCode 插件部署路径（由 `setup-hooks.sh` 自动复制）        |
-| `~/.config/opencode/plugins/.kotori-pet-config-dir`         | OpenCode 插件同伴文件（指向 `desktop/cross-platform/` 路径） |
+| 路径                                                        | 用途                                                               |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ |
+| `desktop/cross-platform/runtime/sessions/{session_id}.json` | 各会话当前状态（hook 写、后端读）                                  |
+| `/tmp/kotori-pet.sock`                                      | macOS/Linux 默认 Unix socket — hook → 后端推送通道（权限 `0o600`） |
+| `tcp://127.0.0.1:17361`                                     | Windows/WSL2 默认 TCP loopback 事件端点                            |
+| `/tmp/kotori-pet-tauri.log`                                 | Tauri 渲染器日志（`build-and-run.sh` 输出）                        |
+| `/tmp/kotori-pet-codex-hook.log`                            | Codex hook 调试日志                                                |
+| `/tmp/kotori-pet-opencode-debug.log`                        | OpenCode 插件调试日志                                              |
+| `~/.config/opencode/plugins/pet-plugin.ts`                  | OpenCode 插件部署路径（由 `setup-hooks.sh` 自动复制）              |
+| `~/.config/opencode/plugins/.kotori-pet-config-dir`         | OpenCode 插件同伴文件（指向 `desktop/cross-platform/` 路径）       |
 
 ---
 

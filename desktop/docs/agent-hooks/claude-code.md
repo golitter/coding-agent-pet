@@ -53,19 +53,19 @@ Claude Code 的 hooks 配置写在 `~/.claude/settings.json` 中：
 
 ### 注册的 11 个事件
 
-| 事件 | 触发时机 | 宠物用途 |
-|---|---|---|
-| `SessionStart` | 启动或恢复会话 | 宠物挥手："嗨！小鸟来啦～" |
-| `UserPromptSubmit` | 用户提交 prompt | 宠物奔跑："收到！开始工作～" |
-| `PreToolUse` | Claude 调用工具之前 | 宠物奔跑："执行中..." |
-| `PostToolUse` | 工具执行完成后 | 宠物奔跑："处理中..." |
-| `Stop` | Claude 完成响应 | 宠物跳跃："搞定啦！✨" |
-| `StopFailure` | Claude 执行失败 | 宠物失败："呜...出了点问题" |
-| `Notification` | 发送通知时 | 宠物挥手："注意哦～" |
-| `PermissionRequest` | 请求权限时 | 宠物等待："需要你的授权～" |
-| `SubagentStop` | 子代理完成时 | 宠物回到 idle |
-| `PreCompact` | 压缩上下文之前 | 宠物等待："整理一下记忆..." |
-| `SessionEnd` | Claude Code 会话结束 | 宠物挥手："下次见！♪"，立即删除 session 文件 |
+| 事件                | 触发时机             | 宠物用途                                     |
+| ------------------- | -------------------- | -------------------------------------------- |
+| `SessionStart`      | 启动或恢复会话       | 宠物挥手："嗨！小鸟来啦～"                   |
+| `UserPromptSubmit`  | 用户提交 prompt      | 宠物奔跑："收到！开始工作～"                 |
+| `PreToolUse`        | Claude 调用工具之前  | 宠物奔跑："执行中..."                        |
+| `PostToolUse`       | 工具执行完成后       | 宠物奔跑："处理中..."                        |
+| `Stop`              | Claude 完成响应      | 宠物跳跃："搞定啦！✨"                       |
+| `StopFailure`       | Claude 执行失败      | 宠物失败："呜...出了点问题"                  |
+| `Notification`      | 发送通知时           | 宠物挥手："注意哦～"                         |
+| `PermissionRequest` | 请求权限时           | 宠物等待："需要你的授权～"                   |
+| `SubagentStop`      | 子代理完成时         | 宠物回到 idle                                |
+| `PreCompact`        | 压缩上下文之前       | 宠物等待："整理一下记忆..."                  |
+| `SessionEnd`        | Claude Code 会话结束 | 宠物挥手："下次见！♪"，立即删除 session 文件 |
 
 **注意**：宠物 hook 不使用 `matcher` 字段，匹配所有工具调用，因为宠物的目的是反映整体工作状态，而非拦截特定工具。
 
@@ -148,7 +148,7 @@ common.process_event()
         │ 4. load_config() 加载 config.json
         │ 5. state_map 查表 → {state, dialogue}
         │ 6. 写 session 文件 (原子写入)
-        │ 7. 推送 Unix socket
+        │ 7. 推送 event endpoint（Unix socket 或 TCP）
         │ 8. terminal 事件: 延迟删除
         ▼
 Tauri 渲染器 → 宠物动画更新
@@ -168,19 +168,19 @@ Claude Code 的事件名已经是 PascalCase（如 `PreToolUse`），直接使�
 
 ### state_map 映射表
 
-| hook_event_name | → 宠物 state | → dialogue | 备注 |
-|---|---|---|---|
-| `SessionStart` | `waving` | "嗨！小鸟来啦～" | 一次性动画，播完恢复 idle |
-| `UserPromptSubmit` | `running` | "收到！开始工作～" | 循环动画 |
-| `PreToolUse` | `running` | "执行中..." | 循环动画 |
-| `PostToolUse` | `running` | "处理中..." | 硬编码（不在 state_map 中） |
-| `Stop` | `jumping` | "搞定啦！✨" | 一次性动画，2s 后删除 session |
-| `StopFailure` | `failed` | "呜...出了点问题" | terminal 事件，立即删除 session |
-| `Notification` | `waving` | "注意哦～" | 一次性动画 |
-| `PermissionRequest` | `waiting` | "需要你的授权～" | 循环动画，黄色警告气泡 |
-| `SubagentStop` | `idle` | "" | 回到静息 |
-| `PreCompact` | `waiting` | "整理一下记忆..." | 循环动画 |
-| `SessionEnd` | `waving` | "下次见！♪" | terminal 事件，立即删除 session 文件 |
+| hook_event_name     | → 宠物 state | → dialogue         | 备注                                 |
+| ------------------- | ------------ | ------------------ | ------------------------------------ |
+| `SessionStart`      | `waving`     | "嗨！小鸟来啦～"   | 一次性动画，播完恢复 idle            |
+| `UserPromptSubmit`  | `running`    | "收到！开始工作～" | 循环动画                             |
+| `PreToolUse`        | `running`    | "执行中..."        | 循环动画                             |
+| `PostToolUse`       | `running`    | "处理中..."        | 硬编码（不在 state_map 中）          |
+| `Stop`              | `jumping`    | "搞定啦！✨"       | 一次性动画，2s 后删除 session        |
+| `StopFailure`       | `failed`     | "呜...出了点问题"  | terminal 事件，立即删除 session      |
+| `Notification`      | `waving`     | "注意哦～"         | 一次性动画                           |
+| `PermissionRequest` | `waiting`    | "需要你的授权～"   | 循环动画，黄色警告气泡               |
+| `SubagentStop`      | `idle`       | ""                 | 回到静息                             |
+| `PreCompact`        | `waiting`    | "整理一下记忆..."  | 循环动画                             |
+| `SessionEnd`        | `waving`     | "下次见！♪"        | terminal 事件，立即删除 session 文件 |
 
 ---
 
@@ -190,10 +190,10 @@ Claude Code 的事件名已经是 PascalCase（如 `PreToolUse`），直接使�
 
 ### Exit code
 
-| 行为 | 含义 |
-|---|---|
-| `exit 0`（无输出） | 成功，Claude Code 正常继续 |
-| `|| true` | shell 脚本末尾的保险，即使 Python 报错也不阻断 Claude |
+| 行为               | 含义                                                       |
+| ------------------ | ---------------------------------------------------------- |
+| `exit 0`（无输出） | 成功，Claude Code 正常继续                                 |
+| `\|\| true`        | shell 脚本末尾的保险，即使 Python 报错也不阻断 Claude Code |
 
 ### stdout
 
@@ -222,15 +222,15 @@ Claude Code hooks 支持丰富的输出控制（`permissionDecision: "deny"`, `d
 
 了解 Claude Code 的 hook 运行机制，有助于理解宠物系统的可靠性：
 
-| 特性 | 说明 |
-|---|---|
-| **超时** | 默认 60 秒，宠物 hook 通常 <100ms 完成 |
-| **并行** | 所有匹配的 hook 并行执行，宠物 hook 不阻塞其他 hook |
-| **去重** | 多个相同的 hook 命令会自动去重 |
-| **环境变量** | `CLAUDE_PROJECT_DIR` 可用，但宠物 hook 不依赖它 |
-| **工作目录** | 在 Claude Code 的当前目录执行 |
+| 特性         | 说明                                                         |
+| ------------ | ------------------------------------------------------------ |
+| **超时**     | 默认 60 秒，宠物 hook 通常 <100ms 完成                       |
+| **并行**     | 所有匹配的 hook 并行执行，宠物 hook 不阻塞其他 hook          |
+| **去重**     | 多个相同的 hook 命令会自动去重                               |
+| **环境变量** | `CLAUDE_PROJECT_DIR` 可用，但宠物 hook 不依赖它              |
+| **工作目录** | 在 Claude Code 的当前目录执行                                |
 | **快照机制** | Claude Code 启动时拍摄 hook 配置快照，运行期间修改不立即生效 |
-| **信任审查** | hook 修改后需要在 `/hooks` 菜单中审查才生效 |
+| **信任审查** | hook 修改后需要在 `/hooks` 菜单中审查才生效                  |
 
 ---
 
@@ -280,10 +280,10 @@ t=10s   (2s timer fires)              session 文件被删除                →
 
 ## 七、相关文件
 
-| 文件 | 职责 |
-|---|---|
-| `hooks/pet-hook.sh` | Shell 入口 (claude-code / codex)，调用 Python |
-| `hooks/scripts/claude_hook.py` | 解析 Claude Code stdin JSON |
-| `hooks/scripts/common.py` | 共享逻辑：配置加载、状态映射、socket 推送 |
-| `setup-hooks.sh` | 自动注册 hook 到 `~/.claude/settings.json` |
-| `config.json` | state_map 映射表、socket 路径等配置 |
+| 文件                           | 职责                                          |
+| ------------------------------ | --------------------------------------------- |
+| `hooks/pet-hook.sh`            | Shell 入口 (claude-code / codex)，调用 Python |
+| `hooks/scripts/claude_hook.py` | 解析 Claude Code stdin JSON                   |
+| `hooks/scripts/common.py`      | 共享逻辑：配置加载、状态映射、socket 推送     |
+| `setup-hooks.sh`               | 自动注册 hook 到 `~/.claude/settings.json`    |
+| `config.json`                  | state_map 映射表、socket 路径等配置           |

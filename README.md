@@ -52,7 +52,7 @@ OpenCode           → TS 插件 (opencode-plugin.ts)┘     ├── Rust: 多
                                                         └── JS: 精灵动画 + 对话气泡/折叠徽标 + 权限提示音
 ```
 
-Windows / WSL2 场景下事件通道使用 TCP loopback（默认 `tcp://127.0.0.1:17361`）替代 Unix Socket；WSL2 中可运行 `desktop/cross-platform/scripts/wsl/setup-hooks.sh` 配置 Claude Code / Codex / OpenCode。
+Windows / WSL2 场景下事件通道使用 TCP loopback（默认 `tcp://127.0.0.1:17361`）替代 Unix Socket。如果桌面宠物运行在 Windows，而 Claude Code / Codex / OpenCode 运行在 WSL2，请先启动 Windows 端宠物，再到 WSL2 内进入本仓库的 `desktop/cross-platform` 目录运行 `bash scripts/wsl/setup-hooks.sh`。完整配置步骤见 [desktop/README.md#WSL2-hooks](desktop/README.md#wsl2-hooks) 和 [desktop/docs/agent-hooks/wsl2.md](desktop/docs/agent-hooks/wsl2.md)。
 
 状态优先级：`waiting > running > running-left/right > review > jumping > waving > idle > failed`
 

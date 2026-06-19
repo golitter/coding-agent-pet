@@ -19,20 +19,23 @@ bash scripts/macos/setup.sh
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -File scripts/windows/setup.ps1
 
-# WSL2: 只配置 hooks/plugins，Windows 原生应用负责渲染
+# WSL2: 只配置 hooks/plugins；Windows 原生应用负责渲染
 bash scripts/wsl/setup-hooks.sh
 ```
 
 ### WSL2 hooks
 
-如果 Claude Code / Codex / OpenCode 运行在 WSL2 内，而 Kotori Pet 桌面应用运行在 Windows 原生环境，需要在对应 WSL distro 内执行：
+如果 Claude Code / Codex / OpenCode 运行在 WSL2 内，而 Kotori Pet 桌面应用运行在 Windows 原生环境，需要在对应 WSL distro 内单独配置 hooks/plugins。这个步骤需要手动进入 WSL2 执行，因为 Windows 原生进程不能直接替 WSL 用户写入 `~/.claude`、`~/.codex` 或 `~/.config/opencode`。
 
 ```bash
 cd <repo>/desktop/cross-platform
 bash scripts/wsl/setup-hooks.sh
 ```
 
-其中 `<repo>` 是本仓库在 WSL2 中看到的根目录路径。如果仓库在 Windows 的 `D:\path\to\coding-agent-pet`，WSL2 中通常对应 `/mnt/d/path/to/coding-agent-pet`。也可以在 WSL2 里先进入你 clone 的仓库根目录，再执行 `cd desktop/cross-platform`。
+其中 `<repo>` 是本仓库在 WSL2 中看到的根目录路径，不是 Windows 里的 `D:\...` 路径。取得方式有两种：
+
+- 如果仓库放在 Windows 盘，例如 `D:\path\to\coding-agent-pet`，WSL2 中通常对应 `/mnt/d/path/to/coding-agent-pet`。
+- 如果已经在 WSL2 里进入仓库根目录，可以用 `pwd` 查看当前路径，然后执行 `cd desktop/cross-platform`。
 
 这个入口不会安装 npm 依赖、不会构建或启动 Tauri，只会配置当前 WSL 用户环境里的 Claude Code / Codex hooks，并在检测到 `opencode` 时部署 OpenCode 插件。事件默认推送到 Windows 渲染器监听的 `tcp://127.0.0.1:17361`。
 
@@ -59,7 +62,7 @@ bash scripts/wsl/setup-hooks.sh
    bash scripts/wsl/setup-hooks.sh
    ```
 
-   `<repo>` 是仓库根目录在 WSL2 中的路径。例如 Windows 路径 `D:\path\to\coding-agent-pet` 通常对应 WSL2 路径 `/mnt/d/path/to/coding-agent-pet`。
+   `<repo>` 是仓库根目录在 WSL2 中的路径。例如 Windows 路径 `D:\path\to\coding-agent-pet` 通常对应 WSL2 路径 `/mnt/d/path/to/coding-agent-pet`。不确定时可以先在 WSL2 里进入仓库根目录并运行 `pwd`。
 
 3. 查看输出结果：
 
@@ -74,12 +77,15 @@ bash scripts/wsl/setup-hooks.sh
 
 如果脚本提示 `endpoint is not reachable right now`，通常只是 Windows 宠物尚未启动；如果已经启动仍连不上，检查 WSL 网络模式是否支持从 WSL 访问 Windows 的 `127.0.0.1`，必要时启用 WSL mirrored networking。
 
+更完整的写入内容、环境变量和排障说明见 [docs/agent-hooks/wsl2.md](docs/agent-hooks/wsl2.md)。
+
 ## 入口脚本目录结构
 
 入口脚本按平台分目录，源码 `src/`、`src-tauri/`、`hooks/`、配置等保持单份共享：
 
 - `scripts/macos/`：`setup.sh` / `setup-hooks.sh` / `build-and-run.sh`
 - `scripts/windows/`：对应 `.ps1`（`setup.ps1` / `setup-hooks.ps1` / `build-and-run.ps1`）
+- `scripts/wsl/`：`setup-hooks.sh`，只用于 Windows 渲染 + WSL2 agents 的分离工作流
 
 ## hooks 自动安装
 

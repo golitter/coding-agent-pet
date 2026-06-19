@@ -15,7 +15,13 @@ cd <repo>/desktop/cross-platform
 bash scripts/wsl/setup-hooks.sh
 ```
 
-其中 `<repo>` 是本仓库在 WSL2 中看到的根目录路径。如果仓库在 Windows 的 `D:\path\to\coding-agent-pet`，WSL2 中通常对应 `/mnt/d/path/to/coding-agent-pet`。也可以在 WSL2 里先进入你 clone 的仓库根目录，再执行 `cd desktop/cross-platform`。
+其中 `<repo>` 是本仓库在 WSL2 中看到的根目录路径。它不是 Windows 里的 `D:\...` 路径。
+
+常见取得方式：
+
+- 仓库在 Windows 盘时，把盘符映射到 `/mnt/<盘符小写>/`。例如 `D:\path\to\coding-agent-pet` 通常对应 `/mnt/d/path/to/coding-agent-pet`。
+- 已经在 WSL2 里进入仓库根目录时，运行 `pwd` 查看路径，然后执行 `cd desktop/cross-platform`。
+- 仓库直接 clone 在 WSL2 的 Linux 文件系统内时，`<repo>` 可能类似 `~/coding-agent-pet` 或 `/home/<user>/coding-agent-pet`。
 
 这个脚本只会配置 WSL 用户环境里的 agent hooks / 插件，不会安装 npm 依赖、不会构建 Tauri，也不会启动桌面宠物。
 
@@ -49,6 +55,13 @@ python3 /mnt/d/.../desktop/cross-platform/hooks/scripts/codex_hook.py
 
 Codex 首次使用时可能仍需要在 `/hooks` 里手动 Trust/Enable 一次。
 
+脚本输出里常见状态含义：
+
+- `Configured: Claude Code`：已写入 WSL 侧 `~/.claude/settings.json`。
+- `Configured: Codex`：已写入 WSL 侧 `~/.codex/hooks.json`。
+- `Configured: OpenCode`：已部署 WSL 侧 OpenCode 插件。
+- `Skipping ... command not found`：当前 WSL distro 内没有安装对应 CLI；安装后重新运行脚本即可。
+
 ## 运行时路径
 
 运行时，Python hook 脚本和 OpenCode shared runtime 都会检测 WSL 环境，并默认使用：
@@ -58,6 +71,8 @@ tcp://127.0.0.1:17361
 ```
 
 Windows 原生宠物使用相同的默认端点，因此通常不需要额外做 socket 路径映射。
+
+如果需要覆盖默认端点，可以在 `desktop/cross-platform/config.json` 中设置 `event_endpoint`。Windows 端渲染器和 WSL2 hooks/plugins 必须使用同一个端点，否则 WSL2 内的事件会发不到 Windows 宠物。
 
 ## 环境要求
 
@@ -70,3 +85,16 @@ Windows 原生宠物使用相同的默认端点，因此通常不需要额外做
 ```bash
 KOTORI_PET_PYTHON=/usr/bin/python3 bash scripts/wsl/setup-hooks.sh
 ```
+
+如果只想临时跳过 OpenCode 插件部署，可以设置：
+
+```bash
+KOTORI_PET_SKIP_OPENCODE=1 bash scripts/wsl/setup-hooks.sh
+```
+
+## 排障
+
+- 看到 `endpoint is not reachable right now`：通常只是 Windows 端宠物还没有启动；脚本仍会继续写配置。
+- Windows 端宠物已启动但仍无法收到事件：确认 WSL2 能访问 Windows 的 `127.0.0.1:17361`，必要时启用 WSL mirrored networking，或把 `event_endpoint` 改成 WSL 能访问的地址。
+- Codex 没有触发宠物：在 Codex 内运行 `/hooks`，确认 pet hook 已 Trust/Enable。
+- OpenCode 没有触发宠物：确认 `opencode` 安装在同一个 WSL distro 内，并检查 `~/.config/opencode/plugins/` 下是否存在 `pet-plugin.ts`、`opencode-shared.mjs` 和 `.kotori-pet-config-dir`。
