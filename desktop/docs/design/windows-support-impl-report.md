@@ -184,6 +184,7 @@ TS 侧与 Python 同构：`defaultEventEndpoint` / `pushEvent` / `pushTcp` / `re
 
 - [.husky/pre-commit](../../cross-platform/.husky/pre-commit)：检测到 `MINGW*|MSYS*|CYGWIN*` 就 `pwsh`（回落 `powershell`）执行 [.husky/pre-commit.ps1](../../cross-platform/.husky/pre-commit.ps1)；否则继续走原 sh 逻辑。
 - **pre-commit.ps1**：用 `Get-Command` 探测式调用每个工具——`cargo`/`shellcheck`/`python`(`python3`)/`ruff`，装了就强校验，没装就明确提示跳过（不静默放行、不抛错中断）。已用 PowerShell Parser 验证语法，并在本次提交中实测跑通（lint-staged 通过、cargo 未在 PATH 时明确 skip）。
+- **后续修复**：pre-commit 会先 `cd desktop/cross-platform`，但 `git diff --cached --name-only` 返回的是仓库根相对路径，导致 ruff/shellcheck 在子目录下找不到 staged 文件。现已在 sh / PowerShell 两版中把 staged 路径转换为 `$repoRoot` 下的绝对路径后再传给工具；PowerShell 版 ruff 探测顺序也补齐为 `python` → `python3` → `py` → `ruff`，避免只安装了 Python Launcher + ruff 时误判缺失。
 
 ---
 

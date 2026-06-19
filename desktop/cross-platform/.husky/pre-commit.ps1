@@ -30,9 +30,10 @@ Pop-Location
 # ── Shell: shellcheck (only staged .sh files) ──
 $stagedSh = & git diff --cached --name-only --diff-filter=ACM -- '*.sh' ':!node_modules'
 if ($stagedSh) {
+  $stagedShAbs = @($stagedSh | ForEach-Object { Join-Path $repoRoot $_ })
   $cmd = Get-Command shellcheck -ErrorAction SilentlyContinue
   if ($cmd) {
-    & shellcheck @stagedSh
+    & shellcheck @stagedShAbs
     if ($LASTEXITCODE -ne 0) { exit 1 }
   } else {
     Write-Host "⚠️  shellcheck not installed. Skipped."
@@ -42,16 +43,27 @@ if ($stagedSh) {
 # ── Python: ruff (only staged .py files) ──
 $stagedPy = & git diff --cached --name-only --diff-filter=ACM -- '*.py' ':!node_modules'
 if ($stagedPy) {
-  $py = Get-Command python -ErrorAction SilentlyContinue
-  if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
+  $stagedPyAbs = @($stagedPy | ForEach-Object { Join-Path $repoRoot $_ })
   $ran = $false
-  if ($py) {
-    & $py.Source -m ruff check @stagedPy 2>$null
-    if ($LASTEXITCODE -eq 0) { $ran = $true }
+  foreach ($pythonName in @('python', 'python3', 'py')) {
+    $py = Get-Command $pythonName -ErrorAction SilentlyContinue
+    if ($py) {
+      & $py.Source -m ruff --version 2>$null
+      if ($LASTEXITCODE -eq 0) {
+        & $py.Source -m ruff check @stagedPyAbs
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        $ran = $true
+        break
+      }
+    }
   }
   if (-not $ran) {
-    & npx ruff check @stagedPy 2>$null
-    if ($LASTEXITCODE -eq 0) { $ran = $true }
+    $ruff = Get-Command ruff -ErrorAction SilentlyContinue
+    if ($ruff) {
+      & $ruff.Source check @stagedPyAbs
+      if ($LASTEXITCODE -ne 0) { exit 1 }
+      $ran = $true
+    }
   }
   if (-not $ran) {
     Write-Host "⚠️  ruff not installed. Install: pip install ruff"
